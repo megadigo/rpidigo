@@ -15,6 +15,7 @@
     // ── players: each player can only write their own record ──
     "players": {
       ".read": true,
+      ".indexOn": "name",
       "$playerId": {
         ".write": true
       }
