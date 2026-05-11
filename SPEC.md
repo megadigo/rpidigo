@@ -2,7 +2,7 @@
 
 ## Overview
 
-A browser-based multiplayer RPG with a persistent shared world, real-time Firebase synchronisation, and Python-scriptable entity behaviours. The full world is generated once at world initialization, persisted to Firebase, and then shared by every client. There is no dedicated server — every client connects directly to the database and renders the world locally. All the entities has a script associated that implement behaviors.
+A browser-based multiplayer RPG with a persistent shared world, real-time Firebase synchronisation, and Python-scriptable entity behaviours. The world is generated **lazily in 32×32-tile chunks** as players explore — never upfront. When a player reaches an unvisited area, the visiting client generates the chunk deterministically from the world seed and writes it to Firebase; all later clients simply read the persisted tiles. There is no dedicated server — every client connects directly to the database and renders the world locally. All entities have a script that implements their behaviour.
 
 ---
 
@@ -13,11 +13,13 @@ A browser-based multiplayer RPG with a persistent shared world, real-time Fireba
 - The world is divided into named **zones** that determine terrain type, tiles, and enemy population.
 - Tiles outside the grid boundary are impassable void.
 
-### Full world generation
-- The overworld is generated **all at once** when the world is initialized for the first time.
-- A random world seed is created once, stored in Firebase, and used to generate the entire map layout, POIs, rivers, roads, and initial enemy/NPC placement.
-- The generated world is written to Firebase before normal play begins; later clients only load the persisted world.
-- Once a cell is written to the database it is never regenerated or overwritten by world generation — player modifications (chopped trees, placed houses) persist permanently.
+### Lazy chunk generation
+- The world is divided into **32×32-tile chunks** (chunk coordinates `(cx, cy)` where `cx = ⌊x/32⌋`, `cy = ⌊y/32⌋`). The full world fits in a 32×32 chunk grid.
+- A random world seed is created once when the first player ever logs in, stored at `config/seed` in Firebase. All 100 village POIs and 100 dungeon-entrance POIs are computed from the seed at that time and stored at `config/pois`.
+- A chunk is generated the first time any client explores its tiles. The client calls a pure deterministic function `generateChunk(cx, cy, seed, pois)` — same inputs always produce the same output — then batch-writes the 1024 tiles (plus enemies and NPCs if applicable) to Firebase and records a sentinel at `/map/chunks/{cx}_{cy}`.
+- Any subsequent client entering the same area reads the persisted tiles from Firebase instead of regenerating.
+- Once a tile is written it is never overwritten by world generation — player modifications (chopped trees, placed houses) persist permanently.
+- Road paths between POIs are pre-computed from the seed in memory. When a chunk is generated, any road tiles that cross it are stamped on top of the noise-based terrain, guaranteeing that POIs will be connected by a passable road as the world is explored.
 
 ### Zones
 
@@ -31,10 +33,9 @@ A browser-based multiplayer RPG with a persistent shared world, real-time Fireba
 | **Dungeon** | Underground multi-floor complex accessed via a surface entrance tile. |
 
 - The 1000×1000 world is divided into a **10×10 grid of 100-tile sectors**. Each sector contains exactly one village and one dungeon entrance, placed at a seeded-random offset within the sector.
-- Rivers are traced as connected paths following the terrain elevation gradient.
-- World generation must guarantee that every major zone type appears in reachable land.
-- Every village and every dungeon entrance must be reachable on foot from every other village and dungeon entrance.
-- If rivers, cliffs, forests, or dense obstacle placement would disconnect the world, generation must automatically repair connectivity by carving passable paths and placing bridges where needed.
+- Rivers are traced as connected paths within each chunk following the local elevation gradient.
+- Road paths between all POIs are pre-computed from the seed. When a chunk containing a road segment is generated, road tiles (`dirt_path`, `cobblestone`, or `bridge` over water) are stamped in, ensuring every explored POI is connected to every other explored POI by a walkable road.
+- No global connectivity repair pass is needed; connectivity is guaranteed by the deterministic road network stamped at chunk-generation time.
 
 ### Tiles by zone
 

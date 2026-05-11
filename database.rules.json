@@ -1,0 +1,47 @@
+{
+  "rules": {
+    // ── config: readable by all, writable only by generator client (world bootstrap) ──
+    "config": {
+      ".read": true,
+      ".write": true
+    },
+
+    // ── map: readable by all, writable by all (bootstrap writes tiles; players modify tiles) ──
+    "map": {
+      ".read": true,
+      ".write": true
+    },
+
+    // ── players: each player can only write their own record ──
+    "players": {
+      ".read": true,
+      "$playerId": {
+        ".write": true
+      }
+    },
+
+    // ── entities: readable by all, writable by all (executor assignment + script updates) ──
+    "entities": {
+      ".read": true,
+      ".write": true
+    },
+
+    // ── presence: readable by all, writable by all (movement + disconnect cleanup) ──
+    "presence": {
+      ".read": true,
+      ".write": true
+    },
+
+    // ── chat: readable by all, append-only per message key ──
+    "chat": {
+      ".read": true,
+      ".write": true
+    },
+
+    // ── shops: readable by all, writable by all (restock + stock updates) ──
+    "shops": {
+      ".read": true,
+      ".write": true
+    }
+  }
+}

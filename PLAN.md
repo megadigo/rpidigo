@@ -2,7 +2,7 @@
 
 ## Overview
 
-A multiplayer browser-based RPG with a 1000×1000 bounded world that is generated in full at world initialization, Firebase persistence, distributed NPC/enemy script execution, and Python-scriptable entity behaviors. No dedicated server — all clients connect directly to Firebase.
+A multiplayer browser-based RPG with a 1000×1000 bounded world that is generated **lazily, chunk by chunk, as players explore**, Firebase persistence, distributed NPC/enemy script execution, and Python-scriptable entity behaviors. No dedicated server — all clients connect directly to Firebase.
 
 ---
 
@@ -16,7 +16,7 @@ A multiplayer browser-based RPG with a 1000×1000 bounded world that is generate
 | Database | Firebase Realtime Database | Single table, real-time sync, offline support |
 | Auth | Firebase Realtime Database (custom) | Name + password stored in player template (hashed) |
 | Python runtime | Pyodide (WASM) | Runs Python scripts client-side for entity behaviors |
-| Map generation | `simplex-noise` library | Seeded random 1000×1000 world generated once at bootstrap, then persisted |
+| Map generation | `simplex-noise` library | Seeded random 1000×1000 world generated lazily in 32×32-tile chunks as players explore |
 | Build tool | Vite | Fast HMR, TypeScript support |
 
 ---
@@ -37,8 +37,8 @@ This is the **authoritative implementation order**. Each phase must end with a p
 
 ### Phase 3 — Playable World Exploration Slice
 - Includes: Steps `2.1` to `2.5`, Steps `3.2` to `3.6`, and Steps `4.1` to `4.2`
-- Scope: full-world generation, world bootstrap, connectivity validation, collision map, Phaser scale config, full scene structure, IntroScene, camera, login with email and champion selection, spawn, player placement, and movement
-- End-of-phase outcome: a player reaches the intro screen, registers with an email and a chosen champion, spawns into a valid world, sees the map, and moves around reliably
+- Scope: lazy chunk world generation, seed + POI init, ChunkManager, collision map, Phaser scale config, full scene structure, IntroScene, camera, login with email and champion selection, spawn, player placement, and movement
+- End-of-phase outcome: a player reaches the intro screen, registers with an email and a chosen champion, spawns into a lazily-generated world, sees the map, and moves around reliably
 
 ### Phase 4 — Playable Enemy Combat Slice
 - Enemy work comes before NPC work
@@ -93,12 +93,8 @@ The database is split into purpose-built top-level collections. Each has a singl
 #### `/config` — World configuration (written once; read at startup)
 ```
 config/
-  seed:    number                     # deterministic world seed
-  world:
-    status: 'empty' | 'generating' | 'ready'
-    generatorPlayerId: string | null
-    generatedAt: number
-  pois:    { villages: [...], dungeons: [...] }
+  seed:    number                     # deterministic world seed (written on first-ever login)
+  pois:    { villages: [...], dungeons: [...] }   # computed from seed; written on first-ever login
   extensions/                         # runtime content additions — merged into registries at startup
     tiles/    { [id]: TileDefinition }
     enemies/  { [id]: EnemyDefinition }
@@ -108,6 +104,15 @@ config/
     armors/   { [id]: ArmorDefinition }
     recipes/  { [id]: RecipeDefinition }
 ```
+
+#### `/map/chunks/{cx}_{cy}` — Generated-chunk sentinel
+```
+map/
+  chunks/
+    {cx}_{cy}: true     # present = this 32×32 chunk has been written to /map/0/
+                        # absent  = no client has generated this chunk yet
+```
+*Tile data itself is still stored at `/map/{room}/{x}_{y}` (schema unchanged). The sentinel is a lightweight flag so any client can decide in one read whether to generate or read.*
 
 ---
 
@@ -466,225 +471,139 @@ This means: adding new content = add a definition object to a data file (or push
 
 ## Phase 3 Details — Playable World Exploration: World Generation
 
-### Step 2.1 — Full-world generator (`src/world/WorldGen.ts`)
-- World is a fixed **1000×1000** grid (coordinates 0–999 on each axis)
-- On the first world bootstrap, create a random seed if `config/seed` does not exist yet; persist it immediately
-- Use `simplex-noise` with that seed to build the **entire overworld and all dungeon floors in memory first**, then write them to Firebase in chunks
-- `generateWorld(seed): WorldSnapshot` → returns the full tile map, POIs, village layouts, dungeon layouts, roads, bridges, and initial spawn placements
-- Bounds guard: any call outside [0, 999] returns a `void` (impassable barrier) tile
+### Step 2.1 — Lazy chunk generator (`src/world/ChunkGen.ts`)
 
----
+The world is never generated upfront. Instead, 32×32-tile **chunks** are generated on demand the first time any client visits them, then persisted to Firebase so every subsequent client reads the stored tiles.
 
-#### Zone system (`src/world/ZoneMap.ts`)
+**Chunk coordinates:**
+- A tile at `(x, y)` belongs to chunk `(cx, cy)` where `cx = Math.floor(x / 32)`, `cy = Math.floor(y / 32)`
+- Chunk key: `${cx}_${cy}` — used as the sentinel key under `/map/chunks/`
+- World bounds: `cx` ∈ [0, 31], `cy` ∈ [0, 31] (covering the full 1024×1024 usable area; tiles 1000–1023 are `void`)
 
-Three stacked noise layers determine every cell's zone and tile:
-
-| Noise layer | Scale | Purpose |
-|---|---|---|
-| `elevation` | 300 | Broad terrain shape (high = hills/desert, low = water/plains) |
-| `moisture` | 200 | Wet vs dry (high = forest/river, low = desert) |
-| `detail` | 20 | Fine variation within a zone (tile variant selection) |
+**`generateChunk(cx, cy, seed, pois): ChunkData`** — pure function, deterministic, no Firebase calls:
+1. For each tile `(x, y)` in the 32×32 chunk, sample three simplex-noise layers:
+   - `elevation = noise(x/300, y/300)` (seed offset 0)
+   - `moisture   = noise(x/200, y/200)` (seed offset 1000)
+   - `detail     = noise(x/20,  y/20)`  (seed offset 2000)
+2. Assign zone via priority lookup (same table as before); pick tile from zone `tileProbabilities` weighted by `detail`
+3. **POI stamp** — if this chunk contains a village or dungeon-entrance POI position, overwrite affected tiles with the structured layout (VillageGen / DungeonGen output)
+4. **Road stamp** — if any pre-computed road segment passes through this chunk, overwrite road cells with `dirt_path` / `cobblestone` / `bridge` as appropriate
+5. Return `{ tiles: Record<string, TileData>, enemies: EnemyInstance[] }` — the tiles and initial enemy spawns for the chunk
+6. Bounds guard: any tile outside [0, 999] is forced to `void`
 
 **Zone lookup table** (evaluated in priority order):
 
-| Zone | Condition | Notes |
-|---|---|---|
-| `river` | elevation < 0.25 AND moisture > 0.6 | Linear water features (see river pass below) |
-| `desert` | elevation > 0.55 AND moisture < 0.35 | Arid zones |
-| `forest` | moisture > 0.65 AND elevation 0.3–0.7 | Dense woodland |
-| `plains` | default (everything else) | Open grassland |
-| `village` | POI grid (see below) | Structured, overrides noise |
-| `dungeon` | POI grid (see below) | Structured, overrides noise |
+| Zone | Condition |
+|---|---|
+| `river` | elevation < 0.25 AND moisture > 0.6 |
+| `desert` | elevation > 0.55 AND moisture < 0.35 |
+| `forest` | moisture > 0.65 AND elevation 0.3–0.7 |
+| `plains` | default |
+| `village` | POI stamp overrides noise |
+| `dungeon` | POI stamp overrides noise |
 
-**River pass** — applied after zone assignment:
-- Trace river paths using elevation gradient flow (downhill from peaks to edges)
-- River cells form connected horizontal/vertical chains, not isolated patches
-- River banks (1-tile border around river) become `sand_bank` or `reeds`
-
-**Point-of-interest (POI) placement** — deterministic grid + jitter:
-- Divide the 1000×1000 world into a **10×10 grid** of 100×100-tile sectors
-- Each sector contains exactly **one village** and **one dungeon entrance**, placed at `sector_origin + noise_jitter(±20 tiles)`
-- POI positions are computed at startup from the seed, stored in `config/pois`
-- After POI placement, build a road network between villages and their nearest dungeon entrances so the world has a guaranteed passable backbone
+**River tracing** — applied within the chunk after zone assignment:
+- For each river-zone cell, check cardinal neighbours; connect horizontally/vertically to form chains
+- 1-tile border around river cells becomes `sand_bank` or `reeds`
 
 ---
 
-#### Tile catalogue by zone
+#### Zone noise layers
 
-**Plains**
-
-| Tile ID | Passable | Description |
+| Layer | Scale | Purpose |
 |---|---|---|
-| `grass` | ✓ | Base ground |
-| `grass_tall` | ✓ | Dense grass (slower movement) |
-| `flower_yellow` | ✓ | Decoration |
-| `flower_red` | ✓ | Decoration |
-| `dirt_path` | ✓ | Worn trail |
-| `rock_small` | ✗ | Small boulder |
-| `rock_large` | ✗ | Large boulder (mineable) |
-
-**Forest**
-
-| Tile ID | Passable | Description |
-|---|---|---|
-| `grass_dark` | ✓ | Forest floor |
-| `tree_oak` | ✗ | Oak tree (choppable → `wood`) |
-| `tree_pine` | ✗ | Pine tree (choppable → `wood`) |
-| `tree_dead` | ✗ | Dead tree (choppable → `wood`, `fiber`) |
-| `bush` | ✓ | Low shrub (yields `fiber`) |
-| `mushroom` | ✓ | Collectible (crafting ingredient) |
-| `log` | ✓ | Fallen log (decoration / minor cover) |
-| `moss_rock` | ✗ | Mossy boulder (mineable → `stone`) |
-
-**River / Water**
-
-| Tile ID | Passable | Description |
-|---|---|---|
-| `water_shallow` | ✗ | Wading depth — blocks movement |
-| `water_deep` | ✗ | Deep water |
-| `sand_bank` | ✓ | River bank |
-| `reeds` | ✓ | Riverside reeds (yields `fiber`) |
-| `bridge` | ✓ | Auto-placed at road crossings over rivers |
-| `mud` | ✓ | Slow-movement tile near banks |
-
-**Desert**
-
-| Tile ID | Passable | Description |
-|---|---|---|
-| `sand` | ✓ | Base desert ground |
-| `sand_dune` | ✓ | Dune crest (decoration) |
-| `dry_rock` | ✗ | Desert boulder (mineable → `stone`, `iron_ore`) |
-| `cactus` | ✗ | Blocks movement; yields `fiber` if cut |
-| `dry_grass` | ✓ | Sparse vegetation |
-| `oasis_water` | ✗ | Small water patch in desert |
-| `quicksand` | ✓ | Trap tile — slows movement, rare damage tick |
-
-**Village** (structured, procedurally arranged per POI)
-
-| Tile ID | Passable | Description |
-|---|---|---|
-| `cobblestone` | ✓ | Village paths and squares |
-| `house_floor` | ✓ | Interior floor |
-| `house_wall` | ✗ | Building wall |
-| `house_door` | ✓ | Entry point to building interior |
-| `house_roof` | — | Visual roof layer (rendered above sprites) |
-| `well` | ✗ | Central village feature |
-| `fence` | ✗ | Garden / yard border |
-| `market_stall` | ✓ | Merchant interaction point |
-| `blacksmith_forge` | ✓ | Craft station for metal weapons |
-| `tavern_sign` | ✓ | Tavern entrance marker |
-| `lantern` | ✓ | Decoration / light source |
-| `garden_plot` | ✓ | Farmland decoration |
-
-**Dungeon** (structured, BSP-generated rooms per POI)
-
-| Tile ID | Passable | Description |
-|---|---|---|
-| `dungeon_entrance` | ✓ | World-map tile — enter to go underground |
-| `dungeon_floor` | ✓ | Interior floor |
-| `dungeon_wall` | ✗ | Interior wall |
-| `dungeon_door` | ✓ | Room connector |
-| `dungeon_stairs_down` | ✓ | Descend to next floor |
-| `dungeon_stairs_up` | ✓ | Ascend to previous floor / exit |
-| `dungeon_torch` | ✓ | Light source (decoration) |
-| `dungeon_pillar` | ✗ | Structural pillar |
-| `dungeon_trap` | ✓ | Pressure plate (hidden; triggers damage) |
-| `dungeon_chest` | ✓ | Loot container |
-| `dungeon_altar` | ✓ | Boss room feature |
-
-**Special / Shared**
-
-| Tile ID | Passable | Description |
-|---|---|---|
-| `house` | ✓ | Player house entrance on world map |
-| `workbench` | ✓ | Crafting station (inside house interior) |
-| `chest` | ✓ | World loot container |
-| `stump` | ✓ | Chopped tree remnant (regenerates after timer) |
-| `void` | ✗ | Out-of-bounds barrier |
+| `elevation` | 300 | Broad terrain shape |
+| `moisture` | 200 | Wet vs dry |
+| `detail` | 20 | Fine tile variation within a zone |
 
 ---
 
 #### Village layout generation (`src/world/VillageGen.ts`)
 1. Place a **central well** at the POI origin
 2. Radiate **cobblestone paths** in 4 cardinal directions (length 6–10 tiles)
-3. Place **3–8 buildings** (5×4 to 8×6 tiles) along the paths — each is a rectangle of `house_wall` with a `house_door` facing the path and `house_floor` inside
+3. Place **3–8 buildings** (5×4 to 8×6 tiles) along the paths — `house_wall` border, `house_floor` interior, `house_door` facing the path
 4. Place one `blacksmith_forge` and one `market_stall` adjacent to the central square
 5. Scatter `fence`, `lantern`, and `garden_plot` tiles as decoration
-6. Spawn 2–4 villager NPCs, 1 merchant NPC, and 1–2 guard NPCs at fixed offsets from the well
-   - Merchant NPC instance is given `villageId` and `zoneId` fields so its Python script can call `actions.openShop(villageId)` and `ShopManager` can resolve the correct price list
-   - Initialize `/shops/{villageId}/lastRestock` to generation timestamp and `limitedStock` to default quantities
+6. Produce NPC instances: 2–4 villagers, 1 merchant (with `villageId` and `zoneId`), 1–2 guards
+7. Initialize `/shops/{villageId}/lastRestock` and `limitedStock`
 
 #### Dungeon layout generation (`src/world/DungeonGen.ts`)
-1. Use **BSP (Binary Space Partitioning)** to split the dungeon room (`room = "dungeon_{id}_floor_{n}"`) into 6–12 rectangular rooms
-2. Connect rooms with 1-tile-wide corridors (`dungeon_floor`); walls everywhere else
-3. Place `dungeon_door` at corridor/room junctions
-4. Scatter `dungeon_torch`, `dungeon_pillar`, and `dungeon_trap` tiles
-5. Place `dungeon_chest` in dead-end rooms; seed each with `{ gold: randInt(20,80) * floorMultiplier, items: [...] }` — floor multiplier is `1 + (floorIndex * 0.5)`
-6. Place `dungeon_stairs_down` on floor N and `dungeon_stairs_up` back to surface on floor 1
-7. Final floor contains a `dungeon_altar` (boss room); boss room chest seeded with gold 200–400
+1. BSP splits the dungeon room into 6–12 rectangular rooms
+2. 1-tile corridors connect rooms; `dungeon_wall` everywhere else
+3. `dungeon_door` at corridor/room junctions
+4. Scatter `dungeon_torch`, `dungeon_pillar`, `dungeon_trap`
+5. Dead-end rooms get `dungeon_chest` seeded with `{ gold: randInt(20,80) * (1 + floorIndex * 0.5) }`
+6. Floor N has `dungeon_stairs_down`; floor 1 has `dungeon_stairs_up` to surface
+7. Final floor has `dungeon_altar` in the boss room; boss room chest: 200–400 gold
 
-### Step 2.2 — World bootstrap and persistence (`src/world/WorldBootstrap.ts`)
-Because there is no dedicated server, the first online client that finds `config/world/status = 'empty'` is responsible for generating the shared world.
+---
 
-**Bootstrap flow:**
-1. Claim generation ownership with a Firebase transaction on `config/world/status`
-2. If claimed, generate the full overworld, all villages, all dungeon entrances, and all dungeon floors in memory
-3. Run connectivity validation and repair before writing anything permanent
-4. Write `/config/seed`, `/config/pois`, `/map/0/*`, all dungeon room maps, NPC instances, enemy instances, and `/shops/*` in chunked batched updates
-5. Mark `config/world/status = 'ready'` and set `generatedAt`
-6. If another client is already generating, wait until status becomes `ready` and then load the persisted world
+### Step 2.2 — World bootstrap and ChunkManager (`src/world/WorldBootstrap.ts` + `src/world/ChunkManager.ts`)
 
-**Chunked persistence strategy:**
-- Split the overworld write into deterministic chunks (for example 50×50 or 100×100 tile batches)
-- Commit each chunk through batched `update()` calls to avoid oversized Firebase payloads
-- Persist generation progress only through `config/world/status`; no client should partially regenerate existing chunks
+**WorldBootstrap** (runs once at app start, before any gameplay):
+1. Read `config/seed` from Firebase
+2. If missing (very first client ever), generate a random seed with a Firebase transaction, write it, and compute + write `config/pois` (100 villages + 100 dungeon entrances, deterministically placed from seed)
+3. Pre-compute road paths between all POIs from seed (in memory only — no Firebase write; roads are stamped into chunks at generation time)
+4. WorldBootstrap resolves; gameplay and chunk generation can proceed immediately
 
-### Step 2.3 — Reachability validation and repair (`src/world/ConnectivityPass.ts`)
-The generated map must satisfy the gameplay rule that every major zone and every important POI is reachable.
+**ChunkManager** (`src/world/ChunkManager.ts`):
+- Maintains an in-memory LRU cache of recently loaded/generated chunks (max 64 chunks)
+- `ensureChunk(cx, cy): Promise<void>`:
+  1. If already in cache → done
+  2. Read `/map/chunks/{cx}_{cy}` from Firebase
+  3. If sentinel exists → load tile data from `/map/0/` for the chunk's 32×32 range into cache → done
+  4. If sentinel missing → call `generateChunk(cx, cy, seed, pois)` → batch-write all 1024 tiles to `/map/0/` + write enemies to `/entities/enemies/` + write enemy presence to `/presence/0/enemies/` → set sentinel `/map/chunks/{cx}_{cy}: true` → cache result
+- Race condition safety: if two clients generate the same chunk simultaneously, both write identical deterministic output — last writer wins harmlessly
+- `ensureRadius(cx, cy, radius)`: calls `ensureChunk` for all chunks within `radius` of `(cx, cy)` — used by ChunkLoader to pre-generate the area around a moving player
 
-**Validation targets:**
-- Every village POI
-- Every dungeon entrance POI
-- At least one representative reachable region of `plains`, `forest`, `river`, and `desert`
-- Player spawn candidates within the allowed 50-tile world margin
+**ChunkLoader** (part of `src/world/ChunkManager.ts`):
+- Watches player position; whenever the player enters a new chunk, calls `ensureRadius(cx, cy, 2)` (a 5×5 chunk = 160×160 tile area)
+- Tiles in ungenerated chunks render as `void` until the async generation completes
 
-**Repair rules:**
-1. Run a flood-fill on passable overworld cells from the main road network
-2. If a village or dungeon entrance is unreachable, carve a passable connector using `dirt_path`, `cobblestone`, or `sand_bank` depending on the local zone
-3. If a river blocks the connector, place `bridge` tiles at the narrowest valid crossing
-4. Clear dense blockers (`tree_*`, `rock_*`, `cactus`) around POIs and along repaired corridors where necessary
-5. Re-run validation until all required targets are reachable
+---
 
-### Step 2.4 — Zone-aware enemy spawning (`src/world/SpawnManager.ts`)
-After the full map is generated and validated, spawn enemies from the persisted zone layout using a seeded roll per eligible cell.
+### Step 2.3 — POI road network (`src/world/RoadNetwork.ts`)
 
-**Spawn algorithm:**
-1. Look up the zone's `spawnTable` from `ZoneRegistry`
-2. Roll spawn chance (seeded by `worldSeed + x * 31 + y * 97` — deterministic, never re-rolls)
-3. If spawning, pick a variant by weighted random from `spawnTable` entries
-4. Write enemy instance to `/entities/enemies/{enemyId}` and a presence snapshot to `/presence/{room}/enemies/{enemyId}`
+Roads are pre-computed from the seed at startup (pure in-memory computation, no Firebase):
+1. Build a graph of all 100 village POIs and 100 dungeon entrances
+2. For each village, compute a straight-line path (with axis-aligned jog) to the nearest dungeon entrance; this is the road corridor
+3. Store each road as an ordered list of `(x, y)` tile positions
+4. When `ChunkGen` generates a chunk, it looks up which road tiles fall inside the chunk bounds and stamps `dirt_path` (open terrain) or `cobblestone` (near villages) or `bridge` (over river tiles) on them
+5. Result: any two explored POIs will always be connected by a passable road, without any global flood-fill pass
 
-**Zone spawn tables** (variant IDs + relative weights):
+---
 
-| Zone | Spawn chance/cell | Spawn table |
-|---|---|---|
-| Plains | 2% | `wolf_weak` 60, `wolf_strong` 20, `bandit_weak` 15, `bandit_strong` 5 |
-| Forest | 4% | `wolf_weak` 40, `wolf_strong` 20, `giant_spider_weak` 20, `goblin_scout_weak` 10, `treant_strong` 5, `giant_spider_venomous` 5 |
-| River | 3% | `river_troll_weak` 40, `river_troll_strong` 20, `crocodile_weak` 25, `water_spirit_weak` 10, `water_spirit_enraged` 5 |
-| Desert | 3% | `scorpion_weak` 35, `scorpion_giant` 15, `sand_worm_weak` 20, `mummy_weak` 20, `desert_bandit_strong` 10 |
-| Village outskirts | 1% | `thief_weak` 60, `dark_mage_weak` 30, `dark_mage_strong` 10 |
-| Dungeon floor 1 | 15%/room | `skeleton_weak` 40, `slime_weak` 30, `slime_corrosive` 10, `zombie_weak` 15, `zombie_armoured` 5 |
-| Dungeon floor 2+ | 20%/room | `dark_knight_weak` 30, `dark_knight_elite` 20, `ghost_weak` 25, `ghost_enraged` 10, `necromancer_weak` 10, `necromancer_strong` 5 |
-| Dungeon boss room | 100% | `dungeon_boss_strong` 100 |
+### Step 2.4 — Zone-aware enemy spawning (integrated into `ChunkGen`)
 
-- Boss room is always one `dungeon_boss_strong` instance — no weight roll needed
-- Enemy instance JSON includes `templateId` (the full variant id), `baseType`, and `variant` for fast lookup
+Enemies are spawned at chunk-generation time, not as a separate global pass.
 
-### Step 2.5 — Collision map
+**Per-tile spawn roll** (inside `generateChunk`):
+1. Determine the tile's zone
+2. Look up zone's `spawnTable` from `ZoneRegistry`
+3. Roll spawn chance with seeded RNG: `seededRandom(seed + x * 31 + y * 97)`
+4. If spawning, pick variant by weighted random; create `EnemyInstance`
+5. Add to chunk's `enemies` list — written to Firebase when the chunk is persisted
+
+**Spawn chances per zone** (unchanged):
+
+| Zone | Spawn chance/tile |
+|---|---|
+| Plains | 2% |
+| Forest | 4% |
+| River | 3% |
+| Desert | 3% |
+| Village outskirts | 1% |
+| Dungeon floor 1 | 15%/room |
+| Dungeon floor 2+ | 20%/room |
+| Dungeon boss room | 100% (always one `dungeon_boss_strong`) |
+
+---
+
+### Step 2.5 — Collision map (`src/world/CollisionMap.ts`)
+
 - Impassable tiles: all `tree_*`, `rock_*`, `moss_rock`, `cactus`, `water_*`, `oasis_water`, `house_wall`, `dungeon_wall`, `dungeon_pillar`, `fence`, `well`, `void`
-- `isPassable(x, y)` checks the local cache first, then falls back to the persisted map data for the current room
-- Boundary check: `isPassable` returns `false` for any coordinate outside [0, 999]
-- Slow-movement tiles (`grass_tall`, `mud`, `quicksand`, `sand_dune`) are passable but apply a movement speed penalty
+- `isPassable(x, y): boolean` — checks ChunkManager's in-memory cache first; returns `false` for any tile not yet loaded (chunk still generating) or out of bounds [0, 999]
+- Slow-movement tiles (`grass_tall`, `mud`, `quicksand`, `sand_dune`) are passable but apply a `speedMod` from `TileDefinition`
 
 ---
 
