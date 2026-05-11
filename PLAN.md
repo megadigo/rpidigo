@@ -2,7 +2,7 @@
 
 ## Overview
 
-A multiplayer browser-based RPG with a 1000×1000 bounded world that is generated lazily as players explore, Firebase persistence, distributed NPC/enemy script execution, and Python-scriptable entity behaviors. No dedicated server — all clients connect directly to Firebase.
+A multiplayer browser-based RPG with a 1000×1000 bounded world that is generated in full at world initialization, Firebase persistence, distributed NPC/enemy script execution, and Python-scriptable entity behaviors. No dedicated server — all clients connect directly to Firebase.
 
 ---
 
@@ -16,10 +16,60 @@ A multiplayer browser-based RPG with a 1000×1000 bounded world that is generate
 | Database | Firebase Realtime Database | Single table, real-time sync, offline support |
 | Auth | Firebase Realtime Database (custom) | Name + password stored in player template (hashed) |
 | Python runtime | Pyodide (WASM) | Runs Python scripts client-side for entity behaviors |
-| Map generation | `simplex-noise` library | Deterministic 1000×1000 world, generated lazily on exploration |
+| Map generation | `simplex-noise` library | Seeded random 1000×1000 world generated once at bootstrap, then persisted |
 | Build tool | Vite | Fast HMR, TypeScript support |
 
 ---
+
+## Phases
+
+This is the **authoritative implementation order**. Each phase must end with a playable build. The detailed sections below follow the same phase order.
+
+### Phase 1 — Project Scaffold & Firebase Setup
+- Includes: Steps `1.1` to `1.4`
+- Scope: project init, Firebase init, schema design, registries
+- End-of-phase outcome: the app boots, connects to Firebase, and the core data model is ready
+
+### Phase 2 — Sprite File Preparation
+- Includes: Step `3.1`
+- Scope: copying source sprites from the graphics directory into `public/assets/sprites/entities/` with stable filenames aligned to entity IDs
+- End-of-phase outcome: all sprite files exist under a stable path; Phaser can load them by key without blocking gameplay work
+
+### Phase 3 — Playable World Exploration Slice
+- Includes: Steps `2.1` to `2.5`, Steps `3.2` to `3.6`, and Steps `4.1` to `4.2`
+- Scope: full-world generation, world bootstrap, connectivity validation, collision map, Phaser scale config, full scene structure, IntroScene, camera, login with email and champion selection, spawn, player placement, and movement
+- End-of-phase outcome: a player reaches the intro screen, registers with an email and a chosen champion, spawns into a valid world, sees the map, and moves around reliably
+
+### Phase 4 — Playable Enemy Combat Slice
+- Enemy work comes before NPC work
+- Includes: Step `5.1`, Steps `5.3` to `5.4`, Steps `6.1` to `6.3`, and Steps `7.1` to `7.6`
+- Scope: enemy templates, pathfinding, nearest-player executor assignment, oldest-update-first scheduler, throttled entity refresh, combat, loot, death/respawn, DeathScene, and gold-stealing logic
+- End-of-phase outcome: the player can encounter enemies, die and see the DeathScene, respawn, and the combat loop is playable without overloading the client
+
+### Phase 5 — Playable NPC and Village Slice
+- Add NPCs only after the enemy/combat slice is stable
+- Includes: Step `5.2`, Step `8.6`, and Steps `9.3` to `9.4`
+- Scope: NPC templates, village NPC placement, healer, merchant, gossiper, chat/dialog notifications (DialogScene), and shop interactions
+- End-of-phase outcome: villages feel alive, NPCs speak and react, DialogScene and merchant/healer interactions work in-game
+
+### Phase 6 — Playable Progression Slice
+- Includes: Steps `4.3` to `4.6` and Steps `8.1` to `8.5`
+- Scope: stats, LevelUpScene, inventory, houses, gathering, intermediate processing, crafting stations, weapons, armor, and equipment effects
+- End-of-phase outcome: the player can gather resources, manage inventory, craft gear, equip it, and see the LevelUpScene when gaining a level
+
+### Phase 7 — UI, Performance, and Release Prep Slice
+- Includes: Steps `9.1` to `9.2` and Steps `10.1` to `10.6`
+- Scope: HUD (with mobile layout and zoom controls), inventory panel, PauseScene, MapScene, sound, performance hardening, Firebase security rules, and production build preparation
+- End-of-phase outcome: all screens are implemented, the full loop is polished and performant
+
+### Phase 8 — Publish
+- Includes: Steps `11.1` to `11.8`
+- Scope: amen.pt deployment, SSL, Firebase authorized domains, and smoke tests
+- End-of-phase outcome: the game is live in production
+
+---
+
+The sections below are the detailed phase breakdown. Existing step numbers are kept for stability, but the phase order and ownership are defined by the phase headings below.
 
 ## Phase 1 — Project Scaffold & Firebase Setup
 
@@ -44,6 +94,10 @@ The database is split into purpose-built top-level collections. Each has a singl
 ```
 config/
   seed:    number                     # deterministic world seed
+  world:
+    status: 'empty' | 'generating' | 'ready'
+    generatorPlayerId: string | null
+    generatedAt: number
   pois:    { villages: [...], dungeons: [...] }
   extensions/                         # runtime content additions — merged into registries at startup
     tiles/    { [id]: TileDefinition }
@@ -70,7 +124,7 @@ map/
         regenAt?: number              # timestamp when depleted tile regenerates
       }
 ```
-*Tile data is never overwritten by generation once written. Player modifications (chopped tree → stump, placed house) persist permanently.*
+*Tile data is generated once during world bootstrap and is never overwritten by generation afterwards. Player modifications (chopped tree → stump, placed house) persist permanently.*
 
 ---
 
@@ -80,7 +134,9 @@ players/
   {id}/
     id:            string
     name:          string
+    email:         string             # stored at registration; used to send account details
     passwordHash:  string             # SHA-256
+    championId:    string             # chosen champion e.g. 'arthax' — sprite: '{championId}.png'
     level:         number
     xp:            number
     hp:            number
@@ -111,7 +167,7 @@ entities/
   npcs/
     {id}/
       id:               string
-      templateId:       string        # NpcDefinition id e.g. 'villager.gossiper'
+      templateId:       string        # NpcDefinition id e.g. 'villager_gossiper'
       baseType:         string
       variant:          string
       hp:               number
@@ -128,13 +184,14 @@ entities/
       zoneId:           string
       state:            string        # 'idle' | 'wander' | 'talk' | 'follow' | 'flee'
       executingPlayerId: string | null
+      lastLogicAt:      number        # Unix ms — scheduler sorts oldest first
       script:           string
       memory:           {}
 
   enemies/
     {id}/
       id:               string
-      templateId:       string        # EnemyDefinition id e.g. 'wolf.aggressive'
+      templateId:       string        # EnemyDefinition id e.g. 'wolf_aggressive'
       baseType:         string
       variant:          string
       hp:               number
@@ -150,6 +207,7 @@ entities/
       spawnY:           number
       state:            string        # 'idle' | 'patrol' | 'chase' | 'attack' | 'flee' | 'dead'
       executingPlayerId: string | null
+      lastLogicAt:      number        # Unix ms — scheduler sorts oldest first
       script:           string
       memory:           {}
       carriedGold:      number        # gold stolen from players; returned as loot on death
@@ -206,7 +264,9 @@ shops/
 {
   "id": "string",
   "name": "string",
+  "email": "string",
   "passwordHash": "string",
+  "championId": "arthax",
   "level": 1,
   "xp": 0,
   "hp": 100, "maxHp": 100,
@@ -230,7 +290,7 @@ shops/
 ```json
 {
   "id": "string",
-  "templateId": "villager.wanderer",
+  "templateId": "villager_wanderer",
   "baseType": "villager",
   "variant": "wanderer",
   "hp": 80, "maxHp": 80,
@@ -242,6 +302,7 @@ shops/
   "zoneId": "plains",
   "state": "idle",
   "executingPlayerId": null,
+  "lastLogicAt": 0,
   "script": "# python behavior script",
   "memory": {}
 }
@@ -251,7 +312,7 @@ shops/
 ```json
 {
   "id": "string",
-  "templateId": "wolf.aggressive",
+  "templateId": "wolf_aggressive",
   "baseType": "wolf",
   "variant": "aggressive",
   "hp": 45, "maxHp": 45,
@@ -261,6 +322,7 @@ shops/
   "spawnRoom": "0", "spawnX": 0, "spawnY": 0,
   "state": "idle",
   "executingPlayerId": null,
+  "lastLogicAt": 0,
   "script": "# python behavior script",
   "memory": {},
   "carriedGold": 0
@@ -288,7 +350,7 @@ interface TileDefinition {
 }
 
 interface EnemyDefinition {
-  id: string          // format: '{baseType}.{profile}'  e.g. 'wolf.aggressive', 'slime.typeA', 'goblin.special1'
+  id: string          // format: '{baseType}_{profile}'  e.g. 'wolf_aggressive', 'slime_typeA', 'goblin_special1'
   baseType: string    // species name  e.g. 'wolf' — groups profiles; used for display name and sprite fallback
   variant: string     // arbitrary profile label — any string is valid: 'weak', 'aggressive', 'typeA', 'special1', 'enraged', 'boss', etc.
   displayName: string // shown to the player  e.g. 'Wolf'
@@ -311,8 +373,8 @@ interface ZoneDefinition {
   moistureRange:  [number, number]
   tileProbabilities: Record<string, number>  // tileId → weight
   spawnTable: { id: string; weight: number; levelRange?: [number, number] }[]
-  // id is any valid EnemyDefinition id (e.g. 'wolf.aggressive', 'slime.typeA', 'goblin.special1')
-  // weight is relative — wolf.aggressive:70 wolf.berserker:30 means 70% chance of aggressive wolf when a wolf spawns
+  // id is any valid EnemyDefinition id (e.g. 'wolf_aggressive', 'slime_typeA', 'goblin_special1')
+  // weight is relative — wolf_aggressive:70 wolf_berserker:30 means 70% chance of aggressive wolf when a wolf spawns
   ambientSound: string
   musicTrack: string
 }
@@ -402,12 +464,13 @@ This means: adding new content = add a definition object to a data file (or push
 
 ---
 
-## Phase 2 — World Map Generation
+## Phase 3 Details — Playable World Exploration: World Generation
 
-### Step 2.1 — Bounded deterministic map generator (`src/world/WorldGen.ts`)
+### Step 2.1 — Full-world generator (`src/world/WorldGen.ts`)
 - World is a fixed **1000×1000** grid (coordinates 0–999 on each axis)
-- Use `simplex-noise` with a fixed global seed stored in Firebase (`config/seed`) — same seed produces the same tile for any (x, y) on every client
-- `generateCell(x, y): TileData` → returns tile type and zone purely from noise; no Firebase read required
+- On the first world bootstrap, create a random seed if `config/seed` does not exist yet; persist it immediately
+- Use `simplex-noise` with that seed to build the **entire overworld and all dungeon floors in memory first**, then write them to Firebase in chunks
+- `generateWorld(seed): WorldSnapshot` → returns the full tile map, POIs, village layouts, dungeon layouts, roads, bridges, and initial spawn placements
 - Bounds guard: any call outside [0, 999] returns a `void` (impassable barrier) tile
 
 ---
@@ -442,6 +505,7 @@ Three stacked noise layers determine every cell's zone and tile:
 - Divide the 1000×1000 world into a **10×10 grid** of 100×100-tile sectors
 - Each sector contains exactly **one village** and **one dungeon entrance**, placed at `sector_origin + noise_jitter(±20 tiles)`
 - POI positions are computed at startup from the seed, stored in `config/pois`
+- After POI placement, build a road network between villages and their nearest dungeon entrances so the world has a guaranteed passable backbone
 
 ---
 
@@ -559,32 +623,40 @@ Three stacked noise layers determine every cell's zone and tile:
 6. Place `dungeon_stairs_down` on floor N and `dungeon_stairs_up` back to surface on floor 1
 7. Final floor contains a `dungeon_altar` (boss room); boss room chest seeded with gold 200–400
 
-### Step 2.2 — Lazy exploration system (`src/world/ExplorationManager.ts`)
-World cells exist in one of two states:
+### Step 2.2 — World bootstrap and persistence (`src/world/WorldBootstrap.ts`)
+Because there is no dedicated server, the first online client that finds `config/world/status = 'empty'` is responsible for generating the shared world.
 
-| State | Meaning |
-|---|---|
-| **Unvisited** | No Firebase entry. Tile is computed locally from noise but not persisted. |
-| **Visited** | Firebase entry exists. Persisted state is authoritative (may differ from noise if players modified it — chopped tree, placed house, etc.). |
+**Bootstrap flow:**
+1. Claim generation ownership with a Firebase transaction on `config/world/status`
+2. If claimed, generate the full overworld, all villages, all dungeon entrances, and all dungeon floors in memory
+3. Run connectivity validation and repair before writing anything permanent
+4. Write `/config/seed`, `/config/pois`, `/map/0/*`, all dungeon room maps, NPC instances, enemy instances, and `/shops/*` in chunked batched updates
+5. Mark `config/world/status = 'ready'` and set `generatedAt`
+6. If another client is already generating, wait until status becomes `ready` and then load the persisted world
 
-**Generation radius — on spawn and on every player move:**
-1. Compute the set of all cells within **radius 20** of the player's current position (a filled circle, ~1257 cells max)
-2. For each cell in the radius, check `/map/{room}/{x}_{y}` via a single batched `get()` call
-3. For cells that **do not exist** in Firebase: call `generateCell(x, y)`, write the result to Firebase in a single `update()` batch
-4. For cells that **already exist**: skip — never overwrite persisted state
-5. Subscribe to Firebase `onValue` only for cells within the visible viewport (~25×19 tiles); unsubscribe as they scroll off screen
-6. Cache all radius-20 cells in memory (`Map<string, TileData>`) so re-reads are instant while the player is nearby
+**Chunked persistence strategy:**
+- Split the overworld write into deterministic chunks (for example 50×50 or 100×100 tile batches)
+- Commit each chunk through batched `update()` calls to avoid oversized Firebase payloads
+- Persist generation progress only through `config/world/status`; no client should partially regenerate existing chunks
 
-**On player movement:**
-- Recalculate the radius-20 circle at the new position
-- Diff against the previously generated set → only process the new crescent of cells that entered the radius
-- This keeps each move's Firebase write cost proportional to the movement step (~20–60 new cells per tile moved), not the full radius
+### Step 2.3 — Reachability validation and repair (`src/world/ConnectivityPass.ts`)
+The generated map must satisfy the gameplay rule that every major zone and every important POI is reachable.
 
-**World boundary enforcement:**
-- `ExplorationManager` clamps the radius circle to [0, 999] — cells outside the world are never written to Firebase
+**Validation targets:**
+- Every village POI
+- Every dungeon entrance POI
+- At least one representative reachable region of `plains`, `forest`, `river`, and `desert`
+- Player spawn candidates within the allowed 50-tile world margin
 
-### Step 2.3 — Zone-aware enemy spawning (`src/world/SpawnManager.ts`)
-When `generateCell(x, y)` writes a new cell to Firebase, it also decides whether to spawn an enemy based on the cell's zone and a seeded spawn-chance roll.
+**Repair rules:**
+1. Run a flood-fill on passable overworld cells from the main road network
+2. If a village or dungeon entrance is unreachable, carve a passable connector using `dirt_path`, `cobblestone`, or `sand_bank` depending on the local zone
+3. If a river blocks the connector, place `bridge` tiles at the narrowest valid crossing
+4. Clear dense blockers (`tree_*`, `rock_*`, `cactus`) around POIs and along repaired corridors where necessary
+5. Re-run validation until all required targets are reachable
+
+### Step 2.4 — Zone-aware enemy spawning (`src/world/SpawnManager.ts`)
+After the full map is generated and validated, spawn enemies from the persisted zone layout using a seeded roll per eligible cell.
 
 **Spawn algorithm:**
 1. Look up the zone's `spawnTable` from `ZoneRegistry`
@@ -596,30 +668,101 @@ When `generateCell(x, y)` writes a new cell to Firebase, it also decides whether
 
 | Zone | Spawn chance/cell | Spawn table |
 |---|---|---|
-| Plains | 2% | `wolf.weak` 60, `wolf.strong` 20, `bandit.weak` 15, `bandit.strong` 5 |
-| Forest | 4% | `wolf.weak` 40, `wolf.strong` 20, `giant_spider.weak` 20, `goblin_scout.weak` 10, `treant.strong` 5, `giant_spider.venomous` 5 |
-| River | 3% | `river_troll.weak` 40, `river_troll.strong` 20, `crocodile.weak` 25, `water_spirit.weak` 10, `water_spirit.enraged` 5 |
-| Desert | 3% | `scorpion.weak` 35, `scorpion.giant` 15, `sand_worm.weak` 20, `mummy.weak` 20, `desert_bandit.strong` 10 |
-| Village outskirts | 1% | `thief.weak` 60, `dark_mage.weak` 30, `dark_mage.strong` 10 |
-| Dungeon floor 1 | 15%/room | `skeleton.weak` 40, `slime.weak` 30, `slime.corrosive` 10, `zombie.weak` 15, `zombie.armoured` 5 |
-| Dungeon floor 2+ | 20%/room | `dark_knight.weak` 30, `dark_knight.elite` 20, `ghost.weak` 25, `ghost.enraged` 10, `necromancer.weak` 10, `necromancer.strong` 5 |
-| Dungeon boss room | 100% | `dungeon_boss.strong` 100 |
+| Plains | 2% | `wolf_weak` 60, `wolf_strong` 20, `bandit_weak` 15, `bandit_strong` 5 |
+| Forest | 4% | `wolf_weak` 40, `wolf_strong` 20, `giant_spider_weak` 20, `goblin_scout_weak` 10, `treant_strong` 5, `giant_spider_venomous` 5 |
+| River | 3% | `river_troll_weak` 40, `river_troll_strong` 20, `crocodile_weak` 25, `water_spirit_weak` 10, `water_spirit_enraged` 5 |
+| Desert | 3% | `scorpion_weak` 35, `scorpion_giant` 15, `sand_worm_weak` 20, `mummy_weak` 20, `desert_bandit_strong` 10 |
+| Village outskirts | 1% | `thief_weak` 60, `dark_mage_weak` 30, `dark_mage_strong` 10 |
+| Dungeon floor 1 | 15%/room | `skeleton_weak` 40, `slime_weak` 30, `slime_corrosive` 10, `zombie_weak` 15, `zombie_armoured` 5 |
+| Dungeon floor 2+ | 20%/room | `dark_knight_weak` 30, `dark_knight_elite` 20, `ghost_weak` 25, `ghost_enraged` 10, `necromancer_weak` 10, `necromancer_strong` 5 |
+| Dungeon boss room | 100% | `dungeon_boss_strong` 100 |
 
-- Boss room is always one `dungeon_boss.strong` instance — no weight roll needed
+- Boss room is always one `dungeon_boss_strong` instance — no weight roll needed
 - Enemy instance JSON includes `templateId` (the full variant id), `baseType`, and `variant` for fast lookup
 
 ### Step 2.5 — Collision map
 - Impassable tiles: all `tree_*`, `rock_*`, `moss_rock`, `cactus`, `water_*`, `oasis_water`, `house_wall`, `dungeon_wall`, `dungeon_pillar`, `fence`, `well`, `void`
-- `isPassable(x, y)` checks local cache first, falls back to `generateCell` result
+- `isPassable(x, y)` checks the local cache first, then falls back to the persisted map data for the current room
 - Boundary check: `isPassable` returns `false` for any coordinate outside [0, 999]
 - Slow-movement tiles (`grass_tall`, `mud`, `quicksand`, `sand_dune`) are passable but apply a movement speed penalty
 
 ---
 
-## Phase 3 — Phaser 3 Renderer
+## Phase 2 — Sprite File Preparation
+
+### Step 3.1 — Entity sprite files
+- Source sprites are in `graphics/MiniWorldSprites/MiniWorldSprites/` — copy them into `public/assets/sprites/entities/` with flat, stable filenames
+- Directory structure:
+  - `public/assets/sprites/entities/players/`
+  - `public/assets/sprites/entities/npcs/`
+  - `public/assets/sprites/entities/enemies/`
+- Each file is named after its entity id/profile using underscores; the source graphic is noted in parentheses
+
+**Players** (source: `Characters/Champions/`)
+
+| Destination file | Source |
+|---|---|
+| `players/player_arthax.png` | `Characters/Champions/Arthax.png` |
+| `players/player_borg.png` | `Characters/Champions/Börg.png` |
+| `players/player_gangblanc.png` | `Characters/Champions/Gangblanc.png` |
+| `players/player_grum.png` | `Characters/Champions/Grum.png` |
+| `players/player_kanji.png` | `Characters/Champions/Kanji.png` |
+| `players/player_katan.png` | `Characters/Champions/Katan.png` |
+| `players/player_okomo.png` | `Characters/Champions/Okomo.png` |
+| `players/player_zhinja.png` | `Characters/Champions/Zhinja.png` |
+
+**NPCs**
+
+| Destination file | Source |
+|---|---|
+| `npcs/villager_wanderer.png` | `Characters/Workers/FarmerTemplate.png` |
+| `npcs/villager_hunter.png` | `Characters/Soldiers/Ranged/BowmanTemplate.png` |
+| `npcs/villager_fisherman.png` | `Characters/Workers/FarmerTemplate.png` |
+| `npcs/villager_gossiper.png` | `Characters/Workers/FarmerTemplate.png` |
+| `npcs/healer_standard.png` | `Characters/Soldiers/Ranged/MageTemplate.png` |
+| `npcs/merchant_standard.png` | `Characters/Workers/FarmerTemplate.png` |
+| `npcs/guard_patrol.png` | `Characters/Soldiers/Melee/SwordsmanTemplate.png` |
+
+**Enemies**
+
+| Destination file | Source |
+|---|---|
+| `enemies/wolf.png` | `Animals/Boar.png` |
+| `enemies/bandit_weak.png` | `Characters/Soldiers/Melee/AssasinTemplate.png` |
+| `enemies/bandit_strong.png` | `Characters/Soldiers/Melee/AxemanTemplate.png` |
+| `enemies/giant_spider.png` | `Characters/Monsters/GiantAnimals/GiantCrab.png` |
+| `enemies/goblin_scout_weak.png` | `Characters/Monsters/Orcs/ArcherGoblin.png` |
+| `enemies/goblin_scout_strong.png` | `Characters/Monsters/Orcs/SpearGoblin.png` |
+| `enemies/treant.png` | `Characters/Monsters/Orcs/Minotaur.png` |
+| `enemies/river_troll.png` | `Characters/Monsters/Orcs/Orc.png` |
+| `enemies/crocodile.png` | `Animals/MarineAnimals.png` |
+| `enemies/water_spirit.png` | `Characters/Monsters/Demons/PurpleDemon.png` |
+| `enemies/scorpion.png` | `Characters/Monsters/GiantAnimals/GiantCrab.png` |
+| `enemies/sand_worm.png` | `Characters/Monsters/Orcs/ClubGoblin.png` |
+| `enemies/mummy.png` | `Characters/Monsters/Undead/Skeleton-Soldier.png` |
+| `enemies/desert_bandit.png` | `Characters/Soldiers/Melee/AssasinTemplate.png` |
+| `enemies/thief.png` | `Characters/Soldiers/Melee/AssasinTemplate.png` |
+| `enemies/dark_mage_weak.png` | `Characters/Soldiers/Ranged/MageTemplate.png` |
+| `enemies/dark_mage_strong.png` | `Characters/Monsters/Orcs/OrcMage.png` |
+| `enemies/skeleton.png` | `Characters/Monsters/Undead/Skeleton-Soldier.png` |
+| `enemies/slime_weak.png` | `Characters/Monsters/Slimes/Slime.png` |
+| `enemies/slime_corrosive.png` | `Characters/Monsters/Slimes/SlimeBlue.png` |
+| `enemies/zombie.png` | `Characters/Monsters/Undead/Skeleton-Soldier.png` |
+| `enemies/dark_knight_weak.png` | `Characters/Soldiers/Melee/SwordsmanTemplate.png` |
+| `enemies/dark_knight_elite.png` | `Characters/Soldiers/Mounted/RedKnight.png` |
+| `enemies/ghost.png` | `Characters/Monsters/Demons/PurpleDemon.png` |
+| `enemies/necromancer.png` | `Characters/Monsters/Undead/Necromancer.png` |
+| `enemies/dungeon_boss_strong.png` | `Characters/Monsters/Dragons/BlackDragon.png` |
+
+- The `spriteFrame` field in each `EnemyDefinition` and `NpcDefinition` references the destination filename (without the directory prefix), e.g. `"wolf.png"`, `"necromancer.png"`
+- End of phase requirement: all destination files exist (copied from source); Phaser can load them by key
+
+---
+
+## Phase 3 Details — Playable World Exploration: Rendering
 
 ### Step 3.1 — Tileset and assets
-- Pixel-art tileset, 16×16 or 32×32 tiles, single sprite sheet with all tile IDs as named frames
+- Base tile size is fixed at **16×16** for all world tiles and entity sprites
 - **Plains:** `grass`, `grass_tall`, `flower_yellow`, `flower_red`, `dirt_path`, `rock_small`, `rock_large`
 - **Forest:** `grass_dark`, `tree_oak`, `tree_pine`, `tree_dead`, `bush`, `mushroom`, `log`, `moss_rock`, `stump`
 - **River:** `water_shallow`, `water_deep`, `sand_bank`, `reeds`, `bridge`, `mud`
@@ -627,44 +770,78 @@ When `generateCell(x, y)` writes a new cell to Firebase, it also decides whether
 - **Village:** `cobblestone`, `house_floor`, `house_wall`, `house_door`, `house_roof`, `well`, `fence`, `market_stall`, `blacksmith_forge`, `tavern_sign`, `lantern`, `garden_plot`
 - **Dungeon:** `dungeon_entrance`, `dungeon_floor`, `dungeon_wall`, `dungeon_door`, `dungeon_stairs_down`, `dungeon_stairs_up`, `dungeon_torch`, `dungeon_pillar`, `dungeon_trap`, `dungeon_chest`, `dungeon_altar`
 - **Special:** `house` (player house entrance), `workbench`, `chest`, `void`
-- **Sprite sheets:** player (4-direction walk, 3-frame), NPC variants (villager, merchant, guard, blacksmith), enemy variants (wolf, spider, goblin, treant, troll, crocodile, scorpion, sand_worm, mummy, skeleton, slime, zombie, dark_knight, ghost, dungeon_boss)
 
 ### Step 3.2 — Scene structure
-```
-BootScene      → load assets
-LoginScene     → name + password UI, create or load player
-GameScene      → main gameplay (Phaser TilemapDynamic + entity sprites)
-UIScene        → HUD overlay (HP/MP bars, inventory panel, chat/dialog)
-CraftScene     → workbench crafting UI (additive overlay)
-ShopScene      → village shop buy/sell panel (triggered by merchant.standard NPC interaction)
-```
 
-### Step 3.3 — Dynamic tilemap rendering (`src/renderer/TilemapRenderer.ts`)
+All scenes are Phaser scenes. Additive scenes run simultaneously with `GameScene`; replacement scenes stop the previous scene. Scene classes live in `src/scenes/`.
+
+| Scene | Stacking | Purpose |
+|---|---|---|
+| `IntroScene` | replacement | Title screen shown once on first page load |
+| `LoginScene` | replacement | Name, email, password, and champion selection |
+| `LoadingScene` | replacement | Asset preload + world bootstrap progress |
+| `GameScene` | replacement | Main gameplay — tilemap + entity sprites |
+| `HudScene` | additive | Persistent HP/MP/gold/chat overlay above `GameScene` |
+| `InventoryScene` | additive overlay | Item grid, armor slots, equip/drop/use |
+| `CraftScene` | additive overlay | Recipe list for workbench, forge, and altar |
+| `ShopScene` | additive overlay | Village merchant buy/sell panel |
+| `DialogScene` | additive overlay | NPC speech bubbles |
+| `MapScene` | additive overlay | Full-screen fog-of-war world map |
+| `LevelUpScene` | additive overlay | Stat point distribution on level gain |
+| `PauseScene` | additive overlay | Resume / settings / log out |
+| `DeathScene` | additive overlay | Death summary + respawn countdown |
+
+### Step 3.3 — Phaser scale config and pixel-art rendering (`src/main.ts`)
+```typescript
+new Phaser.Game({
+  width: 320,
+  height: 180,
+  pixelArt: true,           // nearest-neighbour upscaling
+  scale: {
+    mode: Phaser.Scale.FIT, // fill window, preserve 16:9
+    autoCenter: Phaser.Scale.CENTER_BOTH,
+  },
+  backgroundColor: '#000',
+})
+```
+- Logical resolution **320×180** at 16×16 tiles → 20 tiles wide × ~11 tiles tall visible at 1× zoom
+- Default camera zoom **2×**; player can adjust 1×–4× (integer steps) via scroll-wheel / pinch; persisted in `localStorage`
+- On viewport width < 640 CSS px: HUD compact layout + on-screen D-pad (see *Viewport & Scaling* in SPEC)
+
+### Step 3.4 — Dynamic tilemap rendering (`src/renderer/TilemapRenderer.ts`)
 - Use Phaser's `DynamicTilemapLayer` fed from `ChunkManager`
 - Re-render tiles on Firebase cell updates
 - Sprite pool for players, NPCs, enemies — reuse on move
 
-### Step 3.4 — Camera
+### Step 3.5 — Camera
 - Follow local player; smooth lerp
 - Render depth-sorted sprites (y-sort for top-down feel)
+- Clamp camera so it never shows void outside world boundaries (0–999)
+
+### Step 3.6 — IntroScene (`src/scenes/IntroScene.ts`)
+- Shown once on first page load before any Firebase or network call
+- Full-screen DOM overlay (HTML/CSS) centred over the Phaser canvas; `body { background: #000 }`
+- Content: game title (styled text or logo image from `public/assets/ui/title.png`), short tagline, and a **Play** button
+- **Play** click: hide overlay, launch `LoginScene`
+- No asset preloading required; renders immediately from inlined styles and a single image
 
 ---
 
-## Phase 4 — Player System
+## Phase 3 Details — Playable World Exploration: Player Login and Movement
 
 ### Step 4.1 — Authentication (`src/player/Auth.ts`)
-- **First login:** hash password (SHA-256 via Web Crypto API), pick a random spawn point, create `PlayerInstance`, write to Firebase, then trigger initial world generation (see below)
-- **Subsequent login:** query `/players` ordered by `name` field, compare hash, load saved state from `/players/{id}`
+- **Registration (first login):** collect name, email, password, and chosen champion (one of eight); hash password SHA-256 via Web Crypto API; wait for `WorldBootstrap.ensureWorldReady()`; pick a random reachable spawn point; create `PlayerInstance` (including `email` and `championId`); write to Firebase; trigger a welcome email to the provided address containing the player name via a Firebase Cloud Function or a client-side `mailto:` link as fallback
+- **Subsequent login:** query `/players` ordered by `name` field, compare hash, load saved state from `/players/{id}`; if credentials fail show error in `LoginScene`
 - Set `online: true` on connect; set `online: false` and `lastSeen: serverTimestamp()` via `onDisconnect`
 
 **Random spawn placement (first login only):**
 1. Pick random `x = randInt(50, 950)`, `y = randInt(50, 950)` — 50-tile margin keeps spawn away from world edges
 2. Verify the chosen cell is passable; re-roll up to 10 times if not
-3. Call `ExplorationManager.generateAround(x, y, radius=20)` to materialise the starting area **before** placing anything — so tile data is available for passability checks
+3. Verify the chosen cell belongs to the validated reachable overworld set generated in Phase 2
 4. Find the house position: scan up to 5 tiles away from spawn for the nearest `grass` cell; use that as `houseX, houseY`
 5. Write the `house` tile to `/map/0/{houseX}_{houseY}` (overwrites the generated `grass`)
 6. Write `PlayerInstance` to `/players/{id}` with `room: "0"`, `x`, `y`, `house`
-7. Write presence entry to `/presence/0/players/{id}` with `{ x, y, name, level, spriteFrame, state: "idle" }`
+7. Write presence entry to `/presence/0/players/{id}` with `{ x, y, name, level, spriteFrame: player.championId + '.png', state: "idle" }`
 
 ### Step 4.2 — Player movement (`src/player/PlayerController.ts`)
 - WASD / arrow key input; movement is client-predicted (apply locally, then sync to Firebase)
@@ -690,6 +867,10 @@ ShopScene      → village shop buy/sell panel (triggered by merchant.standard N
   ```
 - On disconnect: `onDisconnect` removes `/presence/{room}/players/{id}` so stale entries don't accumulate
 
+---
+
+## Phase 6 Details — Playable Progression: Player Growth, Inventory, and Housing
+
 ### Step 4.3 — Stats and power calculation (`src/player/Stats.ts`)
 - `power = baseStrength * 2 + weaponPower + powerBonusFromGloves`
 - `totalDefense = endurance * 0.5 + sum(equippedArmor[slot].defense for each filled slot)`
@@ -710,24 +891,35 @@ ShopScene      → village shop buy/sell panel (triggered by merchant.standard N
 - Interior is a fixed small room (e.g. 10×8 tiles) containing a `workbench` tile and a `chest` for personal storage
 - On respawn after death the player reappears at the house position
 
+### Step 4.6 — LevelUpScene (`src/scenes/LevelUpScene.ts`)
+- Additive overlay shown immediately when `player.xp >= xpForLevel(player.level + 1)`
+- Blocks further movement and entity script execution until dismissed
+- **Content:**
+  - “Level Up!” banner with the new level number
+  - Four stat rows: Strength, Agility, Intelligence, Endurance — each with current value and a **+** button
+  - Unspent points counter (1 stat point per level); **+** buttons disabled when zero points remain
+  - Any new recipe or unlock available at this level listed as a brief notification line
+  - **Confirm** button (only enabled once all stat points are spent)
+- **On Confirm:** write new stats to `players/{id}/stats`, increment `players/{id}/level`, recalculate and write `power` and `totalDefense`, dismiss overlay
+
 ---
 
-## Phase 5 — NPC and Enemy State Machines
+## Phase 4 Details — Playable Enemy Combat: Entity Foundations and Enemy Logic
 
 ### Step 5.1 — State machine base class (`src/entities/StateMachine.ts`)
 - Generic FSM: `states: Map<string, StateHandler>`, `currentState`, `transition(newState)`
 - `StateHandler = { onEnter?, onTick(dt, entity, world), onExit? }`
 
-### Step 5.2 — NPC states and profiles (`src/entities/NpcTemplate.ts`)
+### Step 5.2 — NPC states and profiles (`src/entities/NpcTemplate.ts`) [Implemented in Phase 5]
 
-NPCs use the same `{baseType}.{profile}` convention as enemies. Profile names are free-form.
+NPCs use the same `{baseType}_{profile}` convention as enemies. Profile names are free-form.
 
 **States:** `idle`, `wander`, `talk`, `follow`, `flee`
 
 **NpcDefinition** (added to `src/data/npcs.ts` and `src/registry/NpcRegistry.ts`):
 ```typescript
 interface NpcDefinition {
-  id: string          // '{baseType}.{profile}'  e.g. 'villager.wanderer', 'healer.standard'
+  id: string          // '{baseType}_{profile}'  e.g. 'villager_wanderer', 'healer_standard'
   baseType: string
   variant: string     // free-form profile label
   displayName: string
@@ -741,7 +933,7 @@ interface NpcDefinition {
 
 ---
 
-`villager.wanderer` — roams the village, greets players:
+`villager_wanderer` — roams the village, greets players:
 ```python
 import random
 player = world.nearestPlayer(entity, radius=3)
@@ -763,7 +955,7 @@ else:
 
 ---
 
-`villager.hunter` — patrols the forest edge, talks about game:
+`villager_hunter` — patrols the forest edge, talks about game:
 ```python
 import random
 player = world.nearestPlayer(entity, radius=2)
@@ -781,7 +973,7 @@ else:
 
 ---
 
-`villager.fisherman` — stays near river tiles, shares river knowledge:
+`villager_fisherman` — stays near river tiles, shares river knowledge:
 ```python
 import random
 player = world.nearestPlayer(entity, radius=2)
@@ -798,7 +990,7 @@ else:
 
 ---
 
-`villager.gossiper` — shares world knowledge: dungeon locations, treasures, boss sightings, village directions:
+`villager_gossiper` — shares world knowledge: dungeon locations, treasures, boss sightings, village directions:
 ```python
 import random
 player = world.nearestPlayer(entity, radius=3)
@@ -837,7 +1029,7 @@ else:
 
 ---
 
-`healer.standard` — restores player HP and MP on approach:
+`healer_standard` — restores player HP and MP on approach:
 ```python
 player = world.nearestPlayer(entity, radius=2)
 if player:
@@ -857,7 +1049,7 @@ else:
 
 ---
 
-`merchant.standard` — greets players and opens the shop:
+`merchant_standard` — greets players and opens the shop:
 ```python
 import random
 player = world.nearestPlayer(entity, radius=2)
@@ -885,15 +1077,15 @@ else:
 
 | Profile | Count per village | Placement |
 |---|---|---|
-| `villager.wanderer` | 2–4 | Random grass cells in village bounds |
-| `villager.hunter` | 1 | Near village edge facing forest |
-| `villager.fisherman` | 1 | Adjacent to nearest river or water tile |
-| `villager.gossiper` | 1 | Near the central well |
-| `healer.standard` | 1 | Inside or adjacent to a house building |
-| `merchant.standard` | 1 | At `market_stall` tile |
-| `guard.patrol` | 1–2 | At village entry paths |
+| `villager_wanderer` | 2–4 | Random grass cells in village bounds |
+| `villager_hunter` | 1 | Near village edge facing forest |
+| `villager_fisherman` | 1 | Adjacent to nearest river or water tile |
+| `villager_gossiper` | 1 | Near the central well |
+| `healer_standard` | 1 | Inside or adjacent to a house building |
+| `merchant_standard` | 1 | At `market_stall` tile |
+| `guard_patrol` | 1–2 | At village entry paths |
 
-### Step 5.3 — Enemy states, variants and templates (`src/entities/EnemyTemplate.ts`)
+### Step 5.3 — Enemy states, variants and templates (`src/entities/EnemyTemplate.ts`) [Implemented in Phase 4]
 - States: `idle`, `patrol`, `chase`, `attack`, `flee`, `dead`
 - Aggro range: if player within N tiles → `chase`
 - Attack: if adjacent → deal `power` damage to player, apply cooldown
@@ -902,7 +1094,7 @@ else:
 
 #### Variant system
 
-Every enemy is identified by `{baseType}.{profile}`. The profile is a **free-form label** — any string is valid: `aggressive`, `typeA`, `special1`, `weak`, `strong`, `berserker`, `enraged`, `spectral`, `boss`, or anything else that describes the behaviour. Each profile is a **separate `EnemyDefinition`** with its own stats and its own Python behaviour script. Profiles of the same `baseType` share a display name and can share a sprite frame.
+Every enemy is identified by `{baseType}_{profile}`. The profile is a **free-form label** — any string is valid: `aggressive`, `typeA`, `special1`, `weak`, `strong`, `berserker`, `enraged`, `spectral`, `boss`, or anything else that describes the behaviour. Each profile is a **separate `EnemyDefinition`** with its own stats and its own Python behaviour script. Profiles of the same `baseType` share a display name and can share a sprite frame.
 
 Rules for profile design:
 - There is no required naming convention — use names that describe the behaviour (`aggressive`, `coward`, `healer`, `typeA`) or role (`special1`, `elite`, `miniboss`)
@@ -912,27 +1104,27 @@ Rules for profile design:
 
 **Example variant pairs:**
 
-`wolf.weak`
+`wolf_weak`
 - HP 25 · Power 6 · Speed fast
 - Script: flees any player on sight; wanders otherwise
 
-`wolf.strong`
+`wolf_strong`
 - HP 45 · Power 12 · Speed fast
 - Script: chases and attacks player; only flees at HP < 15%
 
-`slime.weak`
+`slime_weak`
 - HP 20 · Power 4 · Speed slow
 - Script: moves away from nearest player; does not attack
 
-`slime.corrosive`
+`slime_corrosive`
 - HP 35 · Power 10 · Speed slow
 - Script: actively chases and attacks; applies armour-reduction debuff on hit (via `special: ['corrodes_armor']`)
 
-`necromancer.weak`
+`necromancer_weak`
 - HP 55 · Power 20 · Speed normal
 - Script: keeps distance from player; casts ranged spell every 3 s
 
-`necromancer.strong`
+`necromancer_strong`
 - HP 80 · Power 30 · Speed normal
 - Script: keeps distance; re-spawns dead skeletons every 10 s via `world.nearbyDead(entity, 'skeleton', radius=5)` + `actions.revive(id)`
 
@@ -942,47 +1134,47 @@ Rules for profile design:
 
 | Variant ID | HP | Power | Speed | Behaviour summary | Loot |
 |---|---|---|---|---|---|
-| `wolf.weak` | 25 | 6 | fast | flees on sight | `hide` x1 |
-| `wolf.strong` | 45 | 12 | fast | chases; flees HP<15% | `hide` x1, `meat` x1 |
-| `bandit.weak` | 35 | 8 | normal | patrols; flees HP<30% | `gold` 1–3 |
-| `bandit.strong` | 55 | 16 | normal | chases; steals 10–25 gold/hit | `gold` 3–8 + `carriedGold`, `wooden_sword` 10% |
-| `giant_spider.weak` | 30 | 7 | normal | wanders; chases on sight | `silk` x1 |
-| `giant_spider.venomous` | 50 | 14 | normal | chases; poisons on hit | `silk` x1, `poison_sac` 60% |
-| `goblin_scout.weak` | 20 | 5 | fast | flees if outnumbered | `fiber` x1 |
-| `goblin_scout.strong` | 35 | 10 | fast | chases; calls allies; steals 3–8 gold/hit | `gold` 1–5 + `carriedGold`, `fiber` x1 |
-| `treant.strong` | 120 | 20 | slow | patrols; limited chase (3 tiles) | `ancient_wood` x2, `mushroom` x2 |
-| `river_troll.weak` | 60 | 12 | normal | wanders near water | `stone` x2 |
-| `river_troll.strong` | 100 | 22 | normal | aggressive; limited chase | `stone` x2, `gold` 2–8 |
-| `crocodile.weak` | 45 | 10 | normal | ambush (idle until player adjacent) | `hide` x1, `meat` x1 |
-| `water_spirit.weak` | 25 | 8 | fast | flees; only attacks if cornered | `gold` 1–4 |
-| `water_spirit.enraged` | 50 | 18 | fast | chases relentlessly | `crystal` 40%, `gold` 2–6 |
-| `scorpion.weak` | 25 | 10 | fast | chases; basic attack | `chitin` x1 |
-| `scorpion.giant` | 55 | 20 | fast | chases; poisons on hit | `chitin` x2, `poison_sac` 70% |
-| `sand_worm.weak` | 80 | 15 | slow | burrows; surfaces near player | `chitin` x2 |
-| `mummy.weak` | 45 | 12 | slow | wanders; chases on sight | `linen` x1 |
-| `desert_bandit.strong` | 60 | 18 | normal | chases; steals 15–35 gold/hit | `gold` 3–10 + `carriedGold`, `iron_ore` x1 |
-| `thief.weak` | 30 | 7 | fast | steals 5–15 gold then flees; gold lost if escape | `gold` 5–10 + `carriedGold` |
-| `dark_mage.weak` | 40 | 14 | normal | keeps distance; ranged spell | `mana_crystal` x1 |
-| `dark_mage.strong` | 60 | 22 | normal | keeps distance; AOE spell | `mana_crystal` x1, `spell_scroll` 25% |
-| `skeleton.weak` | 35 | 9 | normal | patrol; chases on sight | `bone` x1 |
-| `slime.weak` | 20 | 4 | slow | flees player | `slime_gel` x1 |
-| `slime.corrosive` | 35 | 10 | slow | chases; corrodes armour | `slime_gel` x1 |
-| `zombie.weak` | 45 | 8 | slow | wanders; chases slowly | `rotten_flesh` x1 |
-| `zombie.armoured` | 70 | 14 | slow | chases; high defence | `rotten_flesh` x1, `gold` 2–5 |
-| `dark_knight.weak` | 70 | 18 | normal | patrols; chases on sight | `iron_ingot` x1, `gold` 5–10 |
-| `dark_knight.elite` | 110 | 30 | normal | chases; never flees; heavy hit | `iron_ingot` x2, `gold` 10–20, `iron_sword` 15% |
-| `ghost.weak` | 45 | 14 | fast | drifts; ignores walls | `ectoplasm` x1 |
-| `ghost.enraged` | 70 | 24 | fast | charges player; ignores walls | `ectoplasm` x2, `mana_crystal` 40% |
-| `necromancer.weak` | 55 | 20 | normal | ranged; keeps distance | `spell_scroll` x1 |
-| `necromancer.strong` | 80 | 30 | normal | ranged; re-spawns skeletons | `spell_scroll` x1, `dark_robe` 25% |
-| `dungeon_boss.strong` | 500 | 50 | normal | room lock; phase-based attack | `boss_key` x1, `rare_weapon` 100%, `gold` 200–400 |
+| `wolf_weak` | 25 | 6 | fast | flees on sight | `hide` x1 |
+| `wolf_strong` | 45 | 12 | fast | chases; flees HP<15% | `hide` x1, `meat` x1 |
+| `bandit_weak` | 35 | 8 | normal | patrols; flees HP<30% | `gold` 1–3 |
+| `bandit_strong` | 55 | 16 | normal | chases; steals 10–25 gold/hit | `gold` 3–8 + `carriedGold`, `wooden_sword` 10% |
+| `giant_spider_weak` | 30 | 7 | normal | wanders; chases on sight | `silk` x1 |
+| `giant_spider_venomous` | 50 | 14 | normal | chases; poisons on hit | `silk` x1, `poison_sac` 60% |
+| `goblin_scout_weak` | 20 | 5 | fast | flees if outnumbered | `fiber` x1 |
+| `goblin_scout_strong` | 35 | 10 | fast | chases; calls allies; steals 3–8 gold/hit | `gold` 1–5 + `carriedGold`, `fiber` x1 |
+| `treant_strong` | 120 | 20 | slow | patrols; limited chase (3 tiles) | `ancient_wood` x2, `mushroom` x2 |
+| `river_troll_weak` | 60 | 12 | normal | wanders near water | `stone` x2 |
+| `river_troll_strong` | 100 | 22 | normal | aggressive; limited chase | `stone` x2, `gold` 2–8 |
+| `crocodile_weak` | 45 | 10 | normal | ambush (idle until player adjacent) | `hide` x1, `meat` x1 |
+| `water_spirit_weak` | 25 | 8 | fast | flees; only attacks if cornered | `gold` 1–4 |
+| `water_spirit_enraged` | 50 | 18 | fast | chases relentlessly | `crystal` 40%, `gold` 2–6 |
+| `scorpion_weak` | 25 | 10 | fast | chases; basic attack | `chitin` x1 |
+| `scorpion_giant` | 55 | 20 | fast | chases; poisons on hit | `chitin` x2, `poison_sac` 70% |
+| `sand_worm_weak` | 80 | 15 | slow | burrows; surfaces near player | `chitin` x2 |
+| `mummy_weak` | 45 | 12 | slow | wanders; chases on sight | `linen` x1 |
+| `desert_bandit_strong` | 60 | 18 | normal | chases; steals 15–35 gold/hit | `gold` 3–10 + `carriedGold`, `iron_ore` x1 |
+| `thief_weak` | 30 | 7 | fast | steals 5–15 gold then flees; gold lost if escape | `gold` 5–10 + `carriedGold` |
+| `dark_mage_weak` | 40 | 14 | normal | keeps distance; ranged spell | `mana_crystal` x1 |
+| `dark_mage_strong` | 60 | 22 | normal | keeps distance; AOE spell | `mana_crystal` x1, `spell_scroll` 25% |
+| `skeleton_weak` | 35 | 9 | normal | patrol; chases on sight | `bone` x1 |
+| `slime_weak` | 20 | 4 | slow | flees player | `slime_gel` x1 |
+| `slime_corrosive` | 35 | 10 | slow | chases; corrodes armour | `slime_gel` x1 |
+| `zombie_weak` | 45 | 8 | slow | wanders; chases slowly | `rotten_flesh` x1 |
+| `zombie_armoured` | 70 | 14 | slow | chases; high defence | `rotten_flesh` x1, `gold` 2–5 |
+| `dark_knight_weak` | 70 | 18 | normal | patrols; chases on sight | `iron_ingot` x1, `gold` 5–10 |
+| `dark_knight_elite` | 110 | 30 | normal | chases; never flees; heavy hit | `iron_ingot` x2, `gold` 10–20, `iron_sword` 15% |
+| `ghost_weak` | 45 | 14 | fast | drifts; ignores walls | `ectoplasm` x1 |
+| `ghost_enraged` | 70 | 24 | fast | charges player; ignores walls | `ectoplasm` x2, `mana_crystal` 40% |
+| `necromancer_weak` | 55 | 20 | normal | ranged; keeps distance | `spell_scroll` x1 |
+| `necromancer_strong` | 80 | 30 | normal | ranged; re-spawns skeletons | `spell_scroll` x1, `dark_robe` 25% |
+| `dungeon_boss_strong` | 500 | 50 | normal | room lock; phase-based attack | `boss_key` x1, `rare_weapon` 100%, `gold` 200–400 |
 
 **Special flags still apply per variant:**
-- `ghost.*` → `special: ['ignores_walls']` — passable through `dungeon_wall`; immune to physical weapons
-- `dungeon_boss.strong` → `special: ['room_lock', 'phase_attack']`
-- `necromancer.strong` → `special: ['summons_skeletons']`
-- `slime.corrosive` → `special: ['corrodes_armor']`
-- `thief.weak`, `bandit.strong`, `desert_bandit.strong`, `goblin_scout.strong` → `special: ['steals_gold']` — `Combat.ts` checks this flag after each hit and calls `goldSteal(attacker, defender)`
+- `ghost_*` → `special: ['ignores_walls']` — passable through `dungeon_wall`; immune to physical weapons
+- `dungeon_boss_strong` → `special: ['room_lock', 'phase_attack']`
+- `necromancer_strong` → `special: ['summons_skeletons']`
+- `slime_corrosive` → `special: ['corrodes_armor']`
+- `thief_weak`, `bandit_strong`, `desert_bandit_strong`, `goblin_scout_strong` → `special: ['steals_gold']` — `Combat.ts` checks this flag after each hit and calls `goldSteal(attacker, defender)`
 
 ### Step 5.4 — Pathfinding (`src/world/Pathfinder.ts`)
 - A* on loaded chunk cells using `isPassable`
@@ -991,19 +1183,26 @@ Rules for profile design:
 
 ---
 
-## Phase 6 — Distributed Script Execution
+## Phase 4 Details — Playable Enemy Combat: Distributed Execution
 
 ### Step 6.1 — Executor assignment (`src/scripting/ExecutorAssigner.ts`)
 - Each online player maintains a list of entities within `MAX_EXEC_DISTANCE` tiles (configurable, default 30)
-- On player connect / position change: write `executingPlayerId = localPlayerId` to `/entities/npcs/{id}` and `/entities/enemies/{id}` for each nearby entity whose `executingPlayerId` is null or belongs to an offline player
+- On player connect / position change: compare distance from the entity to all online players in the room; the **nearest player** is the preferred executor
+- Claim rules:
+  - If `executingPlayerId` is null, the nearest player claims it
+  - If the current executor is offline, the nearest online player claims it
+  - If another online player becomes strictly nearer than the current executor, ownership may transfer to that nearer player
+- Ownership claim writes `executingPlayerId = localPlayerId` only for entities where the local player is the current nearest eligible client
 - On player disconnect: `onDisconnect` clears `executingPlayerId` for all entities assigned to them (reads assigned list from `/presence/{room}`)
-- Firebase listener on `/entities/npcs` and `/entities/enemies` filtered by `executingPlayerId === localPlayerId` — only execute scripts for owned entities
+- Firebase listener on `/entities/npcs` and `/entities/enemies` filtered by `executingPlayerId === localPlayerId` — only execute scripts for locally owned entities
+- Keep assignment recalculation debounced (default 500 ms) so movement does not cause constant ownership churn
 
 ### Step 6.2 — Python scripting engine (`src/scripting/ScriptEngine.ts`)
 - Load Pyodide once on app start; expose JS↔Python bridge
 - `runScript(entityId, script, context)` → executes script, collects returned actions, applies them via Firebase writes
 - Sandbox: no file/network access; timeout after 100 ms
 - Script source comes from the entity instance's `script` field, which was copied from the template variant at spawn time
+- After each successful script execution, update `lastLogicAt = serverTimestamp()` on the entity so the scheduler can prioritize the stalest entities first
 
 **Exposed Python API:**
 ```python
@@ -1033,7 +1232,7 @@ memory   # dict — persisted across ticks in entity.memory (Firebase)
 
 **Variant script examples:**
 
-`wolf.weak` — flees on sight:
+`wolf_weak` — flees on sight:
 ```python
 player = world.nearestPlayer(entity, radius=8)
 if player:
@@ -1046,7 +1245,7 @@ else:
     actions.move(0, 0)
 ```
 
-`wolf.strong` — chases and attacks:
+`wolf_strong` — chases and attacks:
 ```python
 player = world.nearestPlayer(entity, radius=entity['aggroRange'])
 if player:
@@ -1069,7 +1268,7 @@ else:
     actions.move(memory.get('dx', 1), 0)
 ```
 
-`slime.weak` — runs away:
+`slime_weak` — runs away:
 ```python
 player = world.nearestPlayer(entity, radius=6)
 if player:
@@ -1082,7 +1281,7 @@ else:
     actions.setState('idle')
 ```
 
-`slime.corrosive` — chases and corrodes:
+`slime_corrosive` — chases and corrodes:
 ```python
 player = world.nearestPlayer(entity, radius=entity['aggroRange'])
 if player:
@@ -1099,7 +1298,7 @@ else:
     actions.setState('patrol')
 ```
 
-`necromancer.strong` — ranged attack + re-spawns skeletons:
+`necromancer_strong` — ranged attack + re-spawns skeletons:
 ```python
 import time
 player = world.nearestPlayer(entity, radius=entity['aggroRange'])
@@ -1124,12 +1323,18 @@ if player:
 ```
 
 ### Step 6.3 — Tick loop (`src/scripting/ScriptTicker.ts`)
-- Per assigned entity: run script every N ms (configurable per entity type, default: NPC 2000ms, enemy 500ms, offline player 5000ms)
+- Maintain a local priority queue of owned entities sorted by `lastLogicAt` ascending (oldest update first)
+- On each scheduler slice, only refresh a **small capped batch**:
+  - default: up to 4 enemies
+  - default: up to 2 NPCs
+- Per assigned entity: run script no faster than its minimum interval (default: NPC 2000 ms, enemy 500 ms)
+- If the queue is larger than the current cap, leave the remaining entities for the next scheduler slice instead of refreshing everything at once
 - Batch Firebase writes to minimize round-trips
+- If the frame budget is exceeded locally, stop the current slice early and continue on the next slice
 
 ---
 
-## Phase 7 — Combat System
+## Phase 4 Details — Playable Enemy Combat: Combat Systems
 
 ### Step 7.1 — Combat resolution (`src/combat/Combat.ts`)
 - `attack(attacker, defender)`:
@@ -1139,7 +1344,7 @@ if player:
   - If `hp <= 0` → trigger death handler
   - Post-hit special effects (resolved in order):
     - `lifesteal` (shadow armor pieces) — attacker heals `damage × 0.05` per piece equipped
-    - `corrodes_armor` (slime.corrosive) — reduce `defender.totalDefense` by 1 (min 0) until combat ends
+    - `corrodes_armor` (`slime_corrosive`) — reduce `defender.totalDefense` by 1 (min 0) until combat ends
     - `steals_gold` (thief/bandit variants) — call `goldSteal(attacker, defender)` after damage is applied (see Step 7.5)
 
 ### Step 7.2 — Player death
@@ -1206,7 +1411,7 @@ function goldSteal(attacker: EnemyInstance, defender: PlayerInstance): void {
 
 **Python scripts for gold-stealing variants:**
 
-`thief.weak` — steals on first contact, then flees:
+`thief_weak` — steals on first contact, then flees:
 ```python
 player = world.nearestPlayer(entity, radius=entity['aggroRange'])
 if player:
@@ -1226,7 +1431,7 @@ else:
     actions.move(0, 0)
 ```
 
-`bandit.strong` — fights and steals each hit, never flees:
+`bandit_strong` — fights and steals each hit, never flees:
 ```python
 player = world.nearestPlayer(entity, radius=entity['aggroRange'])
 if player:
@@ -1252,9 +1457,24 @@ else:
         memory['steps'] = 0
 ```
 
+### Step 7.6 — DeathScene (`src/scenes/DeathScene.ts`)
+- Additive overlay launched immediately when `player.hp <= 0` is detected on the local player
+- Darkened full-screen vignette over the game world; `GameScene` continues rendering but all player input is disabled
+- **Content:**
+  - “You Died” title
+  - Cause line: *“Killed by [enemy display name / player name]”*
+  - Brief summary: gold retained (positive line) and items dropped (listed by name and quantity)
+  - **Respawn at House** button
+  - Countdown label: *“Auto-respawning in 10…”* (counts down to 0, then auto-fires)
+- **On respawn (button or countdown expiry):**
+  1. Teleport player to `house.x`, `house.y`, `house.room`
+  2. Set `hp = Math.floor(maxHp * 0.5)`
+  3. Write room transition to Firebase (remove old presence entry, add new)
+  4. Dismiss `DeathScene`
+
 ---
 
-## Phase 8 — Crafting System
+## Phase 6 Details — Playable Progression: Gathering, Crafting, and Shops
 
 ### Step 8.1 — Resource collection
 
@@ -1443,17 +1663,25 @@ Unlimited-stock items (`maxQuantity: -1`) are never written here.
 
 ---
 
-## Phase 9 — UI / HUD
+## Phase 5 Details — Playable NPC and Village: Dialog, Chat, and Shop UX
 
-### Step 9.1 — HUD (UIScene overlay)
-- HP bar (red), MP bar (blue), XP bar (yellow)
-- Level badge
-- Mini-map (fog-of-war, 50×50 tile grid of visited cells)
-- Quick-slot bar (4 slots)
+### Step 9.1 — HudScene (`src/scenes/HudScene.ts`)
+- Additive scene always stacked over `GameScene`; never stopped during play
+- **Top-left:** HP bar (red), MP bar (blue), level badge, XP progress bar, gold counter
+- **Top-right:** Mini-map — fog-of-war grid of visited cells (50×50 logical tiles); icons for known villages and dungeon entrances
+- **Bottom-right:** equipped weapon icon (quick-slot)
+- **Bottom-left:** chat panel — last 20 visible proximity messages; NPC speech in distinct colour; system notifications (level-up, item found, gold stolen, player joins/leaves); collapsible
+- **Bottom toolbar (mobile) / HUD edges (desktop):** **Inventory**, **Map**, and **Menu** action buttons
+- Scroll-wheel / pinch: adjust camera zoom 1×–4× (integer steps); zoom saved to `localStorage`
+- On viewport width < 640 CSS px: compact layout — chat collapses to single-line ticker; mini-map shrinks to 64×64 logical px; on-screen D-pad rendered for touch movement
 
-### Step 9.2 — Inventory panel
-- Grid display of items with icons and quantities
-- Right-click context menu: equip, drop, use
+### Step 9.2 — InventoryScene (`src/scenes/InventoryScene.ts`)
+- Additive overlay over `GameScene` + `HudScene`; entity script execution paused while open; player cannot move
+- **Left panel:** scrollable grid of inventory slots; each slot shows item icon and stack count; click to select
+- **Right panel:** character silhouette with five armour slots (helmet, chestplate, leggings, boots, gloves) and one weapon slot rendered as labelled zones; click a filled slot to unequip and return the item to the inventory grid
+- **Item tooltip (selected):** item name, power/defense, level requirement, special effect
+- **Action buttons on selected item:** **Equip** (validates slot and level), **Drop** (spawns loot at player's feet), **Use** (consumables only)
+- **Close** / ESC to dismiss
 
 ### Step 9.3 — Dialog box
 - NPC speech rendered as styled text box over game
@@ -1468,7 +1696,7 @@ Unlimited-stock items (`maxQuantity: -1`) are never written here.
 - Inside dungeon rooms the full room is small enough that all messages in the same room are shown regardless of tile distance
 - Messages older than 5 minutes are pruned client-side; the first client to notice trims entries beyond the last 100
 
-**Chat UI** (inside UIScene):
+**Chat UI** (inside `HudScene`):
 - Text input box at the bottom of the screen; press Enter to send
 - Chat history panel (collapsible) shows the last 20 visible messages with player name, timestamp, and text
 - NPC `actions.speak(text)` messages appear in the chat panel with the NPC's name in a distinct colour
@@ -1489,7 +1717,7 @@ chat/
 
 ---
 
-## Phase 10 — Polish & Integration
+## Phase 7 Details — UI, Performance, and Release Prep
 
 ### Step 10.1 — Sound
 - Ambient loop (forest, dungeon)
@@ -1553,9 +1781,30 @@ All collections require Firebase Anonymous Auth to read or write. Anonymous Auth
 - Run `npm run build` → verify `dist/` is generated without errors
 - See **Phase 11** for amen.pt upload steps
 
+### Step 10.5 — PauseScene (`src/scenes/PauseScene.ts`)
+- Additive overlay accessible from the HUD **Menu** button or ESC key at any time during play
+- Semi-transparent dark backdrop; does not stop `GameScene` rendering
+- **Content:**
+  - **Resume** button — dismisses overlay, returns focus to game
+  - **Settings** button — inline panel: master volume slider, SFX toggle, BGM toggle, keybinding reference table (read-only)
+  - **Log Out** button — writes `players/{id}/online: false`, removes `/presence/{room}/players/{id}`, transitions to `LoginScene`
+- ESC or **Resume** dismisses; cannot dismiss while `DeathScene` or `LevelUpScene` is active
+
+### Step 10.6 — MapScene (`src/scenes/MapScene.ts`)
+- Additive overlay triggered by the HUD **Map** button
+- Full-screen Phaser sub-canvas (or DOM overlay) rendering a zoomed-out view of the 1000×1000 world
+- **Content:**
+  - Cells colour-coded by zone: plains = `#5a9`, forest = `#274`, desert = `#dc8`, river = `#37b`, dungeon entrance = `#421`
+  - Fog-of-war: unvisited sectors rendered as solid `#111`; visited sectors reveal zone colours
+  - POI icons overlay: known village = house icon, known dungeon entrance = cave icon
+  - Player's current position = bright pin; player's house = star icon
+  - Scrollable and zoomable (scroll-wheel / pinch) independently of the game camera
+  - **Close** / ESC to dismiss
+- Visited-sector tracking: stored in `localStorage` as a bitmask of 100 sectors (10×10 grid over the world); updated whenever the player enters a new sector
+
 ---
 
-## Phase 11 — Publish to amen.pt
+## Phase 8 Details — Publish to amen.pt
 
 Amen.pt uses **WePanel** (Linux shared hosting). The build output is a fully static site — `dist/` contents go directly into `public_html/`.
 
@@ -1674,17 +1923,14 @@ Firebase blocks requests from unlisted domains by default.
 
 ## Implementation Order (Recommended)
 
-1. **Phase 1** — Scaffold + Firebase schema
-2. **Phase 2** — World gen + chunk loading (headless test)
-3. **Phase 3** — Phaser renderer with static tiles
-4. **Phase 4** — Player login + movement + stats
-5. **Phase 5** — NPC/Enemy state machines (JS only first)
-6. **Phase 7** — Combat system
-7. **Phase 8** — Resource collection + crafting
-8. **Phase 6** — Python scripting engine + executor assignment
-9. **Phase 9** — Full UI/HUD
-10. **Phase 10** — Polish + security rules
-11. **Phase 11** — Publish to amen.pt
+1. **Phase 1** — Project Scaffold & Firebase Setup
+2. **Phase 2** — Sprite File Preparation
+3. **Phase 3** — Playable World Exploration Slice
+4. **Phase 4** — Playable Enemy Combat Slice
+5. **Phase 5** — Playable NPC and Village Slice
+6. **Phase 6** — Playable Progression Slice
+7. **Phase 7** — UI, Performance, and Release Prep Slice
+8. **Phase 8** — Publish
 
 ---
 
@@ -1693,14 +1939,15 @@ Firebase blocks requests from unlisted domains by default.
 | Risk | Mitigation |
 |---|---|
 | Firebase write conflicts on shared cells | Use Firebase transactions for all cell mutations |
+| World bootstrap race between clients | Use a transaction-backed generation lock in `config/world/status` |
 | Pyodide load time (~5MB WASM) | Load in background; show loading screen |
 | Script executor churn when players move | Debounce executor reassignment (500ms delay) |
-| Map storage cost (up to 1M cells) | Only persist visited cells; unvisited cells are computed from noise on demand |
+| Map storage cost (up to 1M cells) | Generate once, write in chunks, and keep runtime reads viewport-scoped with local caching |
 | Python sandbox escapes | Run Pyodide in a Web Worker with no DOM access |
 
 ---
 
-## Phase 12 — Extension Guide
+## Extension Guide
 
 The registry architecture (Step 1.4) means adding any content type follows the same pattern and requires zero engine changes.
 
@@ -1736,9 +1983,9 @@ An enemy needs at least one profile, but there is no naming convention — use a
 3. **Add `EnemyDefinition` entries** to `src/data/enemies.ts` — one per profile (profile names are arbitrary). Add `stealGold: [min, max]` and `special: ['steals_gold']` if the variant should steal gold on hit — `Combat.ts` handles the rest automatically:
 
 ```typescript
-// cave_bat.coward — flees player
+// cave_bat_coward — flees player
 {
-  id: 'cave_bat.coward',
+  id: 'cave_bat_coward',
   baseType: 'cave_bat',
   variant: 'coward',
   displayName: 'Cave Bat',
@@ -1757,9 +2004,9 @@ if player:
   spriteFrame: 'cave_bat'
 },
 
-// cave_bat.aggressive — dives at player
+// cave_bat_aggressive — dives at player
 {
-  id: 'cave_bat.aggressive',
+  id: 'cave_bat_aggressive',
   baseType: 'cave_bat',
   variant: 'aggressive',
   displayName: 'Cave Bat',
@@ -1784,9 +2031,9 @@ else:
   spriteFrame: 'cave_bat'
 },
 
-// cave_bat.special1 — swoops in groups (calls nearby bats)
+// cave_bat_special1 — swoops in groups (calls nearby bats)
 {
-  id: 'cave_bat.special1',
+  id: 'cave_bat_special1',
   baseType: 'cave_bat',
   variant: 'special1',
   displayName: 'Cave Bat',
@@ -1816,9 +2063,9 @@ if player:
 
 4. **Add profiles to the zone spawn table** — in `src/data/zones.ts`, add entries with any weights you need:
 ```typescript
-{ id: 'cave_bat.coward',     weight: 50 },
-{ id: 'cave_bat.aggressive', weight: 30 },
-{ id: 'cave_bat.special1',   weight: 20 },
+{ id: 'cave_bat_coward',     weight: 50 },
+{ id: 'cave_bat_aggressive', weight: 30 },
+{ id: 'cave_bat_special1',   weight: 20 },
 ```
 5. No `SpawnManager` or `Combat` changes needed — the variant id flows through the whole system automatically
 
@@ -1830,7 +2077,7 @@ if player:
 2. **Add an `NpcDefinition`** to `src/data/npcs.ts`:
 ```typescript
 {
-  id: 'villager.herbalist',
+  id: 'villager_herbalist',
   baseType: 'villager',
   variant: 'herbalist',
   displayName: 'Villager',
@@ -1871,10 +2118,10 @@ tileProbabilities: { 'crystal_floor': 60, 'crystal_wall': 30, 'dungeon_torch': 1
   moistureRange: [0.1, 0.3],
   tileProbabilities: { 'crystal_floor': 60, 'crystal_wall': 30 },
   spawnTable: [
-    { id: 'cave_bat.weak',          weight: 45 },
-    { id: 'cave_bat.strong',        weight: 25 },
-    { id: 'crystal_golem.weak',     weight: 20 },
-    { id: 'crystal_golem.enraged',  weight: 10 },
+    { id: 'cave_bat_weak',          weight: 45 },
+    { id: 'cave_bat_strong',        weight: 25 },
+    { id: 'crystal_golem_weak',     weight: 20 },
+    { id: 'crystal_golem_enraged',  weight: 10 },
   ],
   ambientSound: 'cave_drip',
   musicTrack: 'crystal_theme'
