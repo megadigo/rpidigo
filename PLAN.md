@@ -5,149 +5,175 @@ All sprite sheets are 16×16-pixel grids. **Only the first grid cell (frame 0, t
 
 ---
 
-## Step 1 — Firebase Project Setup & Database Configuration
-*Goal: app compiles, connects to Firebase, world seed is bootstrapped. No gameplay yet.*
+## Step 1 — Firebase Setup & Title Screen
+*Goal: app starts, title screen is visible, Firebase connects without errors.*
 
 1. Copy `.env.example` to `.env` and fill in real Firebase Realtime Database credentials (API key, auth domain, databaseURL, project ID, etc.).
-2. Publish `database.rules.json` to the Firebase project (via Firebase CLI `firebase deploy --only database`). Rules cover all spec collections: `/config`, `/map`, `/players`, `/entities`, `/presence`, `/chat`, `/shops`.
-3. Verify `firebase.ts` initialises `getDatabase(app)` — no changes needed, already correct.
-4. Verify `WorldBootstrap.ensureWorldReady()` creates `config/seed` (transaction) and `config/pois` on first run, reads them on subsequent runs — already implemented.
-5. Verify `registry/bootstrap.ts` loads all built-in definitions and merges `config/extensions` from Firebase — already implemented.
-6. **Checkpoint**: `npm run build` passes; opening the game in a browser shows IntroScene; browser console shows no Firebase errors; Firebase console shows `config/seed` written after first "Play" click.
+2. Publish `database.rules.json` via `firebase deploy --only database`. Rules cover `/config`, `/map`, `/players`, `/entities`, `/presence`, `/chat`, `/shops`.
+3. `firebase.ts` and `registry/bootstrap.ts` are already correct — no changes needed.
+4. **Checkpoint**: `npm run dev` opens the browser; the "rpidigo" title screen appears; clicking **Play** navigates to the login screen; browser console shows no Firebase errors.
 
 ---
 
-## Step 2 — Player Registration/Login, Sprite Rendering & World Exploration
-*Goal: a player can register or log in, appear as their champion sprite on a rendered tile world, walk around, and trigger lazy chunk generation.*
+## Step 2 — Player Registration & Login
+*Goal: a new player can register with a name, password, and champion choice; an existing player can log back in.*
 
-### 2a — Preload assets in LoadingScene
-- In `LoadingScene.preload()` (add `preload` lifecycle), call `this.load.spritesheet()` for every tile spritesheet referenced in the Spec (`Ground/Grass.png`, `Nature/Trees.png`, `Nature/PineTrees.png`, `Ground/Shore.png`, etc.) with `frameWidth: 16, frameHeight: 16`.
-- Load all 8 champion spritesheets (`Characters/Champions/Arthax.png`, …) with the same frame size.
-- Load the enemy and NPC spritesheets referenced in the spec, same frame size.
-- Assets are served from `public/assets/sprites/` (already extracted).
-
-### 2b — Upgrade TilemapRenderer to sprite-based rendering
-- Replace the `Phaser.GameObjects.Graphics` approach with a **pool of `Phaser.GameObjects.Image`** objects (one per visible tile).
-- Map each tile type to its spritesheet key + frame 0 (use a lookup table mirroring the SPEC tile table).
-- On `drawViewport`, create/recycle Image objects positioned at `(tx * 16, ty * 16)`, set `setTexture(key).setFrame(0)`.
-- Keep `invalidateTile` and `reset` working (destroy/repool images).
-- `TILE_SIZE` stays `16`.
-
-### 2c — Upgrade PlayerController to champion sprite
-- Replace the `Phaser.GameObjects.Rectangle` sprite with a `Phaser.GameObjects.Image` using the player's `championId` spritesheet key and `setFrame(0)`.
-- Size remains 16×16; depth 10.
-- Camera follow, WASD/arrow movement, Firebase position sync, collision, and lazy chunk loading are all already implemented — no logic changes needed.
-
-### 2d — Wire LoginScene champion preview images to real sprites
-- The champion grid in `LoginScene` already shows `<img>` tags pointing to `/assets/sprites/entities/players/player_${c}.png` — these already exist in `public/assets/sprites/entities/players/`. No change needed.
-
-### 2e — Verify full flow
-- Register → `LoadingScene` seeds world, loads spawn-area chunks → `GameScene` renders tile sprites + player champion sprite.
-- Player walks using WASD; entering a new chunk triggers `ensureRadius` → chunk generated and written to Firebase → tiles appear.
-- **Checkpoint**: `npm run build` passes; player sees actual tile graphics (not coloured boxes); player sprite shows champion; moving causes world tiles to load in.
+1. The `LoginScene`, `Auth.register`, and `Auth.login` are already implemented — verify they work end-to-end.
+2. Confirm `register` writes the new player record under `/players/{id}` and presence under `/presence/0/players/{id}` in the Firebase console.
+3. Confirm `login` finds the player by name, checks the password hash, and restores the session.
+4. **Checkpoint**: Fill in the form, press **Register**; the loading screen appears; the Firebase console shows the new player entry. Press **Login** on a second visit; the same entry is reused.
 
 ---
 
-## Step 3 — Other Players (Multiplayer Presence)
-- In `GameScene.create()`, subscribe to `/presence/{room}/players` with Firebase `onValue`.
-- Render each remote player as a champion Image sprite at frame 0, with their name as a small Text above.
-- On value change, update position with a short tween (smooth movement).
-- Remove sprites on disconnect (entry deleted from presence).
-- **Checkpoint**: two browser tabs, both logged-in players see each other move in real time.
+## Step 3 — World Bootstrap & Colored-Tile Exploration
+*Goal: after login the player drops into a playable world rendered with colored rectangles and can walk around.*
+
+1. `WorldBootstrap.ensureWorldReady()`, `ChunkManager`, and `TilemapRenderer` (colored-rectangle version) are already implemented — verify the full flow.
+2. Confirm `LoadingScene` seeds the world, pre-loads spawn-area chunks (radius 2), then launches `GameScene`.
+3. Confirm `PlayerController` moves the player with WASD/arrow keys, collision works, and entering a new chunk triggers lazy generation.
+4. **Checkpoint**: After login the player sees a colored-tile world; walking around reveals new tiles; the Firebase console shows chunk data being written under `/map/`.
 
 ---
 
-## Step 4 — Enemy & NPC Sprites in the World
-- Subscribe to `/presence/{room}/enemies` and `/presence/{room}/npcs`.
-- Render each entity as an Image at frame 0 of its spritesheet key (registry lookup by `templateId`).
-- Update positions on value change.
-- No interaction or AI yet — display only.
-- **Checkpoint**: enemies and NPCs appear in chunk as it loads; sprites visible.
+## Step 4 — Tile Spritesheets
+*Goal: replace colored rectangles with real tile graphics.*
+
+1. Add a `preload()` method to `LoadingScene`; use `this.load.spritesheet()` to load every tile spritesheet from `public/assets/sprites/` (`Ground/Grass.png`, `Nature/Trees.png`, `Nature/PineTrees.png`, `Ground/Shore.png`, etc.) with `frameWidth: 16, frameHeight: 16`.
+2. Rewrite `TilemapRenderer` to use a pool of `Phaser.GameObjects.Image` objects instead of `Phaser.GameObjects.Graphics`. Map each tile type to its spritesheet key + frame 0. Keep `invalidateTile` and `reset` working.
+3. **Checkpoint**: The colored boxes are gone; the world renders real tile graphics (green grass, blue water, brown paths, etc.).
 
 ---
 
-## Step 5 — HUD (HP/MP Bars, Level, Gold, XP)
-- In `HudScene`, build DOM overlay elements (HP bar, MP bar, level badge, XP bar, gold counter) using the existing DOM-overlay pattern from IntroScene/LoginScene.
-- Read initial values from `getLocalPlayer()`.
-- Subscribe to `/players/{id}` via Firebase `onValue` to keep HUD in sync when remote writes occur (e.g. healer heals).
-- **Checkpoint**: HUD shows correct values; values update when player data changes in Firebase.
+## Step 5 — Champion Sprite
+*Goal: the player appears as their chosen champion instead of a white rectangle.*
+
+1. In `LoadingScene.preload()`, also load all 8 champion spritesheets (`Characters/Champions/Arthax.png`, …) with `frameWidth: 16, frameHeight: 16`.
+2. In `PlayerController.create()`, replace the `Phaser.GameObjects.Rectangle` with a `Phaser.GameObjects.Image` using `player.championId` as the texture key and `setFrame(0)`.
+3. **Checkpoint**: The player sprite now shows the selected champion portrait; movement, camera-follow, and collision all still work.
 
 ---
 
-## Step 6 — Proximity Chat
-- Add chat input + message list DOM elements to `HudScene`.
-- On send, write to `/chat/{room}` with `{ sender, x, y, text, timestamp }`.
-- Subscribe to `/chat/{room}`; filter messages by ≤15 tile distance from local player; display in chat list.
-- Auto-prune messages older than 5 minutes (client-side filter + Firebase `remove()`).
-- System messages (level-up, etc.) use a distinct colour.
-- **Checkpoint**: two players can exchange nearby chat; messages vanish after 5 minutes.
+## Step 6 — HUD (HP / MP / Gold)
+*Goal: a persistent heads-up display shows the player's name, HP, MP, and gold.*
+
+1. `HudScene` with HP, MP, and gold text is already implemented — verify it launches alongside `GameScene`.
+2. Subscribe to `/players/{id}` via Firebase `onValue` so the HUD updates when values change remotely (e.g. future healer writes).
+3. **Checkpoint**: HP, MP, and gold are visible at the top of the screen while exploring; changing a value directly in the Firebase console is reflected in the HUD within a second.
 
 ---
 
-## Step 7 — Enemy Combat & AI (Pyodide scripting)
-- Integrate Pyodide WASM; load the Python runtime in `LoadingScene` as a progress step.
-- Implement `ScriptExecutor`: claim ownership of enemies within range by writing `executingPlayerId` to `/entities/enemies/{id}`; release on disconnect.
-- Each tick, run the entity's `script` string in the sandbox with `{ state, hp, x, y, nearbyPlayers }` + action callbacks (`move`, `attack`, `setState`, `speak`).
-- Schedule in oldest-update-first order; cap at 4 enemies per slice.
-- Player attack: on interact key adjacent to enemy → calculate damage → write HP to Firebase.
-- On enemy death: write loot pickup to Firebase; grant XP to attacker.
-- **Checkpoint**: enemies patrol, chase player, attack; player can kill them and gain XP.
+## Step 7 — Other Players (Multiplayer Presence)
+*Goal: two logged-in tabs can see each other's champion sprites moving in real time.*
+
+1. In `GameScene.create()`, subscribe to `/presence/{room}/players` with Firebase `onValue`.
+2. For each remote entry, render a champion `Image` sprite at frame 0 with a small name `Text` above it.
+3. On value change, update the position with a short tween for smooth movement; remove the sprite when the entry is deleted.
+4. **Checkpoint**: Open two browser tabs and log in as two different players; both see the other move in real time.
 
 ---
 
-## Step 8 — NPC Interaction & Dialogue
-- On interact key adjacent to NPC, open `DialogScene` DOM overlay with NPC portrait (frame 0) and speech text from the NPC's script output.
-- Healer: call `actions.heal(playerId, maxHp, maxMp)` → Firebase write.
-- Gossiper: read `config/pois` to generate directional tips.
-- Merchant: open `ShopScene` instead of dialogue.
-- **Checkpoint**: walking up to a healer restores HP; gossiper gives dungeon/village hints.
+## Step 8 — Enemy & NPC Sprites
+*Goal: enemies and NPCs that belong to a chunk appear as sprites when the chunk loads.*
+
+1. Subscribe to `/presence/{room}/enemies` and `/presence/{room}/npcs` with Firebase `onValue`.
+2. Render each entity as an `Image` at frame 0 of its spritesheet key (look up by `templateId` in the registry). Update positions on value change; remove on deletion.
+3. No AI or interaction yet — display only.
+4. **Checkpoint**: Walk into a chunk that contains enemies or NPCs; their sprites appear on screen.
 
 ---
 
-## Step 9 — Inventory, Gathering & Crafting
-- Gather: on interact with gatherable tile → add material to player inventory in Firebase; replace tile with depleted variant + set `regenAt` timestamp.
-- `InventoryScene` DOM overlay: grid of item slots, equip/drop/use actions.
-- `CraftScene` DOM overlay: filter recipes by station and player level; show ingredient have/need counts; craft button writes result item + consumes ingredients.
-- **Checkpoint**: player chops a tree → wood in inventory → crafts wooden_sword at workbench.
+## Step 9 — Proximity Chat
+*Goal: nearby players can exchange text messages in real time.*
+
+1. Add a chat input box and scrollable message list to `HudScene` (DOM overlay, same pattern as `IntroScene`).
+2. On send, write `{ sender, x, y, text, timestamp }` to `/chat/{room}`.
+3. Subscribe to `/chat/{room}`; display only messages within ≤15 tiles; auto-prune entries older than 5 minutes.
+4. System messages (level-up, etc.) use a distinct colour.
+5. **Checkpoint**: Two players standing near each other can exchange chat messages; a player far away does not see the messages; messages disappear after 5 minutes.
 
 ---
 
-## Step 10 — Dungeon System
-- Step on `dungeon_entrance` tile → room transition: change `player.room` to `dungeon_{id}_1`, update presence.
-- Render dungeon floor from `/map/{room}`.
-- Stairs up/down transitions between floors.
-- Boss room: lock on aggro (`onDisconnect` release).
-- Dungeon chest gold/loot on interaction.
-- **Checkpoint**: player enters dungeon, navigates floors, finds boss room.
+## Step 10 — Player Attack & Enemy Death
+*Goal: the player can attack adjacent enemies, deal damage, and earn XP on kill.*
+
+1. On the interact key (e.g. `E`) when the player is adjacent to an enemy, calculate damage and write the updated HP to `/presence/{room}/enemies/{id}`.
+2. When HP reaches 0, write loot to Firebase and grant XP to the attacking player (`/players/{id}/xp`).
+3. **Checkpoint**: Walk up to an enemy, press `E` repeatedly; enemy HP decreases and the sprite disappears on death; XP is added to the player record in Firebase.
 
 ---
 
-## Step 11 — Village Shop & Economy
-- `ShopScene`: buy/sell tabs; stock filtered by player level; prices = `baseBuyPrice × zoneMult × jitter`.
-- Limited-stock items tracked in `/shops/{villageId}/limitedStock`.
-- Gold transferred in Firebase transaction.
-- **Checkpoint**: player buys leather armor from merchant; gold deducted; item appears in inventory.
+## Step 11 — Enemy AI (Pyodide Scripting)
+*Goal: enemies patrol, chase the player, and attack autonomously.*
+
+1. Integrate Pyodide WASM; load the Python runtime in `LoadingScene` as a progress step.
+2. Implement `ScriptExecutor`: claim ownership of up to 4 nearby enemies by writing `executingPlayerId`; release on disconnect.
+3. Each tick, run each owned enemy's `script` in the sandbox with `{ state, hp, x, y, nearbyPlayers }` and action callbacks (`move`, `attack`, `setState`, `speak`).
+4. **Checkpoint**: Enemies patrol their area and chase + attack the player when in range; the player can still kill them with the attack from Step 10.
 
 ---
 
-## Step 12 — Death, Respawn & PVP
-- HP reaches 0 → drop inventory items as loot at current position → set `player.hp = maxHp * 0.5` → teleport to house.
-- `DeathScene` DOM overlay ("You have died. Respawning at your house…").
-- PVP: attack allowed only when both players ≥ level 10 and in same room.
-- **Checkpoint**: player dies to enemy; inventory dropped; respawns at house.
+## Step 12 — NPC Interaction & Dialogue
+*Goal: the player can talk to NPCs and receive a tangible effect (healing, hints).*
+
+1. On the interact key adjacent to an NPC, open a `DialogScene` DOM overlay showing the NPC portrait (frame 0) and speech text from its script.
+2. Healer: write full HP/MP to `/players/{id}`; Gossiper: read `config/pois` for directional tips; Merchant: open `ShopScene` instead.
+3. **Checkpoint**: Walk up to a healer with reduced HP and press `E`; HP is restored and the HUD updates.
 
 ---
 
-## Step 13 — Mini-map & Full Map Screen
-- Mini-map in HUD (top-right, 64×64 canvas): render explored chunks as coloured dots; POI icons for visited villages/dungeons; player position dot.
-- `MapScene` full-screen overlay: zoomed-out view of explored world with fog-of-war.
-- **Checkpoint**: mini-map updates as player explores; full map accessible from HUD.
+## Step 13 — Inventory, Gathering & Crafting
+*Goal: the player can gather a resource, see it in their inventory, and craft a basic item.*
+
+1. On interact with a gatherable tile (e.g. `tree_oak`), add the material to `player.inventory` in Firebase and replace the tile with its depleted variant + set `regenAt`.
+2. `InventoryScene` DOM overlay: grid of item slots with equip/drop/use actions.
+3. `CraftScene` DOM overlay: list recipes by station and level; craft button writes the result and consumes ingredients.
+4. **Checkpoint**: Chop a tree → wood appears in inventory → craft a wooden sword at a workbench.
 
 ---
 
-## Step 14 — Mobile / Touch Support
-- Detect `window.innerWidth < 640`; render D-pad virtual joystick in `HudScene` using Phaser's pointer events.
-- Compact HUD layout: chat collapses to ticker, mini-map shrinks to 64×64.
-- Tap on adjacent tile/entity triggers interaction.
-- **Checkpoint**: game playable on a phone with virtual joystick.
+## Step 14 — Dungeon Navigation
+*Goal: the player can enter a dungeon and navigate between floors.*
+
+1. Step on a `dungeon_entrance` tile → set `player.room` to `dungeon_{id}_1` and update presence.
+2. Render the dungeon floor from `/map/{room}`; stairs-down/up tiles trigger floor transitions.
+3. Boss room: lock on aggro (`onDisconnect` release); chest drops gold/loot on interaction.
+4. **Checkpoint**: Walk into a dungeon entrance; the screen transitions; stairs lead to deeper floors; a chest can be opened for loot.
+
+---
+
+## Step 15 — Village Shop & Economy
+*Goal: the player can buy and sell items at a merchant.*
+
+1. `ShopScene` DOM overlay: buy/sell tabs; stock filtered by player level; prices = `baseBuyPrice × zoneMult × jitter`.
+2. Limited-stock items tracked in `/shops/{villageId}/limitedStock`; gold transferred via Firebase transaction.
+3. **Checkpoint**: Open a merchant's shop, buy leather armor; gold is deducted; the item appears in inventory.
+
+---
+
+## Step 16 — Death & Respawn
+*Goal: when the player's HP reaches 0 they drop items and respawn at their house.*
+
+1. HP = 0 → drop inventory as loot at current position → set `player.hp = maxHp * 0.5` → teleport to `player.house`.
+2. `DeathScene` DOM overlay shows "You have died. Respawning at your house…".
+3. PVP: attack allowed only when both players are ≥ level 10 and in the same room.
+4. **Checkpoint**: Take enough damage to die; items drop; the death screen shows; player respawns at house with half HP.
+
+---
+
+## Step 17 — Mini-map
+*Goal: a small map in the HUD shows explored terrain and the player's position.*
+
+1. Add a 64×64 canvas to `HudScene` (top-right corner); render explored chunks as coloured dots and POI icons for visited villages/dungeons.
+2. `MapScene` full-screen overlay: zoomed-out explored world with fog-of-war, accessible from the HUD.
+3. **Checkpoint**: Mini-map updates as the player walks into new chunks; opening the full map shows all explored areas.
+
+---
+
+## Step 18 — Mobile / Touch Support
+*Goal: the game is playable on a phone with a virtual joystick.*
+
+1. Detect `window.innerWidth < 640`; render a D-pad virtual joystick in `HudScene` using Phaser pointer events.
+2. Compact HUD: chat collapses to a ticker, mini-map shrinks to 64×64.
+3. Tapping an adjacent tile or entity triggers interaction.
+4. **Checkpoint**: Load the game on a phone (or in a narrow browser window); the virtual joystick appears and the player can move and interact without a keyboard.
 
