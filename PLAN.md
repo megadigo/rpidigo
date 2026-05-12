@@ -1,10 +1,5 @@
 # RPIdigo — Implementation Plan (from Spec)
 
-## Sprite note
-All sprite sheets are 16×16-pixel grids. **Only the first grid cell (frame 0, top-left 16×16 pixels) is used** for every tile, enemy, NPC, and player sprite until animation is added in a later step. Phaser's `setFrame(0)` on a `frameWidth: 16, frameHeight: 16` spritesheet is the pattern to use throughout.
-
----
-
 ## Step 1 — Firebase Setup & Title Screen
 *Goal: app starts, title screen is visible, Firebase connects without errors.*
 
@@ -46,6 +41,8 @@ All sprite sheets are 16×16-pixel grids. **Only the first grid cell (frame 0, t
 
 ## Step 4 — Tile Spritesheets
 *Goal: replace colored rectangles with real tile graphics.*
+
+> **Sprite note**: All sprite sheets are 16×16-pixel grids. **Only the first grid cell (frame 0, top-left 16×16 pixels) is used** for every tile, enemy, NPC, and player sprite until animation is added in a later step. Phaser's `setFrame(0)` on a `frameWidth: 16, frameHeight: 16` spritesheet is the pattern to use throughout.
 
 1. Add a `preload()` method to `LoadingScene`; use `this.load.spritesheet()` to load every tile spritesheet from `public/assets/sprites/` (`Ground/Grass.png`, `Nature/Trees.png`, `Nature/PineTrees.png`, `Ground/Shore.png`, etc.) with `frameWidth: 16, frameHeight: 16`.
 2. Rewrite `TilemapRenderer` to use a pool of `Phaser.GameObjects.Image` objects instead of `Phaser.GameObjects.Graphics`. Map each tile type to its spritesheet key + frame 0. Keep `invalidateTile` and `reset` working.
