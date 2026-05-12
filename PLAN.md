@@ -9,9 +9,18 @@ All sprite sheets are 16×16-pixel grids. **Only the first grid cell (frame 0, t
 *Goal: app starts, title screen is visible, Firebase connects without errors.*
 
 1. Copy `.env.example` to `.env` and fill in real Firebase Realtime Database credentials (API key, auth domain, databaseURL, project ID, etc.).
-2. Publish `database.rules.json` via `firebase deploy --only database`. Rules cover `/config`, `/map`, `/players`, `/entities`, `/presence`, `/chat`, `/shops`.
-3. `firebase.ts` and `registry/bootstrap.ts` are already correct — no changes needed.
-4. **Checkpoint**: `npm run dev` opens the browser; the "rpidigo" title screen appears; clicking **Play** navigates to the login screen; browser console shows no Firebase errors.
+2. **Copy sprites into the public directory** so Vite includes them in the production build and amen.pt can serve them:
+   ```
+   cp -r graphics/MiniWorldSprites/MiniWorldSprites/Ground      public/assets/sprites/Ground
+   cp -r graphics/MiniWorldSprites/MiniWorldSprites/Nature      public/assets/sprites/Nature
+   cp -r graphics/MiniWorldSprites/MiniWorldSprites/Buildings   public/assets/sprites/Buildings
+   cp -r graphics/MiniWorldSprites/MiniWorldSprites/Miscellaneous public/assets/sprites/Miscellaneous
+   cp -r graphics/MiniWorldSprites/MiniWorldSprites/Characters  public/assets/sprites/Characters
+   ```
+   All in-game tile, building, champion, and miscellaneous sprites must live under `public/assets/sprites/` so that `dist/assets/sprites/` is populated after `npm run build`. The entity sprites (`entities/enemies/`, `entities/npcs/`, `entities/players/`) are already in `public/assets/sprites/` and do not need to be copied. These sprites have already been committed to the repository and this step only applies when setting up a fresh clone.
+3. Publish `database.rules.json` via `firebase deploy --only database`. Rules cover `/config`, `/map`, `/players`, `/entities`, `/presence`, `/chat`, `/shops`.
+4. `firebase.ts` and `registry/bootstrap.ts` are already correct — no changes needed.
+5. **Checkpoint**: `npm run dev` opens the browser; the "rpidigo" title screen appears; clicking **Play** navigates to the login screen; browser console shows no Firebase errors.
 
 ---
 
