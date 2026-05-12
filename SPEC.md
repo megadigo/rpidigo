@@ -39,7 +39,7 @@ A browser-based multiplayer RPG with a persistent shared world, real-time Fireba
 
 ### Tiles by zone
 
-All sprite paths are relative to `graphics/MiniWorldSprites/MiniWorldSprites/`.
+All sprite paths are relative to `public/assets/sprites/`.
 
 **Plains**
 
@@ -172,7 +172,7 @@ Some tiles reduce movement speed (`grass_tall`, `mud`, `quicksand`, `sand_dune`)
 
 ### Sprites
 
-Players choose one of eight available champion sprites at character creation. All sprite files are under `graphics/MiniWorldSprites/MiniWorldSprites/Characters/Champions/`.
+Players choose one of eight available champion sprites at character creation. All sprite files are under `public/assets/sprites/Characters/Champions/`.
 
 | Champion | File |
 |---|---|
@@ -224,7 +224,7 @@ NPCs use the same `{baseType}_{profile}` system as enemies. Each profile has its
 
 ### Built-in NPC profiles
 
-All sprite paths are relative to `graphics/MiniWorldSprites/MiniWorldSprites/`.
+All sprite paths are relative to `public/assets/sprites/`.
 
 | Profile | Behaviour | Sprite |
 |---|---|---|
@@ -280,7 +280,7 @@ A base type can have one profile or many. The zone spawn table lists which profi
 
 Enemies are zone-specific — they spawn only in their adapted zones:
 
-All sprite paths are relative to `graphics/MiniWorldSprites/MiniWorldSprites/`.
+All sprite paths are relative to `public/assets/sprites/`.
 
 | Base type | Zone | Variants | Sprite |
 |---|---|---|---|
@@ -369,7 +369,7 @@ Game state is split across purpose-built Firebase Realtime Database collections.
 
 ## Resources and gathering
 
-Players can gather raw materials from the world by interacting with specific tiles. All sprite paths are relative to `graphics/MiniWorldSprites/MiniWorldSprites/`.
+Players can gather raw materials from the world by interacting with specific tiles. All sprite paths are relative to `public/assets/sprites/`.
 
 | Action | Tile | Material obtained | Material sprite |
 |---|---|---|---|
@@ -431,7 +431,7 @@ Some recipes require processed materials. Output sprites are frames from `User I
 
 Most weapons are crafted at stations using gathered materials. Tier 1 and Tier 2 weapons are also stocked in village shops for players who prefer to buy rather than craft. Armor can be crafted or purchased.
 
-All weapon sprites are relative to `graphics/MiniWorldSprites/MiniWorldSprites/Objects/`.
+All weapon sprites are relative to `public/assets/sprites/Objects/`.
 
 **Tier 1 — Workbench · Level 1** *(Forest & Plains materials)*
 
@@ -481,7 +481,7 @@ All weapon sprites are relative to `graphics/MiniWorldSprites/MiniWorldSprites/O
 
 ### Armors
 
-Armor is crafted at stations or bought in village shops. Each piece occupies one of five slots and adds `defense` to the player's damage-reduction total. All armor sprites use frames from `graphics/MiniWorldSprites/MiniWorldSprites/User Interface/Icons-Essentials.png`.
+Armor is crafted at stations or bought in village shops. Each piece occupies one of five slots and adds `defense` to the player's damage-reduction total. All armor sprites use frames from `public/assets/sprites/User Interface/Icons-Essentials.png`.
 
 **Tier 1 — Workbench · Level 1** *(Leather — hide & fiber)*
 
