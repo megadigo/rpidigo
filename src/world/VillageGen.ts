@@ -20,8 +20,22 @@ export function generateVillage(
   const tiles = new Map<string, TileData>()
   const npcs: NpcInstance[] = []
 
-  function set(x: number, y: number, type: string, variant?: string) {
-    tiles.set(`${x}_${y}`, { type, variant })
+  /**
+   * Set a tile with automatic layer assignment:
+   * - GROUND types (cobblestone, house_floor, garden_plot) go in `g`.
+   * - MIDDLE objects (well, fence, walls, furniture…) go in `m` with cobblestone ground.
+   * - Interior flag adds a `t: 'house_roof'` TOP layer.
+   */
+  function set(x: number, y: number, type: string, interior = false) {
+    const GROUND_TYPES = new Set(['cobblestone', 'house_floor', 'garden_plot', 'dungeon_entrance'])
+    let entry: TileData
+    if (GROUND_TYPES.has(type)) {
+      entry = interior ? { g: type, t: 'house_roof' } : { g: type }
+    } else {
+      // MIDDLE object — put on cobblestone ground
+      entry = interior ? { g: 'cobblestone', m: [type], t: 'house_roof' } : { g: 'cobblestone', m: [type] }
+    }
+    tiles.set(`${x}_${y}`, entry)
   }
 
   // Central well
@@ -56,13 +70,15 @@ export function generateVillage(
     const by = originY + dy * offset + (dx !== 0 ? seededRandInt(rand, 1, 2) : 0)
     const bw = seededRandInt(rand, 5, 8)
     const bh = seededRandInt(rand, 4, 6)
-    // Walls
+    // Walls and door
     for (let wx = bx; wx < bx + bw; wx++) {
       for (let wy = by; wy < by + bh; wy++) {
-        if (wx === bx || wx === bx + bw - 1 || wy === by || wy === by + bh - 1) {
+        const isWall = wx === bx || wx === bx + bw - 1 || wy === by || wy === by + bh - 1
+        if (isWall) {
           set(wx, wy, 'house_wall')
         } else {
-          set(wx, wy, 'house_floor')
+          // Interior floor with roof cover (TOP layer hides player inside)
+          set(wx, wy, 'house_floor', true)
         }
       }
     }

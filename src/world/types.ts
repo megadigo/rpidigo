@@ -1,8 +1,19 @@
 /** Shared types for world generation and runtime. */
 
+/**
+ * Tile at a world position — layered model.
+ *
+ *  g  (GROUND, required) — terrain/floor; always rendered at depth 0.
+ *  m  (MIDDLE, optional) — objects on the ground (trees, walls, furniture…);
+ *                          rendered at depth 1; multiple objects allowed.
+ *  t  (TOP, optional)    — cover rendered above the player (depth 20); used
+ *                          for roof tiles that hide building interiors.
+ *  metadata              — runtime mutable data (gold, opened, etc.).
+ */
 export interface TileData {
-  type: string
-  variant?: string
+  g: string
+  m?: string[]
+  t?: string
   metadata?: {
     gold?: number
     opened?: boolean

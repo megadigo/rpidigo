@@ -36,10 +36,10 @@ function generateFloor(
   const enemies: EnemyInstance[] = []
   const SIZE = 40
 
-  // Fill with walls
+  // Fill with walls (dungeon_floor as ground + dungeon_wall as middle)
   for (let x = 0; x < SIZE; x++)
     for (let y = 0; y < SIZE; y++)
-      tiles.set(`${x}_${y}`, { type: 'dungeon_wall' })
+      tiles.set(`${x}_${y}`, { g: 'dungeon_floor', m: ['dungeon_wall'] })
 
   // BSP rooms
   interface Rect { x: number; y: number; w: number; h: number }
@@ -54,7 +54,7 @@ function generateFloor(
       const rh = seededRandInt(rand, 4, rect.h - 3)
       for (let x = rx; x < rx + rw; x++)
         for (let y = ry; y < ry + rh; y++)
-          tiles.set(`${x}_${y}`, { type: 'dungeon_floor' })
+          tiles.set(`${x}_${y}`, { g: 'dungeon_floor' })
       rooms.push({ x: rx, y: ry, w: rw, h: rh })
       return
     }
@@ -85,13 +85,13 @@ function generateFloor(
     // Horizontal corridor
     const minX = Math.min(ax, bx)
     const maxX = Math.max(ax, bx)
-    for (let x = minX; x <= maxX; x++) tiles.set(`${x}_${ay}`, { type: 'dungeon_floor' })
+    for (let x = minX; x <= maxX; x++) tiles.set(`${x}_${ay}`, { g: 'dungeon_floor' })
     // Vertical corridor
     const minY = Math.min(ay, by)
     const maxY = Math.max(ay, by)
-    for (let y = minY; y <= maxY; y++) tiles.set(`${bx}_${y}`, { type: 'dungeon_floor' })
+    for (let y = minY; y <= maxY; y++) tiles.set(`${bx}_${y}`, { g: 'dungeon_floor' })
     // Door at junction
-    tiles.set(`${bx}_${ay}`, { type: 'dungeon_door' })
+    tiles.set(`${bx}_${ay}`, { g: 'dungeon_floor', m: ['dungeon_door'] })
   }
 
   // Decorations and loot
@@ -99,16 +99,17 @@ function generateFloor(
   const isBossFloor = floorIndex === totalFloors
   for (const r of rooms) {
     // Scatter torches and pillars
-    if (rand() < 0.4) tiles.set(`${r.x}_${r.y}`, { type: 'dungeon_torch' })
-    if (rand() < 0.2) tiles.set(`${r.x + 1}_${r.y + 1}`, { type: 'dungeon_pillar' })
-    if (rand() < 0.15) tiles.set(`${r.x}_${r.y + 1}`, { type: 'dungeon_trap' })
+    if (rand() < 0.4) tiles.set(`${r.x}_${r.y}`, { g: 'dungeon_floor', m: ['dungeon_torch'] })
+    if (rand() < 0.2) tiles.set(`${r.x + 1}_${r.y + 1}`, { g: 'dungeon_floor', m: ['dungeon_pillar'] })
+    if (rand() < 0.15) tiles.set(`${r.x}_${r.y + 1}`, { g: 'dungeon_trap' })
 
     // Chest in dead-end-ish rooms (small rooms)
     if (r.w <= 6 && r.h <= 6) {
       const cx = r.x + Math.floor(r.w / 2)
       const cy = r.y + Math.floor(r.h / 2)
       tiles.set(`${cx}_${cy}`, {
-        type: 'dungeon_chest',
+        g: 'dungeon_floor',
+        m: ['dungeon_chest'],
         metadata: { gold: Math.floor((seededRandInt(rand, 20, 80)) * floorMultiplier) },
       })
     }
@@ -119,7 +120,7 @@ function generateFloor(
       const ex = r.x + Math.floor(r.w / 2)
       const ey = r.y + Math.floor(r.h / 2)
       enemies.push(makeEnemy(`enemy_${dungeonId}_f${floorIndex}_boss`, 'dungeon_boss_strong', 'dungeon_boss', 'strong', room, ex, ey, 300, 50))
-      tiles.set(`${ex - 1}_${ey}`, { type: 'dungeon_altar' })
+      tiles.set(`${ex - 1}_${ey}`, { g: 'dungeon_floor', m: ['dungeon_altar'] })
     } else if (rand() < spawnChance) {
       const ex = r.x + seededRandInt(rand, 1, r.w - 2)
       const ey = r.y + seededRandInt(rand, 1, r.h - 2)
@@ -135,9 +136,9 @@ function generateFloor(
   if (rooms.length >= 2) {
     const entrance = rooms[0]
     const exit = rooms[rooms.length - 1]
-    tiles.set(`${entrance.x + 1}_${entrance.y + 1}`, { type: 'dungeon_stairs_up' })
+    tiles.set(`${entrance.x + 1}_${entrance.y + 1}`, { g: 'dungeon_stairs_up' })
     if (floorIndex < totalFloors) {
-      tiles.set(`${exit.x + 1}_${exit.y + 1}`, { type: 'dungeon_stairs_down' })
+      tiles.set(`${exit.x + 1}_${exit.y + 1}`, { g: 'dungeon_stairs_down' })
     }
   }
 

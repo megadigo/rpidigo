@@ -43,20 +43,38 @@ function classifyZone(x: number, y: number, noise: NoiseConfig): Zone {
   return 'plains'
 }
 
-/** Tile variants per zone, weighted by detail noise. */
-const ZONE_TILES: Record<Zone, string[]> = {
-  plains:  ['grass', 'grass', 'grass', 'grass_tall', 'flower_yellow', 'flower_red', 'dirt_path', 'rock_small'],
-  forest:  ['grass_dark', 'grass_dark', 'tree_oak', 'tree_pine', 'tree_dead', 'bush', 'mushroom', 'log', 'moss_rock'],
-  river:   ['water_shallow', 'water_shallow', 'water_deep', 'sand_bank', 'reeds', 'mud'],
-  desert:  ['sand', 'sand', 'sand_dune', 'dry_rock', 'cactus', 'dry_grass', 'oasis_water', 'quicksand'],
-  village: ['cobblestone'],
-  dungeon: ['dungeon_entrance'],
-}
-
-function pickTile(zone: Zone, detail: number): string {
-  const list = ZONE_TILES[zone]
-  const idx = Math.floor(((detail + 1) / 2) * list.length) % list.length
-  return list[idx]
+/** Returns a layered tile for the given zone and detail noise value. */
+function pickTileLayers(zone: Zone, detail: number, rand: () => number): TileData {
+  const d = (detail + 1) / 2   // normalise 0–1
+  switch (zone) {
+    case 'plains': {
+      const ground = ['grass', 'grass', 'grass', 'grass_tall', 'flower_yellow', 'flower_red', 'dirt_path']
+      const g = ground[Math.floor(d * ground.length) % ground.length]
+      if (rand() < 0.05) return { g, m: ['rock_small'] }
+      return { g }
+    }
+    case 'forest': {
+      const features = ['tree_oak', 'tree_oak', 'tree_pine', 'tree_dead', 'bush', 'mushroom', 'log', 'moss_rock', 'stump']
+      if (rand() < 0.65)
+        return { g: 'grass_dark', m: [features[Math.floor(d * features.length) % features.length]] }
+      return { g: 'grass_dark' }
+    }
+    case 'river': {
+      const ground = ['water_shallow', 'water_shallow', 'water_deep', 'sand_bank', 'reeds', 'mud']
+      return { g: ground[Math.floor(d * ground.length) % ground.length] }
+    }
+    case 'desert': {
+      const ground = ['sand', 'sand', 'sand_dune', 'quicksand']
+      const g = ground[Math.floor(d * ground.length) % ground.length]
+      if (rand() < 0.15) {
+        const features = ['dry_rock', 'cactus', 'cactus', 'dry_grass']
+        return { g, m: [features[Math.floor(d * features.length) % features.length]] }
+      }
+      return { g }
+    }
+    case 'village': return { g: 'cobblestone' }
+    case 'dungeon': return { g: 'dungeon_entrance' }
+  }
 }
 
 /** Simple overworld enemy spawn table per zone. */
@@ -147,7 +165,7 @@ export function generateChunk(
 
       // Out-of-bounds → void
       if (x >= WORLD_MAX || y >= WORLD_MAX || x < 0 || y < 0) {
-        tiles[key] = { type: 'void' }
+        tiles[key] = { g: 'void' }
         continue
       }
 
@@ -160,24 +178,23 @@ export function generateChunk(
       // Dungeon entrance stamp
       const isDungeonEntrance = dungeonsInChunk.some(d => d.x === x && d.y === y)
       if (isDungeonEntrance) {
-        tiles[key] = { type: 'dungeon_entrance' }
+        tiles[key] = { g: 'dungeon_entrance' }
         continue
       }
 
       // Road stamp
       if (roads.tileSet.has(key)) {
-        // If base terrain is water place bridge, else dirt_path
         const baseZone = classifyZone(x, y, noise)
-        tiles[key] = { type: baseZone === 'river' ? 'bridge' : 'dirt_path' }
+        tiles[key] = { g: baseZone === 'river' ? 'bridge' : 'dirt_path' }
         continue
       }
 
-      // Noise-based tile
+      // Noise-based layered tile
       const zone = classifyZone(x, y, noise)
       const detail = noise.detail(x / 20, y / 20)
-      tiles[key] = { type: pickTile(zone, detail) }
+      let tileLayers = pickTileLayers(zone, detail, rand)
 
-      // River bank decoration (1-tile border)
+      // River bank decoration (1-tile border around water)
       if (zone !== 'river') {
         const neighbors = [
           classifyZone(x - 1, y, noise),
@@ -186,13 +203,14 @@ export function generateChunk(
           classifyZone(x, y + 1, noise),
         ]
         if (neighbors.includes('river')) {
-          tiles[key] = { type: rand() > 0.5 ? 'sand_bank' : 'reeds' }
+          tileLayers = { g: rand() > 0.5 ? 'sand_bank' : 'reeds' }
         }
       }
 
-      // Enemy spawn roll (skip non-natural zones and impassable tiles)
-      const passable = isPassableTile(tiles[key].type)
-      if (passable) {
+      tiles[key] = tileLayers
+
+      // Enemy spawn roll (skip impassable positions)
+      if (isPassableTile(tiles[key])) {
         const enemy = rollEnemy(zone, x, y, seed, rand)
         if (enemy) enemies.push(enemy)
       }
@@ -216,14 +234,16 @@ export function generateChunk(
   return result
 }
 
-/** Quick impassability check by tile type — mirrors CollisionMap logic. */
-function isPassableTile(type: string): boolean {
-  const impassable = new Set([
+/** Quick impassability check — mirrors CollisionMap logic without importing renderer. */
+function isPassableTile(tile: TileData): boolean {
+  const blocked = new Set([
     'tree_oak', 'tree_pine', 'tree_dead', 'rock_small', 'rock_large', 'moss_rock',
-    'cactus', 'water_shallow', 'water_deep', 'oasis_water', 'house_wall',
-    'dungeon_wall', 'dungeon_pillar', 'fence', 'well', 'void',
+    'cactus', 'water_shallow', 'water_deep', 'oasis_water', 'dungeon_wall',
+    'dungeon_pillar', 'fence', 'well', 'void',
   ])
-  return !impassable.has(type)
+  if (blocked.has(tile.g)) return false
+  if (tile.m?.some(m => blocked.has(m))) return false
+  return true
 }
 
 /** Compute all 100 village + 100 dungeon POI positions from seed. */

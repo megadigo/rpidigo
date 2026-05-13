@@ -86,14 +86,48 @@ async function _loadOrGenerateChunk(cx: number, cy: number, key: string): Promis
 async function _loadChunkFromFirebase(cx: number, cy: number): Promise<void> {
   const originX = cx * CHUNK_SIZE
   const originY = cy * CHUNK_SIZE
-  const rowSnap = await get(ref(db, `map/0`))
-  if (!rowSnap.exists()) return
-  const all = rowSnap.val() as Record<string, TileData>
+  // Fetch only the 1024 keys belonging to this chunk in parallel batches
+  const fetches: Promise<void>[] = []
   for (let lx = 0; lx < CHUNK_SIZE; lx++) {
-    for (let ly = 0; ly < CHUNK_SIZE; ly++) {
-      const k = `${originX + lx}_${originY + ly}`
-      if (all[k]) tileCache.set(k, all[k])
-    }
+    const x = originX + lx
+    fetches.push(
+      get(ref(db, `map/0`)).then(snap => {
+        if (!snap.exists()) return
+        const all = snap.val() as Record<string, TileData>
+        for (let ly = 0; ly < CHUNK_SIZE; ly++) {
+          const k = `${x}_${originY + ly}`
+          if (all[k]) tileCache.set(k, all[k])
+        }
+      }),
+    )
+  }
+  // Actually: fetch per-tile directly so we never download the entire map node.
+  // Each tile is stored at map/0/${x}_${y}.
+  fetches.length = 0
+  const tileKeys: string[] = []
+  for (let lx = 0; lx < CHUNK_SIZE; lx++)
+    for (let ly = 0; ly < CHUNK_SIZE; ly++)
+      tileKeys.push(`${originX + lx}_${originY + ly}`)
+
+  // Read in parallel batches of 32 to balance concurrency vs. connections
+  const BATCH = 32
+  for (let i = 0; i < tileKeys.length; i += BATCH) {
+    await Promise.all(
+      tileKeys.slice(i, i + BATCH).map(async k => {
+        const snap = await get(ref(db, `map/0/${k}`))
+        if (snap.exists()) tileCache.set(k, snap.val() as TileData)
+      }),
+    )
+  }
+}
+
+/** Write a flat key→value object to Firebase in batches to avoid WRITE_TOO_BIG. */
+async function _batchUpdate(entries: Record<string, unknown>, batchSize = 150): Promise<void> {
+  const keys = Object.keys(entries)
+  for (let i = 0; i < keys.length; i += batchSize) {
+    const batch: Record<string, unknown> = {}
+    for (const k of keys.slice(i, i + batchSize)) batch[k] = entries[k]
+    await update(ref(db), batch)
   }
 }
 
@@ -104,58 +138,61 @@ async function _generateAndPersistChunk(cx: number, cy: number, key: string): Pr
     dungeonFloors?: Array<Array<{ room: string; tiles: Map<string, TileData>; enemies: EnemyInstance[] }>>
   }
 
-  // Build Firebase updates
-  const firebaseUpdate: Record<string, unknown> = {}
-
-  // Tiles
+  // 1. Overworld tiles — batched to stay under Firebase payload limit
+  const tileUpdate: Record<string, unknown> = {}
   for (const [k, t] of Object.entries(chunkData.tiles)) {
-    firebaseUpdate[`map/0/${k}`] = JSON.parse(JSON.stringify(t))
+    tileUpdate[`map/0/${k}`] = JSON.parse(JSON.stringify(t))
     tileCache.set(k, t)
   }
+  await _batchUpdate(tileUpdate)
 
-  // Enemies
+  // 2. Enemies + NPCs (small; single write is fine)
+  const entityUpdate: Record<string, unknown> = {}
   for (const enemy of chunkData.enemies) {
-    firebaseUpdate[`entities/enemies/${enemy.id}`] = JSON.parse(JSON.stringify(enemy))
-    firebaseUpdate[`presence/0/enemies/${enemy.id}`] = {
+    entityUpdate[`entities/enemies/${enemy.id}`] = JSON.parse(JSON.stringify(enemy))
+    entityUpdate[`presence/0/enemies/${enemy.id}`] = {
       x: enemy.x, y: enemy.y,
       templateId: enemy.templateId,
       state: enemy.state,
       hp: enemy.hp,
     }
   }
-
-  // NPCs
   for (const npc of chunkData.npcs) {
-    firebaseUpdate[`entities/npcs/${npc.id}`] = JSON.parse(JSON.stringify(npc))
-    firebaseUpdate[`presence/0/npcs/${npc.id}`] = {
+    entityUpdate[`entities/npcs/${npc.id}`] = JSON.parse(JSON.stringify(npc))
+    entityUpdate[`presence/0/npcs/${npc.id}`] = {
       x: npc.x, y: npc.y,
       templateId: npc.templateId,
       state: npc.state,
     }
   }
+  if (Object.keys(entityUpdate).length > 0) await update(ref(db), entityUpdate)
 
-  // Dungeon floors (if any POI in this chunk)
+  // 3. Dungeon floors — each floor's tiles batched separately
   if (chunkData.dungeonFloors) {
     for (const floors of chunkData.dungeonFloors) {
       for (const floor of floors) {
-        const tileObj: Record<string, unknown> = {}
-        for (const [k, t] of floor.tiles) tileObj[k] = JSON.parse(JSON.stringify(t))
-        firebaseUpdate[`map/${floor.room}`] = tileObj
+        const floorTileUpdate: Record<string, unknown> = {}
+        for (const [k, t] of floor.tiles) {
+          floorTileUpdate[`map/${floor.room}/${k}`] = JSON.parse(JSON.stringify(t))
+        }
+        await _batchUpdate(floorTileUpdate)
+
+        const floorEntityUpdate: Record<string, unknown> = {}
         for (const enemy of floor.enemies) {
-          firebaseUpdate[`entities/enemies/${enemy.id}`] = JSON.parse(JSON.stringify(enemy))
-          firebaseUpdate[`presence/${floor.room}/enemies/${enemy.id}`] = {
+          floorEntityUpdate[`entities/enemies/${enemy.id}`] = JSON.parse(JSON.stringify(enemy))
+          floorEntityUpdate[`presence/${floor.room}/enemies/${enemy.id}`] = {
             x: enemy.x, y: enemy.y,
             templateId: enemy.templateId,
             state: enemy.state,
             hp: enemy.hp,
           }
         }
+        if (Object.keys(floorEntityUpdate).length > 0) await update(ref(db), floorEntityUpdate)
       }
     }
   }
 
-  // Sentinel last (so other clients reading the sentinel can safely read tiles)
-  await update(ref(db), firebaseUpdate)
+  // 4. Sentinel last — signals other clients that tiles are fully written
   await set(ref(db, `map/chunks/${key}`), true)
 }
 

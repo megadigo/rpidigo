@@ -9,19 +9,7 @@ import { getLocalPlayer, setLocalPlayer } from '../player/Auth.ts'
 import { isPassable } from '../world/CollisionMap.ts'
 import { ref, update } from 'firebase/database'
 import { db } from '../firebase.ts'
-
-/** All spritesheets loaded here: frameWidth/frameHeight = 16 (global sprite convention). */
-const TILE_SHEETS = [
-  'Ground/Grass', 'Ground/GrassTall', 'Ground/DeadGrass',
-  'Ground/Shore', 'Ground/Cliff', 'Ground/Cliff-Water',
-  'Nature/Trees', 'Nature/PineTrees', 'Nature/DeadTrees',
-  'Nature/RockSmall', 'Nature/RocksBig', 'Nature/Cactus', 'Nature/Tumbleweed',
-  'Ground/GrassFlowerYellow', 'Ground/GrassFlowerRed',
-  'Buildings/Wood/Houses', 'Buildings/Wood/Huts', 'Buildings/Wood/Workshops',
-  'Buildings/Wood/Market', 'Buildings/Wood/Taverns',
-  'Miscellaneous/Bridge', 'Miscellaneous/Chests',
-  'Miscellaneous/Well', 'Miscellaneous/Signs',
-] as const
+import { getTileSheets } from '../renderer/TilemapRenderer.ts'
 
 /** Champion id → file mapping (matches SPEC.md). */
 const CHAMPION_FILES: Record<string, string> = {
@@ -44,8 +32,8 @@ export class LoadingScene extends Phaser.Scene {
   }
 
   preload(): void {
-    // Tile spritesheets — frame 0 is the only frame used until animation is added
-    for (const key of TILE_SHEETS) {
+    // Tile spritesheets — derived from TILE_DEFS in TilemapRenderer (frame 0 convention)
+    for (const key of getTileSheets()) {
       this.load.spritesheet(key, `/assets/sprites/${key}.png`, { frameWidth: 16, frameHeight: 16 })
     }
     // Champion spritesheets

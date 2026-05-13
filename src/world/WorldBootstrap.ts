@@ -3,7 +3,7 @@
  * Runs once at app start before any gameplay.  No tiles are generated here.
  */
 import { db } from '../firebase.ts'
-import { ref, get, runTransaction, set } from 'firebase/database'
+import { ref, get, runTransaction, set, update } from 'firebase/database'
 import type { PoiLayout } from './types.ts'
 import { computePois } from './ChunkGen.ts'
 import { buildRoadNetwork, type RoadNetwork } from './RoadNetwork.ts'
@@ -15,6 +15,12 @@ export interface WorldConfig {
   pois: PoiLayout
   roads: RoadNetwork
 }
+
+/**
+ * Increment this when TileData schema changes to force all clients to
+ * discard stale Firebase map data and regenerate from scratch.
+ */
+const SCHEMA_VERSION = 3
 
 let _worldConfig: WorldConfig | null = null
 
@@ -59,6 +65,15 @@ export async function ensureWorldReady(): Promise<WorldConfig> {
   }
 
   const roads = buildRoadNetwork(pois)
+
+  // Schema version check — wipe map/entities/presence if format changed
+  const schemaSnap = await get(ref(db, 'config/schemaVersion'))
+  if (schemaSnap.val() !== SCHEMA_VERSION) {
+    console.warn('[WorldBootstrap] Schema version mismatch — wiping map data for regeneration')
+    await update(ref(db), { map: null, entities: null, presence: null })
+    await set(ref(db, 'config/schemaVersion'), SCHEMA_VERSION)
+  }
+
   initChunkManager(seed, pois, roads)
 
   _worldConfig = { seed, pois, roads }
