@@ -39,7 +39,7 @@ export class HudScene extends Phaser.Scene {
     const p = getLocalPlayer()
     this.hpText.setText(`HP ${p.hp}/${p.maxHp}`)
     this.mpText.setText(`MP ${p.mp}/${p.maxMp}`)
-    this.goldText.setText(`G ${p.gold}`)
+    this.goldText.setText(`Gold ${p.gold}`)
     this.posText.setText(`${p.x},${p.y}`)
   }
 }

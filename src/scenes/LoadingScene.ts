@@ -12,10 +12,11 @@ import { db } from '../firebase.ts'
 
 /** All spritesheets loaded here: frameWidth/frameHeight = 16 (global sprite convention). */
 const TILE_SHEETS = [
-  'Ground/Grass', 'Ground/TexturedGrass', 'Ground/DeadGrass',
+  'Ground/Grass', 'Ground/GrassTall', 'Ground/DeadGrass',
   'Ground/Shore', 'Ground/Cliff', 'Ground/Cliff-Water',
   'Nature/Trees', 'Nature/PineTrees', 'Nature/DeadTrees',
-  'Nature/Rocks', 'Nature/Cactus', 'Nature/Tumbleweed',
+  'Nature/RockSmall', 'Nature/RocksBig', 'Nature/Cactus', 'Nature/Tumbleweed',
+  'Ground/GrassFlowerYellow', 'Ground/GrassFlowerRed',
   'Buildings/Wood/Houses', 'Buildings/Wood/Huts', 'Buildings/Wood/Workshops',
   'Buildings/Wood/Market', 'Buildings/Wood/Taverns',
   'Miscellaneous/Bridge', 'Miscellaneous/Chests',
