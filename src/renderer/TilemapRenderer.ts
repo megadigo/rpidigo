@@ -1,96 +1,116 @@
 /**
- * TilemapRenderer — renders world tiles using Phaser Graphics primitives.
+ * TilemapRenderer — renders world tiles using Phaser Image objects.
  *
- * Phase 3 uses a simple coloured-rectangle renderer (no tileset sprites yet) so the
- * game is playable immediately.  Each tile type maps to an ARGB colour constant.
- * A later phase will swap this for a real spritesheet-based tilemap.
+ * Each tile type maps to a spritesheet key; frame 0 (top-left 16×16 px) is used
+ * for every tile until animation is added (global sprite convention).
+ *
+ * Tiles are placed once as they enter the viewport and stay in-world.
+ * `invalidateTile` removes and re-creates a single tile (after modification).
+ * `reset` tears down everything (scene restart / room transition).
  */
 import Phaser from 'phaser'
 import { getTile } from '../world/ChunkManager.ts'
 
 export const TILE_SIZE = 16
 
-/** Colour table — hex 0xRRGGBB. */
-const TILE_COLORS: Record<string, number> = {
+/** Maps tile type → spritesheet key (loaded in LoadingScene.preload). */
+const TILE_SPRITE: Record<string, string> = {
   // Plains
-  grass:          0x3a8a3a,
-  grass_tall:     0x2e7a2e,
-  flower_yellow:  0xd4c840,
-  flower_red:     0xc04040,
-  dirt_path:      0xa07850,
-  rock_small:     0x808080,
-  rock_large:     0x606060,
+  grass:              'Ground/Grass',
+  grass_tall:         'Ground/TexturedGrass',
+  flower_yellow:      'Ground/Grass',
+  flower_red:         'Ground/Grass',
+  dirt_path:          'Ground/DeadGrass',
+  rock_small:         'Nature/Rocks',
+  rock_large:         'Nature/Rocks',
   // Forest
-  grass_dark:     0x1e5c1e,
-  tree_oak:       0x1a5c1a,
-  tree_pine:      0x1a4c2a,
-  tree_dead:      0x4a3a2a,
-  bush:           0x2a6030,
-  mushroom:       0xd4603a,
-  log:            0x6a4a2a,
-  moss_rock:      0x506040,
-  stump:          0x6a5030,
+  grass_dark:         'Ground/TexturedGrass',
+  tree_oak:           'Nature/Trees',
+  tree_pine:          'Nature/PineTrees',
+  tree_dead:          'Nature/DeadTrees',
+  bush:               'Nature/Trees',
+  mushroom:           'Ground/TexturedGrass',
+  log:                'Nature/DeadTrees',
+  moss_rock:          'Nature/Rocks',
+  stump:              'Nature/DeadTrees',
   // River
-  water_shallow:  0x3a7ab8,
-  water_deep:     0x1a4a88,
-  sand_bank:      0xd4b878,
-  reeds:          0x6a8a4a,
-  bridge:         0x8a6a3a,
-  mud:            0x6a5040,
+  water_shallow:      'Ground/Shore',
+  water_deep:         'Ground/Cliff-Water',
+  sand_bank:          'Ground/Shore',
+  reeds:              'Ground/Shore',
+  bridge:             'Miscellaneous/Bridge',
+  mud:                'Ground/DeadGrass',
   // Desert
-  sand:           0xe0c87a,
-  sand_dune:      0xcab060,
-  dry_rock:       0x987060,
-  cactus:         0x4a8040,
-  dry_grass:      0xb0a050,
-  oasis_water:    0x3a8ab0,
-  quicksand:      0xc8a860,
+  sand:               'Ground/DeadGrass',
+  sand_dune:          'Ground/DeadGrass',
+  dry_rock:           'Nature/Rocks',
+  cactus:             'Nature/Cactus',
+  dry_grass:          'Nature/Tumbleweed',
+  oasis_water:        'Ground/Shore',
+  quicksand:          'Ground/DeadGrass',
   // Village
-  cobblestone:    0x9a9090,
-  house_floor:    0xc8a878,
-  house_wall:     0x805040,
-  house_door:     0x60381a,
-  house_roof:     0x803030,
-  well:           0x708090,
-  fence:          0xa07850,
-  market_stall:   0xd09030,
-  blacksmith_forge: 0x504040,
-  tavern_sign:    0xa06820,
-  lantern:        0xffd060,
-  garden_plot:    0x5a8030,
-  // Dungeon entrance
-  dungeon_entrance: 0x303030,
-  dungeon_floor:  0x484848,
-  dungeon_wall:   0x282828,
-  dungeon_door:   0x5a4a38,
-  dungeon_stairs_down: 0x3a70a0,
-  dungeon_stairs_up:   0x70a03a,
-  dungeon_torch:  0xffa030,
-  dungeon_pillar: 0x404040,
-  dungeon_trap:   0x803020,
-  dungeon_chest:  0xa08020,
-  dungeon_altar:  0x806080,
+  cobblestone:        'Ground/DeadGrass',
+  house_floor:        'Ground/Grass',
+  house_wall:         'Buildings/Wood/Houses',
+  house_door:         'Buildings/Wood/Houses',
+  house_roof:         'Buildings/Wood/Houses',
+  well:               'Miscellaneous/Well',
+  fence:              'Buildings/Wood/Houses',
+  market_stall:       'Buildings/Wood/Market',
+  blacksmith_forge:   'Buildings/Wood/Workshops',
+  tavern_sign:        'Buildings/Wood/Taverns',
+  lantern:            'Miscellaneous/Signs',
+  garden_plot:        'Ground/Grass',
+  // Dungeon
+  dungeon_entrance:   'Ground/Cliff',
+  dungeon_floor:      'Ground/Cliff',
+  dungeon_wall:       'Ground/Cliff',
+  dungeon_door:       'Buildings/Wood/Houses',
+  dungeon_stairs_down: 'Ground/Cliff',
+  dungeon_stairs_up:   'Ground/Cliff',
+  dungeon_torch:      'Miscellaneous/Signs',
+  dungeon_pillar:     'Ground/Cliff',
+  dungeon_trap:       'Ground/Cliff',
+  dungeon_chest:      'Miscellaneous/Chests',
+  dungeon_altar:      'Ground/Cliff',
   // Special
-  house:          0xc07030,
-  workbench:      0xa06030,
-  chest:          0xa08020,
-  void:           0x000000,
+  house:              'Buildings/Wood/Huts',
+  workbench:          'Buildings/Wood/Workshops',
+  chest:              'Miscellaneous/Chests',
+  void:               'Ground/Cliff',
 }
 
-const DEFAULT_COLOR = 0x888888
+const FALLBACK_SPRITE = 'Ground/Grass'
 
 export class TilemapRenderer {
-  private gfx: Phaser.GameObjects.Graphics
-  private drawnTiles = new Set<string>()
+  private scene: Phaser.Scene
+  /** Placed tile images — key `${tx}_${ty}`. */
+  private placed = new Map<string, Phaser.GameObjects.Image>()
+  /** Object pool for recycled images. */
+  private pool: Phaser.GameObjects.Image[] = []
 
   constructor(scene: Phaser.Scene) {
-    this.gfx = scene.add.graphics()
-    this.gfx.setDepth(0)
+    this.scene = scene
+  }
+
+  private acquire(spriteKey: string, tx: number, ty: number): Phaser.GameObjects.Image {
+    const img = this.pool.pop() ?? this.scene.add.image(0, 0, spriteKey)
+    img.setTexture(spriteKey, 0)
+    img.setOrigin(0, 0)
+    img.setPosition(tx * TILE_SIZE, ty * TILE_SIZE)
+    img.setDepth(0)
+    img.setVisible(true)
+    return img
+  }
+
+  private release(img: Phaser.GameObjects.Image): void {
+    img.setVisible(false)
+    this.pool.push(img)
   }
 
   /**
    * Draw all tiles visible in the given world-coordinate viewport.
-   * Only redraws tiles that have changed (tracks drawn set).
+   * Only places tiles that haven't been placed yet.
    */
   drawViewport(
     worldLeft: number,
@@ -105,28 +125,34 @@ export class TilemapRenderer {
 
     for (let tx = startX; tx <= endX; tx++) {
       for (let ty = startY; ty <= endY; ty++) {
-        const key = `${tx}_${ty}`
-        if (this.drawnTiles.has(key)) continue
+        const k = `${tx}_${ty}`
+        if (this.placed.has(k)) continue
 
         const tile = getTile(tx, ty)
-        if (!tile) continue    // not loaded yet
+        if (!tile) continue   // chunk not yet loaded
 
-        const color = TILE_COLORS[tile.type] ?? DEFAULT_COLOR
-        this.gfx.fillStyle(color, 1)
-        this.gfx.fillRect(tx * TILE_SIZE, ty * TILE_SIZE, TILE_SIZE, TILE_SIZE)
-        this.drawnTiles.add(key)
+        const spriteKey = TILE_SPRITE[tile.type] ?? FALLBACK_SPRITE
+        const img = this.acquire(spriteKey, tx, ty)
+        this.placed.set(k, img)
       }
     }
   }
 
   /** Force redraw of a single tile (after modification). */
   invalidateTile(tx: number, ty: number): void {
-    this.drawnTiles.delete(`${tx}_${ty}`)
+    const k = `${tx}_${ty}`
+    const img = this.placed.get(k)
+    if (img) {
+      this.release(img)
+      this.placed.delete(k)
+    }
   }
 
   /** Clear everything and reset. */
   reset(): void {
-    this.gfx.clear()
-    this.drawnTiles.clear()
+    for (const img of this.placed.values()) img.destroy()
+    for (const img of this.pool) img.destroy()
+    this.placed.clear()
+    this.pool.length = 0
   }
 }

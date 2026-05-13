@@ -1,11 +1,38 @@
 /**
- * LoadingScene — runs WorldBootstrap, then launches GameScene.
+ * LoadingScene — preloads all spritesheets, runs WorldBootstrap, then launches GameScene.
  * Shows a progress bar while the seed/POI init completes.
  */
 import Phaser from 'phaser'
 import { ensureWorldReady } from '../world/WorldBootstrap.ts'
 import { ensureRadius } from '../world/ChunkManager.ts'
-import { getLocalPlayer } from '../player/Auth.ts'
+import { getLocalPlayer, setLocalPlayer } from '../player/Auth.ts'
+import { isPassable } from '../world/CollisionMap.ts'
+import { ref, update } from 'firebase/database'
+import { db } from '../firebase.ts'
+
+/** All spritesheets loaded here: frameWidth/frameHeight = 16 (global sprite convention). */
+const TILE_SHEETS = [
+  'Ground/Grass', 'Ground/TexturedGrass', 'Ground/DeadGrass',
+  'Ground/Shore', 'Ground/Cliff', 'Ground/Cliff-Water',
+  'Nature/Trees', 'Nature/PineTrees', 'Nature/DeadTrees',
+  'Nature/Rocks', 'Nature/Cactus', 'Nature/Tumbleweed',
+  'Buildings/Wood/Houses', 'Buildings/Wood/Huts', 'Buildings/Wood/Workshops',
+  'Buildings/Wood/Market', 'Buildings/Wood/Taverns',
+  'Miscellaneous/Bridge', 'Miscellaneous/Chests',
+  'Miscellaneous/Well', 'Miscellaneous/Signs',
+] as const
+
+/** Champion id → file mapping (matches SPEC.md). */
+const CHAMPION_FILES: Record<string, string> = {
+  arthax:    'Arthax',
+  borg:      'Börg',
+  gangblanc: 'Gangblanc',
+  grum:      'Grum',
+  kanji:     'Kanji',
+  katan:     'Katan',
+  okomo:     'Okomo',
+  zhinja:    'Zhinja',
+}
 
 export class LoadingScene extends Phaser.Scene {
   private bar!: Phaser.GameObjects.Rectangle
@@ -13,6 +40,17 @@ export class LoadingScene extends Phaser.Scene {
 
   constructor() {
     super({ key: 'LoadingScene' })
+  }
+
+  preload(): void {
+    // Tile spritesheets — frame 0 is the only frame used until animation is added
+    for (const key of TILE_SHEETS) {
+      this.load.spritesheet(key, `/assets/sprites/${key}.png`, { frameWidth: 16, frameHeight: 16 })
+    }
+    // Champion spritesheets
+    for (const [id, file] of Object.entries(CHAMPION_FILES)) {
+      this.load.spritesheet(id, `/assets/sprites/Characters/Champions/${file}.png`, { frameWidth: 16, frameHeight: 16 })
+    }
   }
 
   create(): void {
@@ -44,6 +82,28 @@ export class LoadingScene extends Phaser.Scene {
       const cx = Math.floor(player.x / 32)
       const cy = Math.floor(player.y / 32)
       await ensureRadius(cx, cy, 2)
+
+      // Ensure spawn is on a passable tile (spawn search runs before chunks load,
+      // so the fallback pos (500,500) may land on a tree or other impassable tile).
+      let { x: sx, y: sy } = player
+      if (!isPassable(sx, sy)) {
+        outer:
+        for (let r = 1; r <= 30; r++) {
+          for (let dx = -r; dx <= r; dx++) {
+            for (let dy = -r; dy <= r; dy++) {
+              if (Math.abs(dx) !== r && Math.abs(dy) !== r) continue
+              if (isPassable(sx + dx, sy + dy)) { sx += dx; sy += dy; break outer }
+            }
+          }
+        }
+        player.x = sx
+        player.y = sy
+        setLocalPlayer(player)
+        await update(ref(db), {
+          [`players/${player.id}/x`]: sx,
+          [`players/${player.id}/y`]: sy,
+        })
+      }
 
       this.setProgress(1, 'Ready!')
       await new Promise(r => setTimeout(r, 300))

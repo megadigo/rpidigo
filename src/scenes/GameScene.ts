@@ -30,26 +30,22 @@ export class GameScene extends Phaser.Scene {
       localStorage.setItem('rpidigo.zoom', String(newZoom))
     })
 
-    const savedZoom = parseInt(localStorage.getItem('rpidigo.zoom') ?? '2', 10)
-    this.cameras.main.setZoom(Phaser.Math.Clamp(savedZoom, 1, 4))
+    const savedZoom = parseInt(localStorage.getItem('rpidigo.zoom') ?? '1', 10)
+    // Clamp: if a stale zoom=2 was saved, allow it; scroll wheel can still increase
+    this.cameras.main.setZoom(Phaser.Math.Clamp(savedZoom, 1, 3))
   }
 
   update(_time: number, delta: number): void {
     this.playerController.update(delta)
 
-    // Draw visible tiles each frame
+    // Use the camera's actual world viewport so tiles render exactly what is visible
     const cam = this.cameras.main
-    const zoom = cam.zoom
-    const hw = this.scale.width  / 2 / zoom
-    const hh = this.scale.height / 2 / zoom
-    const cx = this.playerController.px
-    const cy = this.playerController.py
-
+    const v = cam.worldView
     this.tilemapRenderer.drawViewport(
-      cx - hw - TILE_SIZE,
-      cy - hh - TILE_SIZE,
-      cx + hw + TILE_SIZE,
-      cy + hh + TILE_SIZE,
+      v.left  - TILE_SIZE,
+      v.top   - TILE_SIZE,
+      v.right + TILE_SIZE,
+      v.bottom + TILE_SIZE,
     )
   }
 }

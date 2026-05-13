@@ -86,22 +86,15 @@ async function _loadOrGenerateChunk(cx: number, cy: number, key: string): Promis
 async function _loadChunkFromFirebase(cx: number, cy: number): Promise<void> {
   const originX = cx * CHUNK_SIZE
   const originY = cy * CHUNK_SIZE
-  // Load all tile keys in one query via /map/0/ (Firebase shallow reads per row)
-  const updates: Record<string, TileData> = {}
+  const rowSnap = await get(ref(db, `map/0`))
+  if (!rowSnap.exists()) return
+  const all = rowSnap.val() as Record<string, TileData>
   for (let lx = 0; lx < CHUNK_SIZE; lx++) {
-    const x = originX + lx
-    const rowSnap = await get(ref(db, `map/0`))
-    if (rowSnap.exists()) {
-      const all = rowSnap.val() as Record<string, TileData>
-      for (let ly = 0; ly < CHUNK_SIZE; ly++) {
-        const y = originY + ly
-        const k = `${x}_${y}`
-        if (all[k]) updates[k] = all[k]
-      }
+    for (let ly = 0; ly < CHUNK_SIZE; ly++) {
+      const k = `${originX + lx}_${originY + ly}`
+      if (all[k]) tileCache.set(k, all[k])
     }
-    break // row snapshot covers everything; exit after first read
   }
-  for (const [k, t] of Object.entries(updates)) tileCache.set(k, t)
 }
 
 async function _generateAndPersistChunk(cx: number, cy: number, key: string): Promise<void> {

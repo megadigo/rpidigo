@@ -17,7 +17,7 @@ const SYNC_INTERVAL = 100
 export class PlayerController {
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys
   private wasd!: { up: Phaser.Input.Keyboard.Key; down: Phaser.Input.Keyboard.Key; left: Phaser.Input.Keyboard.Key; right: Phaser.Input.Keyboard.Key }
-  private sprite!: Phaser.GameObjects.Rectangle
+  private sprite!: Phaser.GameObjects.Image
   private lastSync = 0
   private lastChunk = ''
 
@@ -33,8 +33,9 @@ export class PlayerController {
     this.px = player.x * TILE_SIZE + TILE_SIZE / 2
     this.py = player.y * TILE_SIZE + TILE_SIZE / 2
 
-    // Player sprite — coloured rectangle until spritesheet phase
-    this.sprite = this.scene.add.rectangle(this.px, this.py, 12, 14, 0xffffff)
+    // Player sprite — champion spritesheet, frame 0 (global sprite convention)
+    this.sprite = this.scene.add.image(this.px, this.py, player.championId)
+    this.sprite.setFrame(0)
     this.sprite.setDepth(10)
 
     if (this.scene.input.keyboard) {
@@ -47,10 +48,10 @@ export class PlayerController {
       }
     }
 
-    // Follow camera
-    this.scene.cameras.main.startFollow(this.sprite, true, 0.1, 0.1)
+    // Follow camera — lerp 1 = instant snap so tiles are always in view
+    this.scene.cameras.main.startFollow(this.sprite, true, 1, 1)
     this.scene.cameras.main.setBounds(0, 0, 1000 * TILE_SIZE, 1000 * TILE_SIZE)
-    this.scene.cameras.main.setZoom(2)
+    this.scene.cameras.main.setZoom(1)
   }
 
   update(delta: number): void {

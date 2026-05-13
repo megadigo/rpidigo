@@ -12,8 +12,8 @@ async function main(): Promise<void> {
 
   new Phaser.Game({
     parent: 'game',
-    width: 320,
-    height: 180,
+    width: 640,
+    height: 360,
     pixelArt: true,
     backgroundColor: '#000000',
     scale: {

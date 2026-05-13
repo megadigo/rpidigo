@@ -6,6 +6,17 @@ A browser-based multiplayer RPG with a persistent shared world, real-time Fireba
 
 ---
 
+## Sprite rendering convention
+
+All sprite sheets are **16×16-pixel grids** of animation frames. **Only frame 0 (the top-left 16×16 pixel cell) is used** for every tile, enemy, NPC, and player sprite until animation is added in a later step.
+
+- **In Phaser** (tiles, entities, HUD): load each sheet with `frameWidth: 16, frameHeight: 16`; display with `setFrame(0)`.
+- **In DOM UI** (login character selection): use a `<canvas>` element and draw the source rect `(0, 0, 16, 16)` scaled to the desired display size (e.g. 32×32) with `ctx.drawImage(img, 0, 0, 16, 16, 0, 0, 32, 32)`.
+
+This convention applies everywhere a sprite is rendered. Do not rely on the full sheet size — always address frame 0 explicitly.
+
+---
+
 ## World
 
 ### Size and structure
@@ -172,7 +183,9 @@ Some tiles reduce movement speed (`grass_tall`, `mud`, `quicksand`, `sand_dune`)
 
 ### Sprites
 
-Players choose one of eight available champion sprites at character creation. All sprite files are under `public/assets/sprites/Characters/Champions/`.
+Players choose one of eight available champion sprites at character creation. All sprite files are under `public/assets/sprites/Characters/Champions/`. In the character-selection grid on the login screen, and as the in-game player sprite, **only frame 0 (top-left 16×16 px)** is shown — see the global [Sprite rendering convention](#sprite-rendering-convention).
+
+The entity sprites used in the login selection UI are the pre-scaled portraits under `public/assets/sprites/entities/players/`. The Champions sheets under `Characters/Champions/` are used for in-game rendering.
 
 | Champion | File |
 |---|---|

@@ -25,7 +25,7 @@ export class LoginScene extends Phaser.Scene {
 
     const championOptions = CHAMPIONS.map(
       c => `<button class="champion-btn${c === this.selectedChampion ? ' selected' : ''}" data-id="${c}">
-        <img src="/assets/sprites/entities/players/player_${c}.png" alt="${c}" width="32" height="32">
+        <canvas class="champion-avatar" width="32" height="32" data-src="/assets/sprites/entities/players/player_${c}.png"></canvas>
         <span>${c}</span>
       </button>`,
     ).join('')
@@ -60,7 +60,7 @@ export class LoginScene extends Phaser.Scene {
       .champion-btn { background:#111; border:2px solid #333; color:#aaa; cursor:pointer;
         padding:.3rem; font-family:monospace; font-size:.65rem; text-align:center;
         width:72px; display:flex; flex-direction:column; align-items:center; gap:.2rem; }
-      .champion-btn img { image-rendering:pixelated; }
+      .champion-avatar { width:32px; height:32px; image-rendering:pixelated; }
       .champion-btn.selected { border-color:#fff; color:#fff; }
       .login-buttons { display:flex; gap:.6rem; margin-top:.8rem; }
       .login-buttons button { flex:1; padding:.5rem; background:transparent; border:1px solid #fff;
@@ -70,6 +70,14 @@ export class LoginScene extends Phaser.Scene {
     `
     document.head.appendChild(style)
     document.body.appendChild(this.overlay)
+
+    // Render frame 0 (top-left 16×16 px, scaled to 32×32) for each champion canvas
+    this.overlay.querySelectorAll<HTMLCanvasElement>('canvas.champion-avatar').forEach(canvas => {
+      const ctx = canvas.getContext('2d')!
+      const img = new Image()
+      img.onload = () => ctx.drawImage(img, 0, 0, 16, 16, 0, 0, 32, 32)
+      img.src = canvas.dataset.src!
+    })
 
     // Champion selection
     this.overlay.querySelectorAll<HTMLButtonElement>('.champion-btn').forEach(btn => {

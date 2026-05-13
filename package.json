@@ -13,6 +13,7 @@
     "vite": "^8.0.12"
   },
   "dependencies": {
+    "@rolldown/binding-win32-x64-msvc": "^1.0.0",
     "firebase": "^12.13.0",
     "phaser": "^4.1.0",
     "simplex-noise": "^4.0.3"
