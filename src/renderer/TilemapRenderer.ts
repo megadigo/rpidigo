@@ -183,6 +183,21 @@ export class TilemapRenderer {
     const endX   = Math.ceil(worldRight  / TILE_SIZE)
     const endY   = Math.ceil(worldBottom / TILE_SIZE)
 
+    // Cull tiles that have scrolled out of the viewport
+    for (const k of this.placedGround.keys()) {
+      const us = k.indexOf('_')
+      const tx = +k.slice(0, us)
+      const ty = +k.slice(us + 1)
+      if (tx < startX || tx > endX || ty < startY || ty > endY) {
+        this.release(this.placedGround.get(k)!)
+        this.placedGround.delete(k)
+        const ms = this.placedMiddle.get(k)
+        if (ms) { for (const m of ms) this.release(m); this.placedMiddle.delete(k) }
+        const t = this.placedTop.get(k)
+        if (t) { this.release(t); this.placedTop.delete(k) }
+      }
+    }
+
     for (let tx = startX; tx <= endX; tx++) {
       for (let ty = startY; ty <= endY; ty++) {
         const k = `${tx}_${ty}`
