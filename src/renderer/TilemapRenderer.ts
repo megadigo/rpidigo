@@ -62,7 +62,7 @@ export const TILE_DEFS: Record<string, TileDef> = {
   tree_pine:           { sprite: 'Nature/PineTrees',         layer: 'MIDDLE', impassable: true },
   tree_dead:           { sprite: 'Nature/DeadTrees',         layer: 'MIDDLE', impassable: true },
   bush:                { sprite: 'Nature/Trees',             layer: 'MIDDLE', impassable: true },
-  mushroom:            { sprite: 'Ground/GrassTall',         layer: 'MIDDLE' },
+  mushroom:            { sprite: 'Ground/GrassTall',         layer: 'GROUND' },
   log:                 { sprite: 'Nature/DeadTrees',         layer: 'MIDDLE' },
   moss_rock:           { sprite: 'Nature/RocksBig',          layer: 'MIDDLE', impassable: true },
   stump:               { sprite: 'Nature/DeadTrees',         layer: 'MIDDLE' },
