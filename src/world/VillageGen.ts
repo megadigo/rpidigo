@@ -27,7 +27,7 @@ export function generateVillage(
    * - Interior flag adds a `t: 'house_roof'` TOP layer.
    */
   function set(x: number, y: number, type: string, interior = false) {
-    const GROUND_TYPES = new Set(['cobblestone', 'house_floor', 'garden_plot', 'dungeon_entrance'])
+  const GROUND_TYPES = new Set(['cobblestone', 'house_floor', 'garden_plot', 'dungeon_entrance'])
     let entry: TileData
     if (GROUND_TYPES.has(type)) {
       entry = interior ? { g: type, t: 'house_roof' } : { g: type }
@@ -100,6 +100,32 @@ export function generateVillage(
     const type = decorTiles[seededRandInt(rand, 0, decorTiles.length - 1)]
     const key = `${originX + ox}_${originY + oy}`
     if (!tiles.has(key)) set(originX + ox, originY + oy, type)
+  }
+
+  // Wheat fields — 2 rectangular patches placed away from the central square
+  const fieldOffsets = [
+    { ox: seededRandInt(rand, 8, 13),  oy: seededRandInt(rand, 3, 6)  },
+    { ox: seededRandInt(rand, -13, -8), oy: seededRandInt(rand, -6, -3) },
+  ]
+  for (const { ox, oy } of fieldOffsets) {
+    const fw = seededRandInt(rand, 4, 7)
+    const fh = seededRandInt(rand, 3, 5)
+    for (let fx = 0; fx < fw; fx++) {
+      for (let fy = 0; fy < fh; fy++) {
+        const wx = originX + ox + fx
+        const wy = originY + oy + fy
+        tiles.set(`${wx}_${wy}`, { g: 'garden_plot', m: ['wheat_field'] })
+      }
+    }
+    // Fence border around the field
+    for (let fx = -1; fx <= fw; fx++) {
+      set(originX + ox + fx, originY + oy - 1, 'fence')
+      set(originX + ox + fx, originY + oy + fh, 'fence')
+    }
+    for (let fy = 0; fy < fh; fy++) {
+      set(originX + ox - 1,      originY + oy + fy, 'fence')
+      set(originX + ox + fw,     originY + oy + fy, 'fence')
+    }
   }
 
   // NPC profiles to spawn

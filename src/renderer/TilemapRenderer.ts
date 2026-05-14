@@ -94,6 +94,7 @@ export const TILE_DEFS: Record<string, TileDef> = {
   tavern_sign:         { sprite: 'Buildings/Wood/Taverns',   layer: 'MIDDLE' },
   lantern:             { sprite: 'Miscellaneous/Signs',      layer: 'MIDDLE' },
   garden_plot:         { sprite: 'Ground/Grass',             layer: 'GROUND' },
+  wheat_field:         { sprite: 'Nature/Wheatfield',        layer: 'MIDDLE', speedMod: 0.8 },
   // ── Dungeon ───────────────────────────────────────────────────────────────
   dungeon_entrance:    { sprite: 'Ground/Cliff',             layer: 'GROUND' },
   dungeon_floor:       { sprite: 'Ground/Cliff',             layer: 'GROUND' },
