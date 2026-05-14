@@ -27,7 +27,7 @@ export class LoginScene extends Phaser.Scene {
 
     const championOptions = CHAMPIONS.map(
       c => `<button class="champion-btn${c === this.selectedChampion ? ' selected' : ''}" data-id="${c}">
-        <canvas class="champion-avatar" width="32" height="32" data-src="/assets/sprites/entities/players/player_${c}.png"></canvas>
+        <canvas class="champion-avatar" width="32" height="32" data-src="/assets/sprites/Players/player_${c}.png"></canvas>
         <span>${c}</span>
       </button>`,
     ).join('')

@@ -38,7 +38,7 @@ export class LoadingScene extends Phaser.Scene {
     }
     // Champion spritesheets
     for (const [id, file] of Object.entries(CHAMPION_FILES)) {
-      this.load.spritesheet(id, `/assets/sprites/Characters/Champions/${file}.png`, { frameWidth: 16, frameHeight: 16 })
+      this.load.spritesheet(id, `/assets/sprites/Champions/${file}.png`, { frameWidth: 16, frameHeight: 16 })
     }
   }
 
