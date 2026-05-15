@@ -40,12 +40,12 @@ This convention applies everywhere a sprite is rendered. Do not rely on the full
 | **Forest** | Dense woodland with oak, pine and dead trees, bushes, mushrooms. |
 | **River** | Flowing water channels, sandy banks, reeds, mud, bridges at crossings. |
 | **Desert** | Sand dunes, cacti, dry rocks, quicksand traps, oasis pools. |
-| **Village** | Structured settlement: cobblestone paths, buildings, market, blacksmith, well. |
+| **Village** | Structured settlement with a 5×5 central square; 3-tile-wide cobblestone arms; tavern, barracks, chapel, workshop, and houses along each arm; market stall, well, quest board, wheat fields. |
 | **Dungeon** | Underground multi-floor complex accessed via a surface entrance tile. |
 
 - The 1000×1000 world is divided into a **10×10 grid of 100-tile sectors**. Each sector contains exactly one village and one dungeon entrance, placed at a seeded-random offset within the sector.
 - Rivers are traced as connected paths within each chunk following the local elevation gradient.
-- Road paths between all POIs are pre-computed from the seed. When a chunk containing a road segment is generated, road tiles (`dirt_path`, `cobblestone`, or `bridge` over water) are stamped in, ensuring every explored POI is connected to every other explored POI by a walkable road.
+- Road paths between all POIs are pre-computed from the seed. When a chunk containing a road segment is generated, single-tile `dirt_path` road tiles are stamped in, ensuring every explored POI is connected to every other explored POI by a walkable road.
 - No global connectivity repair pass is needed; connectivity is guaranteed by the deterministic road network stamped at chunk-generation time.
 
 ### Tiles by zone
@@ -57,93 +57,130 @@ All sprite paths are relative to `public/assets/sprites/`.
 | Tile | Sprite |
 |---|---|
 | `grass` | `Ground/Grass.png` |
-| `grass_tall` | `Ground/TexturedGrass.png` |
-| `flower_yellow` | `Ground/Grass.png` *(yellow flower frame)* |
-| `flower_red` | `Ground/Grass.png` *(red flower frame)* |
-| `dirt_path` | `Ground/DeadGrass.png` |
-| `rock_small` | `Nature/Rocks.png` *(small frame)* |
-| `rock_large` | `Nature/Rocks.png` *(large frame)* |
+| `grass_tall` | `Ground/GrassTall.png` |
+| `flower_yellow` | `Ground/GrassFlowerYellow.png` |
+| `flower_red` | `Ground/GrassFlowerRed.png` |
+| `dirt_path` | `Ground/GrassDead.png` |
+| `rock_small` | `Nature/RockSmall.png` |
+| `rock_large` | `Nature/RocksBig.png` |
 
 **Forest**
 
 | Tile | Sprite |
 |---|---|
-| `grass_dark` | `Ground/TexturedGrass.png` |
+| `grass_dark` | `Ground/GrassTall.png` |
 | `tree_oak` | `Nature/Trees.png` |
 | `tree_pine` | `Nature/PineTrees.png` |
-| `tree_dead` | `Nature/DeadTrees.png` |
+| `coconut_tree` | `Nature/CoconutTrees.png` |
 | `bush` | `Nature/Trees.png` *(bush/shrub frame)* |
-| `mushroom` | `Ground/TexturedGrass.png` *(mushroom frame)* |
-| `log` | `Nature/DeadTrees.png` *(log frame)* |
-| `moss_rock` | `Nature/Rocks.png` *(mossy frame)* |
-| `stump` | `Nature/DeadTrees.png` *(stump frame)* |
+| `mushroom` | `Ground/GrassTall.png` *(mushroom frame)* |
+| `log` | `Nature/Stump.png` *(log frame)* |
+| `moss_rock` | `Nature/RockMoss.png` |
+| `stump` | `Nature/Stump.png` |
 
 **River**
 
 | Tile | Sprite |
 |---|---|
-| `water_shallow` | `Ground/Shore.png` *(shallow frame)* |
-| `water_deep` | `Ground/Cliff-Water.png` |
-| `sand_bank` | `Ground/Shore.png` *(sand frame)* |
-| `reeds` | `Ground/Shore.png` *(reeds frame)* |
-| `bridge` | `Miscellaneous/Bridge.png` |
-| `mud` | `Ground/DeadGrass.png` *(mud frame)* |
+| `water_shallow` | `Ground/WaterShallow.png` |
+| `water_deep` | `Ground/WaterDeep.png` |
+| `sand_bank` | `Ground/Sand.png` |
+| `reeds` | `Ground/GrassTall.png` *(reeds frame)* |
+| `mud` | `Ground/Mud.png` |
 
 **Desert**
 
 | Tile | Sprite |
 |---|---|
-| `sand` | `Ground/DeadGrass.png` *(sand frame)* |
-| `sand_dune` | `Ground/DeadGrass.png` *(dune frame)* |
-| `dry_rock` | `Nature/Rocks.png` *(dry frame)* |
+| `sand` | `Ground/Sand.png` |
+| `sand_dune` | `Ground/SandDune.png` |
+| `dry_rock` | `Nature/RockSmall.png` |
 | `cactus` | `Nature/Cactus.png` |
 | `dry_grass` | `Nature/Tumbleweed.png` |
-| `oasis_water` | `Ground/Shore.png` *(water frame)* |
-| `quicksand` | `Ground/DeadGrass.png` *(quicksand frame)* |
+| `oasis_water` | `Ground/WaterOasis.png` |
+| `quicksand` | `Ground/GrassDead.png` *(quicksand frame)* |
 
-**Village**
+**Village** — houses are single-sprite tiles; entering one (press **E** when adjacent) loads a 12×12 interior room.
 
-| Tile | Sprite |
-|---|---|
-| `cobblestone` | `Ground/DeadGrass.png` *(stone path frame)* |
-| `house_wall` | `Buildings/Wood/Houses.png` *(wall frame)* |
-| `house_floor` | `Ground/Grass.png` *(floor frame)* |
-| `house_door` | `Buildings/Wood/Houses.png` *(door frame)* |
-| `house_roof` | `Buildings/Wood/Houses.png` *(roof frame)* |
-| `well` | `Miscellaneous/Well.png` |
-| `fence` | `Buildings/Wood/Resources.png` *(fence frame)* |
-| `market_stall` | `Buildings/Wood/Market.png` |
-| `blacksmith_forge` | `Buildings/Wood/Workshops.png` |
-| `tavern_sign` | `Buildings/Wood/Taverns.png` |
-| `lantern` | `Miscellaneous/Signs.png` *(lantern frame)* |
-| `garden_plot` | `Nature/Wheatfield.png` |
+| Tile | Sprite | Notes |
+|---|---|---|
+| `cobblestone` | `Ground/GrassDead.png` | Path / square |
+| `house_hut` | `Buildings/Huts.png` | Small house — opens interior on interact |
+| `house_cabin` | `Buildings/Houses.png` | Medium house — opens interior on interact |
+| `barracks` | `Buildings/Barracks.png` | Guard barracks — opens interior on interact |
+| `chapel` | `Buildings/Chapels.png` | Chapel / temple — opens interior on interact |
+| `tavern` | `Buildings/Taverns.png` | Tavern — opens interior on interact |
+| `well` | `Miscellaneous/Well.png` | Central landmark |
+| `market_stall` | `Buildings/Market.png` | Merchant NPC spot |
+| `workshop` | `Buildings/Workshops.png` | Blacksmith / crafting — opens interior on interact |
+| `quest_board` | `Miscellaneous/QuestBoard.png` | Notice board |
+| `street_sign` | `Miscellaneous/StreetSign.png` | Path-end marker |
+| `tombstone` | `Miscellaneous/Tombstones.png` | Cemetery decoration |
+| `garden_plot` | `Ground/Grass.png` | Wheat field base |
+| `wheat_field` | `Nature/Wheatfield.png` | Planted crop |
+
+**House Interior** — 12×12 room accessed from any enterable village building.
+
+| Tile | Sprite | Notes |
+|---|---|---|
+| `house_floor` | `Ground/HouseFloor.png` | Interior floor |
+| `dungeon_wall` | `Buildings/DungeonWall.png` | Impassable border |
+| `workbench` | `Miscellaneous/WorkBench.png` | Crafting station (workshop) |
+| `table` | `Miscellaneous/Table.png` | Furniture (tavern, workshop, residential) |
+| `bed` | `Miscellaneous/Bed.png` | Furniture (residential) |
+| `sofa` | `Miscellaneous/Sofa.png` | Furniture (tavern, chapel, residential) |
+| `chest` | `Miscellaneous/Chests.png` | Storage / loot chest |
+| `quest_board` | `Miscellaneous/QuestBoard.png` | Barracks notice board |
+| `dungeon_altar` | `Miscellaneous/DungeonAltar.png` | Chapel altar |
+| `portal_exit` | `Miscellaneous/Portal.png` | Returns player to overworld |
 
 **Dungeon**
 
 | Tile | Sprite |
 |---|---|
-| `dungeon_entrance` | `Buildings/Wood/CaveV2.png` |
-| `dungeon_floor` | `Ground/Cliff.png` *(floor frame)* |
-| `dungeon_wall` | `Ground/Cliff.png` *(wall frame)* |
-| `dungeon_door` | `Buildings/Wood/Houses.png` *(dungeon door frame)* |
-| `dungeon_stairs_down` | `Ground/Cliff.png` *(stairs-down frame)* |
-| `dungeon_stairs_up` | `Ground/Cliff.png` *(stairs-up frame)* |
-| `dungeon_torch` | `Miscellaneous/Signs.png` *(torch frame)* |
-| `dungeon_pillar` | `Ground/Cliff.png` *(pillar frame)* |
-| `dungeon_trap` | `Buildings/Enemy/SpearWall.png` |
+| `dungeon_entrance` | `Buildings/DungeonEntrance.png` |
+| `dungeon_floor` | `Ground/DungeonFloor.png` |
+| `dungeon_wall` | `Buildings/DungeonWall.png` |
+| `dungeon_stairs_down` | `Ground/StairDown.png` |
+| `dungeon_stairs_up` | `Ground/StairUp.png` *(press E to exit)* |
+| `dungeon_pillar` | `Buildings/DungeonPillar.png` |
+| `dungeon_trap` | `Miscellaneous/DungeonTrap.png` |
 | `dungeon_chest` | `Miscellaneous/Chests.png` |
-| `dungeon_altar` | `Buildings/Enemy/Mausoleum.png` |
+| `dungeon_altar` | `Miscellaneous/DungeonAltar.png` |
+| `dungeon_tombstones` | `Miscellaneous/Tombstones.png` |
 
 **Special**
 
 | Tile | Sprite |
 |---|---|
-| `house` | `Buildings/Wood/Huts.png` *(entrance frame)* |
-| `workbench` | `Buildings/Wood/Workshops.png` *(bench frame)* |
-| `chest` | `Miscellaneous/Chests.png` |
-| `void` | `Ground/Cliff.png` *(impassable barrier frame)* |
+| `void` | `Ground/GrassDead.png` *(impassable world-boundary barrier)* |
 
-Some tiles reduce movement speed (`grass_tall`, `mud`, `quicksand`, `sand_dune`) rather than blocking it.
+Some tiles reduce movement speed (`grass_tall`, `mud`, `quicksand`, `sand_dune`, `wheat_field`) rather than blocking it.
+
+---
+
+## House Interior Maps
+
+Every enterable village building (house_hut, house_cabin, barracks, chapel, tavern, workshop) has a corresponding **interior room** stored in Firebase under `map/house_{tx:04d}_{ty:04d}` where `(tx, ty)` is the building's overworld tile position.
+
+### Structure
+- Room size: **12×12 tiles**
+- `dungeon_wall` borders the room perimeter (impassable)
+- `house_floor` fills the interior
+- `portal_exit` tile at bottom-centre (col 6, row 10) returns the player to the overworld
+- Furniture is **seeded-random per building**, themed by type:
+  - **house_hut / house_cabin**: bed, optional table or sofa, chest with gold
+  - **tavern**: 2–4 tables, 1–2 sofas, chest with gold
+  - **workshop**: 2–3 workbenches, chest, optional table
+  - **barracks**: quest_board (near top), 2–3 chests, optional table
+  - **chapel**: dungeon_altar (near top-centre), 1–2 chests, optional sofa
+
+### Room ID derivation
+The room ID `house_${tx.padStart(4,'0')}_${ty.padStart(4,'0')}` is derived deterministically from the building's world coordinates — no metadata storage is needed. Dungeon rooms use `dungeon_${tx:04d}_${ty:04d}_floor_{n}`.
+
+### Entering and exiting
+- Stand adjacent to a building tile → press **E** → camera transitions to the interior room
+- Stand on or adjacent to the `portal_exit` tile → press **E** → return to the overworld at the original entry position
 
 ---
 
@@ -387,7 +424,6 @@ Players can gather raw materials from the world by interacting with specific til
 | Action | Tile | Material obtained | Material sprite |
 |---|---|---|---|
 | Chop | `tree_oak`, `tree_pine` | `wood` | `User Interface/UiIcons.png` *(wood frame)* |
-| Chop | `tree_dead` | `wood`, `fiber` | `User Interface/UiIcons.png` *(wood / fiber frames)* |
 | Cut | `bush`, `reeds` | `fiber` | `User Interface/UiIcons.png` *(fiber frame)* |
 | Cut | `cactus` | `fiber` | `User Interface/UiIcons.png` *(fiber frame)* |
 | Mine | `rock_large`, `moss_rock`, `dry_rock` | `stone` | `User Interface/UiIcons.png` *(stone frame)* |
@@ -426,7 +462,7 @@ After gathering, the source tile changes to a depleted form and regenerates auto
 | Station | Location | Purpose |
 |---|---|---|
 | `workbench` | Inside player house | Basic weapons and tools from natural materials |
-| `blacksmith_forge` | Village | Metal weapons; smelting `iron_ore` into `iron_ingot` |
+| `workshop` | Village | Metal weapons; smelting `iron_ore` into `iron_ingot` |
 | `dungeon_altar` | Dungeon boss room | Rare and magic weapons from dungeon materials |
 
 ### Intermediate processing
@@ -435,10 +471,10 @@ Some recipes require processed materials. Output sprites are frames from `User I
 
 | Process | Input | Output | Station | Output sprite |
 |---|---|---|---|---|
-| Smelt | `iron_ore` ×3 | `iron_ingot` ×1 | `blacksmith_forge` | iron ingot frame |
+| Smelt | `iron_ore` ×3 | `iron_ingot` ×1 | `workshop` | iron ingot frame |
 | Tan | `hide` ×2 + `fiber` ×1 | `leather` ×1 | `workbench` | leather frame |
 | Brew | `poison_sac` ×1 + `mushroom` ×1 | `poison_vial` ×2 | `workbench` | `User Interface/Icons-Essentials.png` *(vial frame)* |
-| Refine | `sand_crystal` ×2 + `stone` ×1 | `refined_crystal` ×1 | `blacksmith_forge` | refined crystal frame |
+| Refine | `sand_crystal` ×2 + `stone` ×1 | `refined_crystal` ×1 | `workshop` | refined crystal frame |
 
 ### Weapons
 
@@ -709,15 +745,15 @@ Pauses entity script execution while open. Player cannot move.
 
 **Transitions:**
 - **Close** / ESC → back to `GameScene` + `HudScene`
-- Click equipped weapon slot while near `workbench` or `blacksmith_forge` → `CraftScene` overlays
+- Click equipped weapon slot while near `workbench` or `workshop` → `CraftScene` overlays
 
 ---
 
 ### Crafting Screen (`CraftScene`) — *overlays `GameScene` + `HudScene`*
-Opens when the player interacts with a `workbench`, `blacksmith_forge`, or `dungeon_altar`.
+Opens when the player interacts with a `workbench`, `workshop`, or `dungeon_altar`.
 
 **Content:**
-- Station label (Workbench / Blacksmith Forge / Dungeon Altar)
+- Station label (Workbench / Workshop / Dungeon Altar)
 - Scrollable list of unlocked recipes for this station at the player's level
 - Selected recipe shows: result item name, power/defense, ingredients with have/need counts (ingredients the player lacks are shown in red)
 - **Craft** button (greyed out if ingredients are missing or level requirement not met)

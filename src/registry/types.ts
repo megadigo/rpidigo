@@ -31,7 +31,7 @@ export interface EnemyDefinition {
   levelRange: [number, number]
   lootTable: DropEntry[]
   behaviorScript: string
-  spriteFrame: string         // filename in public/assets/sprites/entities/enemies/
+  spriteFrame: string         // filename in public/assets/sprites/Enemies/
   special?: string[]
   stealGold?: [number, number]
 }
@@ -84,6 +84,6 @@ export interface RecipeDefinition {
   produces: string
   quantity: number
   requires: { itemId: string; qty: number }[]
-  station: 'workbench' | 'blacksmith_forge' | 'dungeon_altar'
+  station: 'workbench' | 'workshop' | 'dungeon_altar'
   levelRequired: number
 }

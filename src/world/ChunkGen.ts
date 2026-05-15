@@ -5,9 +5,10 @@
 import { createNoise2D } from 'simplex-noise'
 import type { ChunkData, TileData, EnemyInstance, PoiLayout } from './types.ts'
 import type { RoadNetwork } from './RoadNetwork.ts'
-import { mulberry32, seededRandInt } from './utils.ts'
+import { mulberry32, seededRandInt, tileKey } from './utils.ts'
 import { generateVillage } from './VillageGen.ts'
 import { generateDungeon } from './DungeonGen.ts'
+import { generateHouseRoom } from './HouseGen.ts'
 
 export const CHUNK_SIZE = 32
 export const WORLD_MAX = 1000   // tiles 0–999 are valid; 1000+ are void
@@ -54,7 +55,7 @@ function pickTileLayers(zone: Zone, detail: number, rand: () => number): TileDat
       return { g }
     }
     case 'forest': {
-      const features = ['tree_oak', 'tree_oak', 'tree_pine', 'tree_dead', 'bush', 'mushroom', 'log', 'moss_rock', 'stump']
+      const features = ['tree_oak', 'tree_oak', 'tree_pine', 'bush', 'mushroom', 'log', 'moss_rock', 'stump']
       if (rand() < 0.65)
         return { g: 'grass_dark', m: [features[Math.floor(d * features.length) % features.length]] }
       return { g: 'grass_dark' }
@@ -150,9 +151,14 @@ export function generateChunk(
 
   // Pre-generate village overlays for this chunk
   const villageTiles = new Map<string, TileData>()
+  const houseRooms: ReturnType<typeof generateHouseRoom>[] = []
   const villageNpcs = villagesInChunk.flatMap(v => {
     const layout = generateVillage(v.id, v.x, v.y, seed ^ v.x ^ v.y)
     for (const [k, t] of layout.tiles) villageTiles.set(k, t)
+    // Generate a house interior for every building with an interior room
+    for (const bp of layout.buildingPositions) {
+      houseRooms.push(generateHouseRoom(bp.x, bp.y, seed ^ bp.x ^ bp.y, bp.type))
+    }
     return layout.npcs
   })
 
@@ -161,7 +167,7 @@ export function generateChunk(
     for (let ly = 0; ly < CHUNK_SIZE; ly++) {
       const x = chunkOriginX + lx
       const y = chunkOriginY + ly
-      const key = `${x}_${y}`
+      const key = tileKey(x, y)
 
       // Out-of-bounds → void
       if (x >= WORLD_MAX || y >= WORLD_MAX || x < 0 || y < 0) {
@@ -182,10 +188,9 @@ export function generateChunk(
         continue
       }
 
-      // Road stamp
+      // Road stamp — bridges removed; roads over water use dirt_path
       if (roads.tileSet.has(key)) {
-        const baseZone = classifyZone(x, y, noise)
-        tiles[key] = { g: baseZone === 'river' ? 'bridge' : 'dirt_path' }
+        tiles[key] = { g: 'dirt_path' }
         continue
       }
 
@@ -224,12 +229,16 @@ export function generateChunk(
 
   // Write dungeon floors to the caller's responsibility — return dungeon metadata so ChunkManager can persist them
   const _dungeonFloors = dungeonsInChunk.map(d =>
-    generateDungeon(d.id, seed ^ d.x ^ d.y),
+    generateDungeon(d.x, d.y, seed ^ d.x ^ d.y),
   )
 
-  // Attach dungeon floors as a non-standard field so ChunkManager can persist them
-  const result = { tiles, enemies, npcs } as ChunkData & { dungeonFloors?: ReturnType<typeof generateDungeon>[] }
+  // Attach dungeon floors and house rooms as non-standard fields so ChunkManager can persist them
+  const result = { tiles, enemies, npcs } as ChunkData & {
+    dungeonFloors?: ReturnType<typeof generateDungeon>[]
+    houseRooms?: ReturnType<typeof generateHouseRoom>[]
+  }
   if (_dungeonFloors.length > 0) result.dungeonFloors = _dungeonFloors
+  if (houseRooms.length > 0) result.houseRooms = houseRooms
 
   return result
 }
@@ -237,9 +246,11 @@ export function generateChunk(
 /** Quick impassability check — mirrors CollisionMap logic without importing renderer. */
 function isPassableTile(tile: TileData): boolean {
   const blocked = new Set([
-    'tree_oak', 'tree_pine', 'tree_dead', 'rock_small', 'rock_large', 'moss_rock',
-    'cactus', 'water_shallow', 'water_deep', 'oasis_water', 'dungeon_wall',
-    'dungeon_pillar', 'fence', 'well', 'void',
+    'tree_oak', 'tree_pine', 'coconut_tree', 'rock_small', 'rock_large', 'moss_rock',
+    'cactus', 'water_shallow', 'water_deep', 'oasis_water',
+    'dungeon_wall', 'dungeon_pillar',
+    'house_hut', 'house_cabin', 'barracks', 'chapel', 'tavern', 'workshop',
+    'well', 'tombstone', 'void',
   ])
   if (blocked.has(tile.g)) return false
   if (tile.m?.some(m => blocked.has(m))) return false

@@ -10,6 +10,7 @@ import { isPassable } from '../world/CollisionMap.ts'
 import { ref, update } from 'firebase/database'
 import { db } from '../firebase.ts'
 import { getTileSheets } from '../renderer/TilemapRenderer.ts'
+import { enemies } from '../data/enemies.ts'
 
 /** Champion id → file mapping (matches SPEC.md). */
 const CHAMPION_FILES: Record<string, string> = {
@@ -22,6 +23,12 @@ const CHAMPION_FILES: Record<string, string> = {
   okomo:     'Okomo',
   zhinja:    'Zhinja',
 }
+
+/** All NPC sprite names (in public/assets/sprites/NPCs/). */
+const NPC_SPRITES = [
+  'guard_patrol', 'healer_standard', 'merchant_standard',
+  'villager_fisherman', 'villager_gossiper', 'villager_hunter', 'villager_wanderer',
+] as const
 
 export class LoadingScene extends Phaser.Scene {
   private bar!: Phaser.GameObjects.Rectangle
@@ -39,6 +46,15 @@ export class LoadingScene extends Phaser.Scene {
     // Champion spritesheets
     for (const [id, file] of Object.entries(CHAMPION_FILES)) {
       this.load.spritesheet(id, `/assets/sprites/Champions/${file}.png`, { frameWidth: 16, frameHeight: 16 })
+    }
+    // Enemy spritesheets — key: 'Enemies/{name}' (used by entity renderer in Step 6)
+    const enemySheets = [...new Set(enemies.map(e => `Enemies/${e.spriteFrame.replace('.png', '')}`))]
+    for (const key of enemySheets) {
+      this.load.spritesheet(key, `/assets/sprites/${key}.png`, { frameWidth: 16, frameHeight: 16 })
+    }
+    // NPC spritesheets — key: 'NPCs/{name}'
+    for (const name of NPC_SPRITES) {
+      this.load.spritesheet(`NPCs/${name}`, `/assets/sprites/NPCs/${name}.png`, { frameWidth: 16, frameHeight: 16 })
     }
   }
 

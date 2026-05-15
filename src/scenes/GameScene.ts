@@ -1,9 +1,18 @@
 /**
  * GameScene — main gameplay: tilemap, player sprite, camera.
+ *
+ * Listens for 'enterRoom' and 'exitRoom' events from PlayerController to handle
+ * transitions between the overworld and house/dungeon interior rooms.
  */
 import Phaser from 'phaser'
 import { TilemapRenderer, TILE_SIZE } from '../renderer/TilemapRenderer.ts'
 import { PlayerController } from '../player/PlayerController.ts'
+import { enterRoom, exitRoom } from '../world/ChunkManager.ts'
+import { HOUSE_ROOM_SIZE } from '../world/HouseGen.ts'
+import { getLocalPlayer, setLocalPlayer } from '../player/Auth.ts'
+
+/** Tile bounds of the 1000×1000 overworld in pixels. */
+const WORLD_PIXEL_SIZE = 1000 * TILE_SIZE
 
 export class GameScene extends Phaser.Scene {
   private tilemapRenderer!: TilemapRenderer
@@ -31,14 +40,27 @@ export class GameScene extends Phaser.Scene {
     })
 
     const savedZoom = parseInt(localStorage.getItem('rpidigo.zoom') ?? '1', 10)
-    // Clamp: if a stale zoom=2 was saved, allow it; scroll wheel can still increase
     this.cameras.main.setZoom(Phaser.Math.Clamp(savedZoom, 1, 3))
+
+    // Room transition events emitted by PlayerController
+    this.events.on(
+      'enterRoom',
+      (data: { roomId: string; spawnX: number; spawnY: number }) => {
+        void this._handleEnterRoom(data.roomId, data.spawnX, data.spawnY)
+      },
+    )
+
+    this.events.on(
+      'exitRoom',
+      (data: { returnX: number; returnY: number }) => {
+        this._handleExitRoom(data.returnX, data.returnY)
+      },
+    )
   }
 
   update(_time: number, delta: number): void {
     this.playerController.update(delta)
 
-    // Use the camera's actual world viewport so tiles render exactly what is visible
     const cam = this.cameras.main
     const v = cam.worldView
     this.tilemapRenderer.drawViewport(
@@ -47,5 +69,34 @@ export class GameScene extends Phaser.Scene {
       v.right + TILE_SIZE,
       v.bottom + TILE_SIZE,
     )
+  }
+
+  private async _handleEnterRoom(roomId: string, spawnX: number, spawnY: number): Promise<void> {
+    // Persist room in player record so HUD/presence stays consistent
+    const player = getLocalPlayer()
+    player.room = roomId
+    setLocalPlayer(player)
+
+    await enterRoom(roomId)
+    this.tilemapRenderer.reset()
+    this.playerController.teleport(spawnX, spawnY)
+
+    // Narrow camera bounds to the room size
+    const roomSize = roomId.startsWith('house_') ? HOUSE_ROOM_SIZE : 40
+    this.cameras.main.setBounds(0, 0, roomSize * TILE_SIZE, roomSize * TILE_SIZE)
+  }
+
+  private _handleExitRoom(returnX: number, returnY: number): void {
+    exitRoom()
+
+    const player = getLocalPlayer()
+    player.room = '0'
+    setLocalPlayer(player)
+
+    this.tilemapRenderer.reset()
+    this.playerController.teleport(returnX, returnY)
+
+    // Restore overworld camera bounds
+    this.cameras.main.setBounds(0, 0, WORLD_PIXEL_SIZE, WORLD_PIXEL_SIZE)
   }
 }

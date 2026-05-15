@@ -1,13 +1,30 @@
 /**
  * VillageGen — stamps a structured village layout onto a tile map.
- * Called from ChunkGen when generating a chunk that contains a village POI.
+ *
+ * Houses are now single-sprite tiles (house_hut, house_cabin, barracks, chapel,
+ * tavern, workshop) instead of multi-tile wall/roof/door structures.  Each placed
+ * building tile stores its world position so HouseGen can derive the room ID
+ * deterministically as `house_${tx}_${ty}`.
+ *
+ * Village layout:
+ *   • Central well on 5×5 cobblestone square
+ *   • Market stall + quest board at square corners
+ *   • 4 cobblestone arms, 3 tiles wide, 12-18 tiles each
+ *   • Buildings on BOTH sides of each arm at 3 evenly-spaced slots
+ *     (special buildings first: tavern, barracks, chapel, workshop;
+ *      then houses — huts and cabins — fill remaining positions)
+ *   • Street signs at path ends
+ *   • Tombstone cluster away from centre
+ *   • Two wheat-field patches with stump borders
  */
 import type { TileData, NpcInstance } from './types.ts'
-import { mulberry32, seededRandInt } from './utils.ts'
+import { mulberry32, seededRandInt, tileKey } from './utils.ts'
 
 export interface VillageLayout {
   tiles: Map<string, TileData>   // key `${x}_${y}`
   npcs: NpcInstance[]
+  /** World positions of every building tile that has an interior room. */
+  buildingPositions: Array<{ x: number; y: number; type: string }>
 }
 
 export function generateVillage(
@@ -19,93 +36,116 @@ export function generateVillage(
   const rand = mulberry32(seed ^ 0xdeadbeef)
   const tiles = new Map<string, TileData>()
   const npcs: NpcInstance[] = []
+  const buildingPositions: Array<{ x: number; y: number; type: string }> = []
 
-  /**
-   * Set a tile with automatic layer assignment:
-   * - GROUND types (cobblestone, house_floor, garden_plot) go in `g`.
-   * - MIDDLE objects (well, fence, walls, furniture…) go in `m` with cobblestone ground.
-   * - Interior flag adds a `t: 'house_roof'` TOP layer.
-   */
-  function set(x: number, y: number, type: string, interior = false) {
-  const GROUND_TYPES = new Set(['cobblestone', 'house_floor', 'garden_plot', 'dungeon_entrance'])
-    let entry: TileData
-    if (GROUND_TYPES.has(type)) {
-      entry = interior ? { g: type, t: 'house_roof' } : { g: type }
-    } else {
-      // MIDDLE object — put on cobblestone ground
-      entry = interior ? { g: 'cobblestone', m: [type], t: 'house_roof' } : { g: 'cobblestone', m: [type] }
-    }
-    tiles.set(`${x}_${y}`, entry)
+  /** Place a ground tile at (x, y). */
+  function ground(x: number, y: number, g: string) {
+    tiles.set(tileKey(x, y), { g })
   }
 
-  // Central well
-  set(originX, originY, 'well')
+  /** Place a MIDDLE object on a cobblestone ground at (x, y). */
+  function object(x: number, y: number, type: string) {
+    if (!tiles.has(tileKey(x, y))) ground(x, y, 'cobblestone')
+    const entry = tiles.get(tileKey(x, y))!
+    tiles.set(tileKey(x, y), { ...entry, m: [...(entry.m ?? []), type] })
+    const hasInterior = ['house_hut', 'house_cabin', 'barracks', 'chapel', 'tavern', 'workshop']
+    if (hasInterior.includes(type)) buildingPositions.push({ x, y, type })
+  }
 
-  // Cobblestone paths in 4 cardinal directions
+  // ── Central cobblestone square (5×5) ────────────────────────────────────
+  for (let dx = -2; dx <= 2; dx++) {
+    for (let dy = -2; dy <= 2; dy++) {
+      ground(originX + dx, originY + dy, 'cobblestone')
+    }
+  }
+  object(originX, originY, 'well')
+  object(originX + 2, originY - 2, 'market_stall')
+  object(originX - 2, originY - 2, 'quest_board')
+
+  // ── 4 path arms — 3 tiles wide ────────────────────────────────────────
   const pathLengths = [
-    seededRandInt(rand, 6, 10),
-    seededRandInt(rand, 6, 10),
-    seededRandInt(rand, 6, 10),
-    seededRandInt(rand, 6, 10),
+    seededRandInt(rand, 12, 18),
+    seededRandInt(rand, 12, 18),
+    seededRandInt(rand, 12, 18),
+    seededRandInt(rand, 12, 18),
   ]
   const dirs = [
-    { dx: 1, dy: 0 },
-    { dx: -1, dy: 0 },
-    { dx: 0, dy: 1 },
-    { dx: 0, dy: -1 },
+    { dx: 1,  dy: 0  },
+    { dx: -1, dy: 0  },
+    { dx: 0,  dy: 1  },
+    { dx: 0,  dy: -1 },
   ]
+
   for (let d = 0; d < 4; d++) {
-    for (let i = 1; i <= pathLengths[d]; i++) {
-      set(originX + dirs[d].dx * i, originY + dirs[d].dy * i, 'cobblestone')
+    const { dx, dy } = dirs[d]
+    const pl = pathLengths[d]
+    // Perpendicular unit vector (non-zero axis swapped)
+    const px = dy !== 0 ? 1 : 0
+    const py = dx !== 0 ? 1 : 0
+    for (let i = 1; i <= pl; i++) {
+      ground(originX + dx * i,      originY + dy * i,      'cobblestone')
+      ground(originX + dx * i + px, originY + dy * i + py, 'cobblestone')
+      ground(originX + dx * i - px, originY + dy * i - py, 'cobblestone')
     }
+    // Street sign at path end (centre tile)
+    object(originX + dx * pl, originY + dy * pl, 'street_sign')
   }
 
-  // Buildings along paths
-  const buildingCount = seededRandInt(rand, 3, 8)
-  for (let b = 0; b < buildingCount; b++) {
-    const dirIdx = b % 4
-    const { dx, dy } = dirs[dirIdx]
-    const offset = seededRandInt(rand, 2, pathLengths[dirIdx] - 1)
-    const bx = originX + dx * offset + (dy !== 0 ? seededRandInt(rand, 1, 2) : 0)
-    const by = originY + dy * offset + (dx !== 0 ? seededRandInt(rand, 1, 2) : 0)
-    const bw = seededRandInt(rand, 5, 8)
-    const bh = seededRandInt(rand, 4, 6)
-    // Walls and door
-    for (let wx = bx; wx < bx + bw; wx++) {
-      for (let wy = by; wy < by + bh; wy++) {
-        const isWall = wx === bx || wx === bx + bw - 1 || wy === by || wy === by + bh - 1
-        if (isWall) {
-          set(wx, wy, 'house_wall')
-        } else {
-          // Interior floor with roof cover (TOP layer hides player inside)
-          set(wx, wy, 'house_floor', true)
-        }
+  // ── Buildings on both sides of each arm ─────────────────────────────────
+  // Special buildings placed first (1 of each), then houses fill remaining slots
+  const specialPool = ['tavern', 'barracks', 'chapel', 'workshop']
+  let specialIdx = 0
+  const housePool = ['house_hut', 'house_cabin', 'house_hut', 'house_cabin', 'house_hut', 'house_cabin']
+  let houseIdx = 0
+  const usedPositions = new Set<string>()
+
+  for (let d = 0; d < 4; d++) {
+    const { dx, dy } = dirs[d]
+    const pl = pathLengths[d]
+    const px = dy !== 0 ? 1 : 0
+    const py = dx !== 0 ? 1 : 0
+    // 3 building slots at ~25%, ~50%, ~80% of arm length
+    const slots = [
+      Math.max(3, Math.floor(pl * 0.25)),
+      Math.max(5, Math.floor(pl * 0.5)),
+      Math.max(7, Math.floor(pl * 0.8)),
+    ]
+    for (const slot of slots) {
+      for (const side of [-1, 1]) {
+        // Building is 3 tiles perpendicular from the path centre
+        const bx = originX + dx * slot + px * side * 3
+        const by = originY + dy * slot + py * side * 3
+        const posKey = `${bx}_${by}`
+        if (usedPositions.has(posKey)) continue
+        usedPositions.add(posKey)
+        const type = specialIdx < specialPool.length
+          ? specialPool[specialIdx++]
+          : housePool[houseIdx++ % housePool.length]
+        object(bx, by, type)
+        // 1-tile cobblestone connector bridging path edge (±1) to building (±3)
+        ground(
+          originX + dx * slot + px * side * 2,
+          originY + dy * slot + py * side * 2,
+          'cobblestone',
+        )
       }
     }
-    // Door facing path
-    const doorX = bx + Math.floor(bw / 2)
-    const doorY = dy >= 0 ? by : by + bh - 1
-    set(doorX, doorY, 'house_door')
   }
 
-  // Forge and market stall near central square
-  set(originX + 2, originY + 2, 'blacksmith_forge')
-  set(originX - 2, originY + 2, 'market_stall')
-
-  // Decoration scatter
-  const decorTiles = ['fence', 'lantern', 'garden_plot']
-  for (let i = 0; i < 8; i++) {
-    const ox = seededRandInt(rand, -5, 5)
-    const oy = seededRandInt(rand, -5, 5)
-    const type = decorTiles[seededRandInt(rand, 0, decorTiles.length - 1)]
-    const key = `${originX + ox}_${originY + oy}`
-    if (!tiles.has(key)) set(originX + ox, originY + oy, type)
+  // ── Tombstone cluster ────────────────────────────────────────────────────
+  const tombX = originX + seededRandInt(rand, -18, -12)
+  const tombY = originY + seededRandInt(rand, -18, -12)
+  const tombCount = seededRandInt(rand, 3, 6)
+  for (let i = 0; i < tombCount; i++) {
+    const tx = tombX + seededRandInt(rand, -2, 2)
+    const ty = tombY + seededRandInt(rand, -2, 2)
+    if (!tiles.has(tileKey(tx, ty))) object(tx, ty, 'tombstone')
   }
 
-  // Wheat fields — 2 rectangular patches placed away from the central square
+  // ── Wheat fields — 2 rectangular patches ────────────────────────────────
   const fieldOffsets = [
-    { ox: seededRandInt(rand, 8, 13),  oy: seededRandInt(rand, 3, 6)  },
-    { ox: seededRandInt(rand, -13, -8), oy: seededRandInt(rand, -6, -3) },
+    { ox: seededRandInt(rand, 10, 16),   oy: seededRandInt(rand, 4, 8)   },
+    { ox: seededRandInt(rand, -16, -10), oy: seededRandInt(rand, -8, -4) },
   ]
   for (const { ox, oy } of fieldOffsets) {
     const fw = seededRandInt(rand, 4, 7)
@@ -114,32 +154,29 @@ export function generateVillage(
       for (let fy = 0; fy < fh; fy++) {
         const wx = originX + ox + fx
         const wy = originY + oy + fy
-        tiles.set(`${wx}_${wy}`, { g: 'garden_plot', m: ['wheat_field'] })
+        tiles.set(tileKey(wx, wy), { g: 'garden_plot', m: ['wheat_field'] })
       }
     }
-    // Fence border around the field
     for (let fx = -1; fx <= fw; fx++) {
-      set(originX + ox + fx, originY + oy - 1, 'fence')
-      set(originX + ox + fx, originY + oy + fh, 'fence')
+      object(originX + ox + fx, originY + oy - 1,  'stump')
+      object(originX + ox + fx, originY + oy + fh, 'stump')
     }
     for (let fy = 0; fy < fh; fy++) {
-      set(originX + ox - 1,      originY + oy + fy, 'fence')
-      set(originX + ox + fw,     originY + oy + fy, 'fence')
+      object(originX + ox - 1,  originY + oy + fy, 'stump')
+      object(originX + ox + fw, originY + oy + fy, 'stump')
     }
   }
 
-  // NPC profiles to spawn
+  // ── NPCs ─────────────────────────────────────────────────────────────────
   const villagerProfiles = ['villager_wanderer', 'villager_gossiper', 'villager_fisherman', 'villager_hunter']
-  const villagerCount = seededRandInt(rand, 2, 4)
+  const villagerCount = seededRandInt(rand, 3, 5)
   for (let i = 0; i < villagerCount; i++) {
     const profile = villagerProfiles[i % villagerProfiles.length]
-    const nx = originX + seededRandInt(rand, -4, 4)
-    const ny = originY + seededRandInt(rand, -4, 4)
+    const nx = originX + seededRandInt(rand, -5, 5)
+    const ny = originY + seededRandInt(rand, -5, 5)
     npcs.push(makeNpc(`npc_${villageId}_${i}`, profile, 'villager', profile.replace('villager_', ''), nx, ny, villageId))
   }
-  // Merchant
-  npcs.push(makeNpc(`npc_${villageId}_merchant`, 'merchant_standard', 'merchant', 'standard', originX - 2, originY + 2, villageId))
-  // Guards
+  npcs.push(makeNpc(`npc_${villageId}_merchant`, 'merchant_standard', 'merchant', 'standard', originX + 2, originY - 2, villageId))
   const guardCount = seededRandInt(rand, 1, 2)
   for (let g = 0; g < guardCount; g++) {
     const gx = originX + dirs[g].dx * (pathLengths[g] - 1)
@@ -147,7 +184,7 @@ export function generateVillage(
     npcs.push(makeNpc(`npc_${villageId}_guard_${g}`, 'guard_patrol', 'guard', 'patrol', gx, gy, villageId))
   }
 
-  return { tiles, npcs }
+  return { tiles, npcs, buildingPositions }
 }
 
 function makeNpc(
@@ -175,3 +212,6 @@ function makeNpc(
     memory: {},
   }
 }
+
+
+

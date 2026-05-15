@@ -4,13 +4,14 @@
  * Roads are stamped into chunks at chunk-generation time.
  */
 import type { PoiLayout, PoiEntry } from './types.ts'
+import { tileKey } from './utils.ts'
 
 export interface RoadPath {
   tiles: Array<{ x: number; y: number }>
 }
 
 export interface RoadNetwork {
-  /** Set of `${x}_${y}` road tiles across the whole world. */
+  /** Set of `tileKey(x,y)` road tiles across the whole world. */
   tileSet: Set<string>
   paths: RoadPath[]
 }
@@ -35,7 +36,7 @@ export function buildRoadNetwork(pois: PoiLayout): RoadNetwork {
     }
     const path = buildLPath(village.x, village.y, nearestDungeon.x, nearestDungeon.y)
     paths.push(path)
-    for (const t of path.tiles) tileSet.add(`${t.x}_${t.y}`)
+    for (const t of path.tiles) tileSet.add(tileKey(t.x, t.y))
   }
 
   // Also connect each village to its two nearest neighbours (world backbone)
@@ -52,7 +53,7 @@ export function buildRoadNetwork(pois: PoiLayout): RoadNetwork {
       if (va.id < vb.id) {
         const path = buildLPath(va.x, va.y, vb.x, vb.y)
         paths.push(path)
-        for (const t of path.tiles) tileSet.add(`${t.x}_${t.y}`)
+        for (const t of path.tiles) tileSet.add(tileKey(t.x, t.y))
       }
     }
   }
@@ -60,7 +61,7 @@ export function buildRoadNetwork(pois: PoiLayout): RoadNetwork {
   return { tileSet, paths }
 }
 
-/** Trace an L-shaped road: horizontal first, then vertical. */
+/** Trace a single-tile-wide L-shaped road: horizontal first, then vertical. */
 function buildLPath(x1: number, y1: number, x2: number, y2: number): RoadPath {
   const tiles: Array<{ x: number; y: number }> = []
   const dx = x2 > x1 ? 1 : -1

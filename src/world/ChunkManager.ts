@@ -7,13 +7,22 @@ import { ref, get, set, update } from 'firebase/database'
 import type { ChunkData, TileData, EnemyInstance, PoiLayout } from './types.ts'
 import { generateChunk, CHUNK_SIZE, buildNoise, type NoiseConfig } from './ChunkGen.ts'
 import type { RoadNetwork } from './RoadNetwork.ts'
+import type { generateHouseRoom } from './HouseGen.ts'
+import { tileKey, chunkKey } from './utils.ts'
 
-/** In-memory tile cache — key `${x}_${y}`. */
+/** In-memory tile cache — key `tileKey(x,y)` for overworld. */
 const tileCache = new Map<string, TileData>()
-/** Set of chunk keys `${cx}_${cy}` known to be loaded. */
+/** Set of chunk keys `chunkKey(cx,cy)` known to be loaded. */
 const loadedChunks = new Set<string>()
 /** Chunk keys currently being loaded/generated (to avoid double-generation). */
 const pendingChunks = new Map<string, Promise<void>>()
+
+// ── Room (house / dungeon floor) support ─────────────────────────────────
+
+/** The currently active non-overworld room ID, or null when on overworld. */
+let _activeRoom: string | null = null
+/** Tile cache for the active room — keyed by local `tileKey(x,y)`. */
+const _roomTileCache = new Map<string, TileData>()
 
 /** Max cached chunks before evicting oldest. */
 const MAX_CACHED_CHUNKS = 64
@@ -32,12 +41,38 @@ export function initChunkManager(seed: number, pois: PoiLayout, roads: RoadNetwo
 }
 
 export function getTile(x: number, y: number): TileData | undefined {
-  return tileCache.get(`${x}_${y}`)
+  if (_activeRoom !== null) return _roomTileCache.get(tileKey(x, y))
+  return tileCache.get(tileKey(x, y))
+}
+
+/** Returns the currently active room ID, or null when in the overworld. */
+export function getActiveRoom(): string | null { return _activeRoom }
+
+/**
+ * Switch to a house or dungeon room: loads its tiles from Firebase into
+ * `_roomTileCache` and marks the room active so `getTile` reads from it.
+ */
+export async function enterRoom(roomId: string): Promise<void> {
+  _activeRoom = roomId
+  _roomTileCache.clear()
+  const snap = await get(ref(db, `map/${roomId}`))
+  if (!snap.exists()) {
+    console.warn(`[ChunkManager] Room "${roomId}" not found in Firebase`)
+    return
+  }
+  const all = snap.val() as Record<string, TileData>
+  for (const [k, t] of Object.entries(all)) _roomTileCache.set(k, t)
+}
+
+/** Return to the overworld — clears the room cache. */
+export function exitRoom(): void {
+  _activeRoom = null
+  _roomTileCache.clear()
 }
 
 /** Ensure a chunk is loaded.  Returns when the chunk is in tileCache. */
 export async function ensureChunk(cx: number, cy: number): Promise<void> {
-  const key = `${cx}_${cy}`
+  const key = chunkKey(cx, cy)
   if (loadedChunks.has(key)) return
 
   const existing = pendingChunks.get(key)
@@ -91,7 +126,7 @@ async function _loadChunkFromFirebase(cx: number, cy: number): Promise<void> {
   const all = snap.val() as Record<string, TileData>
   for (let lx = 0; lx < CHUNK_SIZE; lx++) {
     for (let ly = 0; ly < CHUNK_SIZE; ly++) {
-      const k = `${originX + lx}_${originY + ly}`
+      const k = tileKey(originX + lx, originY + ly)
       if (all[k]) tileCache.set(k, all[k])
     }
   }
@@ -102,6 +137,7 @@ async function _generateAndPersistChunk(cx: number, cy: number, key: string): Pr
 
   const chunkData = generateChunk(cx, cy, _seed, _pois, _roads, _noise) as ChunkData & {
     dungeonFloors?: Array<Array<{ room: string; tiles: Map<string, TileData>; enemies: EnemyInstance[] }>>
+    houseRooms?: Array<ReturnType<typeof generateHouseRoom>>
   }
 
   // 1. Overworld tiles — single update per chunk (~30KB, under Firebase's 256KB limit)
@@ -159,7 +195,18 @@ async function _generateAndPersistChunk(cx: number, cy: number, key: string): Pr
     }
   }
 
-  // 4. Sentinel last — signals other clients that tiles are fully written
+  // 4. House rooms — each room's tiles batched separately (rooms are small, ~144 tiles)
+  if (chunkData.houseRooms) {
+    for (const room of chunkData.houseRooms) {
+      const roomUpdate: Record<string, unknown> = {}
+      for (const [k, t] of room.tiles) {
+        roomUpdate[`map/${room.roomId}/${k}`] = JSON.parse(JSON.stringify(t))
+      }
+      await update(ref(db), roomUpdate)
+    }
+  }
+
+  // 5. Sentinel last — signals other clients that tiles are fully written
   await set(ref(db, `map/chunks/${key}`), true)
 }
 
@@ -180,12 +227,12 @@ function _trackAccess(key: string): void {
       const oy = ocy * CHUNK_SIZE
       for (let lx = 0; lx < CHUNK_SIZE; lx++)
         for (let ly = 0; ly < CHUNK_SIZE; ly++)
-          tileCache.delete(`${ox + lx}_${oy + ly}`)
+          tileCache.delete(tileKey(ox + lx, oy + ly))
     }
   }
 }
 
-/** Tile coordinate → chunk key `${cx}_${cy}`. */
+/** Tile coordinate → chunk key using zero-padded coords. */
 export function tileToChunk(x: number, y: number): string {
-  return `${Math.floor(x / CHUNK_SIZE)}_${Math.floor(y / CHUNK_SIZE)}`
+  return chunkKey(Math.floor(x / CHUNK_SIZE), Math.floor(y / CHUNK_SIZE))
 }

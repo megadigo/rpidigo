@@ -17,16 +17,16 @@ export const recipes: RecipeDefinition[] = [
   { id: 'recipe_scythe',   produces: 'scythe',    quantity: 1, requires: [{ itemId: 'wood', qty: 3 }, { itemId: 'stone', qty: 2 }],                        station: 'workbench',       levelRequired: 1 },
 
   // ── Blacksmith forge recipes ──────────────────────────────────────────────
-  { id: 'recipe_iron_bar',       produces: 'iron_bar',      quantity: 1, requires: [{ itemId: 'iron_ore', qty: 3 }],                                       station: 'blacksmith_forge', levelRequired: 3 },
-  { id: 'recipe_iron_sword',     produces: 'iron_sword',    quantity: 1, requires: [{ itemId: 'iron_bar', qty: 3 }, { itemId: 'wood', qty: 1 }],            station: 'blacksmith_forge', levelRequired: 3 },
-  { id: 'recipe_iron_axe',       produces: 'iron_axe',      quantity: 1, requires: [{ itemId: 'iron_bar', qty: 3 }, { itemId: 'wood', qty: 2 }],            station: 'blacksmith_forge', levelRequired: 4 },
-  { id: 'recipe_iron_bow',       produces: 'iron_bow',      quantity: 1, requires: [{ itemId: 'iron_bar', qty: 2 }, { itemId: 'wood', qty: 3 }, { itemId: 'fiber', qty: 2 }], station: 'blacksmith_forge', levelRequired: 4 },
-  { id: 'recipe_iron_staff',     produces: 'iron_staff',    quantity: 1, requires: [{ itemId: 'iron_bar', qty: 2 }, { itemId: 'wood', qty: 4 }],            station: 'blacksmith_forge', levelRequired: 5 },
-  { id: 'recipe_iron_helmet',    produces: 'iron_helmet',   quantity: 1, requires: [{ itemId: 'iron_bar', qty: 3 }],                                       station: 'blacksmith_forge', levelRequired: 4 },
-  { id: 'recipe_iron_chestplate',produces: 'iron_chestplate',quantity: 1,requires: [{ itemId: 'iron_bar', qty: 6 }],                                       station: 'blacksmith_forge', levelRequired: 4 },
-  { id: 'recipe_iron_leggings',  produces: 'iron_leggings', quantity: 1, requires: [{ itemId: 'iron_bar', qty: 5 }],                                       station: 'blacksmith_forge', levelRequired: 4 },
-  { id: 'recipe_iron_boots',     produces: 'iron_boots',    quantity: 1, requires: [{ itemId: 'iron_bar', qty: 3 }],                                       station: 'blacksmith_forge', levelRequired: 4 },
-  { id: 'recipe_iron_gloves',    produces: 'iron_gloves',   quantity: 1, requires: [{ itemId: 'iron_bar', qty: 2 }],                                       station: 'blacksmith_forge', levelRequired: 4 },
+  { id: 'recipe_iron_bar',       produces: 'iron_bar',      quantity: 1, requires: [{ itemId: 'iron_ore', qty: 3 }],                                       station: 'workshop', levelRequired: 3 },
+  { id: 'recipe_iron_sword',     produces: 'iron_sword',    quantity: 1, requires: [{ itemId: 'iron_bar', qty: 3 }, { itemId: 'wood', qty: 1 }],            station: 'workshop', levelRequired: 3 },
+  { id: 'recipe_iron_axe',       produces: 'iron_axe',      quantity: 1, requires: [{ itemId: 'iron_bar', qty: 3 }, { itemId: 'wood', qty: 2 }],            station: 'workshop', levelRequired: 4 },
+  { id: 'recipe_iron_bow',       produces: 'iron_bow',      quantity: 1, requires: [{ itemId: 'iron_bar', qty: 2 }, { itemId: 'wood', qty: 3 }, { itemId: 'fiber', qty: 2 }], station: 'workshop', levelRequired: 4 },
+  { id: 'recipe_iron_staff',     produces: 'iron_staff',    quantity: 1, requires: [{ itemId: 'iron_bar', qty: 2 }, { itemId: 'wood', qty: 4 }],            station: 'workshop', levelRequired: 5 },
+  { id: 'recipe_iron_helmet',    produces: 'iron_helmet',   quantity: 1, requires: [{ itemId: 'iron_bar', qty: 3 }],                                       station: 'workshop', levelRequired: 4 },
+  { id: 'recipe_iron_chestplate',produces: 'iron_chestplate',quantity: 1,requires: [{ itemId: 'iron_bar', qty: 6 }],                                       station: 'workshop', levelRequired: 4 },
+  { id: 'recipe_iron_leggings',  produces: 'iron_leggings', quantity: 1, requires: [{ itemId: 'iron_bar', qty: 5 }],                                       station: 'workshop', levelRequired: 4 },
+  { id: 'recipe_iron_boots',     produces: 'iron_boots',    quantity: 1, requires: [{ itemId: 'iron_bar', qty: 3 }],                                       station: 'workshop', levelRequired: 4 },
+  { id: 'recipe_iron_gloves',    produces: 'iron_gloves',   quantity: 1, requires: [{ itemId: 'iron_bar', qty: 2 }],                                       station: 'workshop', levelRequired: 4 },
 
   // ── Dungeon altar recipes ─────────────────────────────────────────────────
   { id: 'recipe_shadow_blade',      produces: 'shadow_blade',      quantity: 1, requires: [{ itemId: 'iron_bar', qty: 5 }, { itemId: 'gold_coin', qty: 50 }], station: 'dungeon_altar', levelRequired: 8 },

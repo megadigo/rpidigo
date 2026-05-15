@@ -110,6 +110,9 @@ export interface PlayerInstance {
   room: string
   x: number
   y: number
+  /** Overworld tile position saved when entering a room; used to restore position on re-login. */
+  returnX?: number
+  returnY?: number
   house: { room: string; x: number; y: number }
   online: boolean
   lastSeen: number

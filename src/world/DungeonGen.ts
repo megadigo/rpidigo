@@ -1,10 +1,15 @@
 /**
  * DungeonGen — BSP-based dungeon floor layout.
  * Called from ChunkGen when generating a chunk that contains a dungeon entrance POI.
- * Writes dungeon rooms to Firebase under `map/dungeon_{id}_floor_1` etc. separately.
+ * Writes dungeon rooms to Firebase under `map/dungeon_{tx}_{ty}_floor_1` etc. separately.
  */
 import type { TileData, EnemyInstance } from './types.ts'
-import { mulberry32, seededRandInt } from './utils.ts'
+import { mulberry32, seededRandInt, tileKey } from './utils.ts'
+
+/** Canonical dungeon room ID derived from the entrance tile's world coordinates. */
+export function dungeonRoomId(tx: number, ty: number, floor: number): string {
+  return `dungeon_${String(tx).padStart(4, '0')}_${String(ty).padStart(4, '0')}_floor_${floor}`
+}
 
 export interface DungeonFloor {
   room: string
@@ -13,24 +18,26 @@ export interface DungeonFloor {
 }
 
 export function generateDungeon(
-  dungeonId: string,
+  tx: number,
+  ty: number,
   seed: number,
   floorCount = 2,
 ): DungeonFloor[] {
   const floors: DungeonFloor[] = []
   for (let f = 1; f <= floorCount; f++) {
-    floors.push(generateFloor(dungeonId, seed, f, floorCount))
+    floors.push(generateFloor(tx, ty, seed, f, floorCount))
   }
   return floors
 }
 
 function generateFloor(
-  dungeonId: string,
+  tx: number,
+  ty: number,
   seed: number,
   floorIndex: number,
   totalFloors: number,
 ): DungeonFloor {
-  const room = `dungeon_${dungeonId}_floor_${floorIndex}`
+  const room = dungeonRoomId(tx, ty, floorIndex)
   const rand = mulberry32(seed ^ (floorIndex * 0x9e3779b9))
   const tiles = new Map<string, TileData>()
   const enemies: EnemyInstance[] = []
@@ -39,7 +46,7 @@ function generateFloor(
   // Fill with walls (dungeon_floor as ground + dungeon_wall as middle)
   for (let x = 0; x < SIZE; x++)
     for (let y = 0; y < SIZE; y++)
-      tiles.set(`${x}_${y}`, { g: 'dungeon_floor', m: ['dungeon_wall'] })
+      tiles.set(tileKey(x, y), { g: 'dungeon_floor', m: ['dungeon_wall'] })
 
   // BSP rooms
   interface Rect { x: number; y: number; w: number; h: number }
@@ -54,7 +61,7 @@ function generateFloor(
       const rh = seededRandInt(rand, 4, rect.h - 3)
       for (let x = rx; x < rx + rw; x++)
         for (let y = ry; y < ry + rh; y++)
-          tiles.set(`${x}_${y}`, { g: 'dungeon_floor' })
+          tiles.set(tileKey(x, y), { g: 'dungeon_floor' })
       rooms.push({ x: rx, y: ry, w: rw, h: rh })
       return
     }
@@ -85,29 +92,29 @@ function generateFloor(
     // Horizontal corridor
     const minX = Math.min(ax, bx)
     const maxX = Math.max(ax, bx)
-    for (let x = minX; x <= maxX; x++) tiles.set(`${x}_${ay}`, { g: 'dungeon_floor' })
+    for (let x = minX; x <= maxX; x++) tiles.set(tileKey(x, ay), { g: 'dungeon_floor' })
     // Vertical corridor
     const minY = Math.min(ay, by)
     const maxY = Math.max(ay, by)
-    for (let y = minY; y <= maxY; y++) tiles.set(`${bx}_${y}`, { g: 'dungeon_floor' })
-    // Door at junction
-    tiles.set(`${bx}_${ay}`, { g: 'dungeon_floor', m: ['dungeon_door'] })
+    for (let y = minY; y <= maxY; y++) tiles.set(tileKey(bx, y), { g: 'dungeon_floor' })
+    // Pillar at junction
+    tiles.set(tileKey(bx, ay), { g: 'dungeon_floor', m: ['dungeon_pillar'] })
   }
 
   // Decorations and loot
   const floorMultiplier = 1 + (floorIndex - 1) * 0.5
   const isBossFloor = floorIndex === totalFloors
   for (const r of rooms) {
-    // Scatter torches and pillars
-    if (rand() < 0.4) tiles.set(`${r.x}_${r.y}`, { g: 'dungeon_floor', m: ['dungeon_torch'] })
-    if (rand() < 0.2) tiles.set(`${r.x + 1}_${r.y + 1}`, { g: 'dungeon_floor', m: ['dungeon_pillar'] })
-    if (rand() < 0.15) tiles.set(`${r.x}_${r.y + 1}`, { g: 'dungeon_trap' })
+    // Scatter pillars
+    if (rand() < 0.4) tiles.set(tileKey(r.x, r.y), { g: 'dungeon_floor', m: ['dungeon_pillar'] })
+    if (rand() < 0.2) tiles.set(tileKey(r.x + 1, r.y + 1), { g: 'dungeon_floor', m: ['dungeon_pillar'] })
+    if (rand() < 0.15) tiles.set(tileKey(r.x, r.y + 1), { g: 'dungeon_trap' })
 
     // Chest in dead-end-ish rooms (small rooms)
     if (r.w <= 6 && r.h <= 6) {
       const cx = r.x + Math.floor(r.w / 2)
       const cy = r.y + Math.floor(r.h / 2)
-      tiles.set(`${cx}_${cy}`, {
+      tiles.set(tileKey(cx, cy), {
         g: 'dungeon_floor',
         m: ['dungeon_chest'],
         metadata: { gold: Math.floor((seededRandInt(rand, 20, 80)) * floorMultiplier) },
@@ -119,8 +126,8 @@ function generateFloor(
     if (isBossFloor && r === rooms[rooms.length - 1]) {
       const ex = r.x + Math.floor(r.w / 2)
       const ey = r.y + Math.floor(r.h / 2)
-      enemies.push(makeEnemy(`enemy_${dungeonId}_f${floorIndex}_boss`, 'dungeon_boss_strong', 'dungeon_boss', 'strong', room, ex, ey, 300, 50))
-      tiles.set(`${ex - 1}_${ey}`, { g: 'dungeon_floor', m: ['dungeon_altar'] })
+      enemies.push(makeEnemy(`enemy_${String(tx).padStart(4,'0')}_${String(ty).padStart(4,'0')}_f${floorIndex}_boss`, 'dungeon_boss_strong', 'dungeon_boss', 'strong', room, ex, ey, 300, 50))
+      tiles.set(tileKey(ex - 1, ey), { g: 'dungeon_floor', m: ['dungeon_altar'] })
     } else if (rand() < spawnChance) {
       const ex = r.x + seededRandInt(rand, 1, r.w - 2)
       const ey = r.y + seededRandInt(rand, 1, r.h - 2)
@@ -128,7 +135,7 @@ function generateFloor(
         ? pickFloor1Enemy(rand)
         : pickFloor2Enemy(rand)
       const [base, variant = 'standard'] = templateId.split('_') as [string, string | undefined]
-      enemies.push(makeEnemy(`enemy_${dungeonId}_f${floorIndex}_${ex}_${ey}`, templateId, base, variant, room, ex, ey, 60 * floorIndex, 15 * floorIndex))
+      enemies.push(makeEnemy(`enemy_${String(tx).padStart(4,'0')}_${String(ty).padStart(4,'0')}_f${floorIndex}_${ex}_${ey}`, templateId, base, variant, room, ex, ey, 60 * floorIndex, 15 * floorIndex))
     }
   }
 
@@ -136,9 +143,9 @@ function generateFloor(
   if (rooms.length >= 2) {
     const entrance = rooms[0]
     const exit = rooms[rooms.length - 1]
-    tiles.set(`${entrance.x + 1}_${entrance.y + 1}`, { g: 'dungeon_stairs_up' })
+    tiles.set(tileKey(entrance.x + 1, entrance.y + 1), { g: 'dungeon_stairs_up' })
     if (floorIndex < totalFloors) {
-      tiles.set(`${exit.x + 1}_${exit.y + 1}`, { g: 'dungeon_stairs_down' })
+      tiles.set(tileKey(exit.x + 1, exit.y + 1), { g: 'dungeon_stairs_down' })
     }
   }
 

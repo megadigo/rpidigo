@@ -39,6 +39,16 @@ export async function sha256(text: string): Promise<string> {
     .join('')
 }
 
+/** Tile position key with 4-digit zero-padded coords — e.g. (42, 117) → '0042_0117'. */
+export function tileKey(x: number, y: number): string {
+  return `${String(x).padStart(4, '0')}_${String(y).padStart(4, '0')}`
+}
+
+/** Chunk position key with 2-digit zero-padded coords — e.g. (3, 7) → '03_07'. */
+export function chunkKey(cx: number, cy: number): string {
+  return `${String(cx).padStart(2, '0')}_${String(cy).padStart(2, '0')}`
+}
+
 /** Generate a crypto-random numeric seed. */
 export function randomSeed(): number {
   const arr = new Uint32Array(1)

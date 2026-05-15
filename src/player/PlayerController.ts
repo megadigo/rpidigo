@@ -1,13 +1,24 @@
 /**
- * PlayerController — keyboard input, client-predicted movement, Firebase sync.
+ * PlayerController — keyboard input, client-predicted movement, Firebase sync,
+ * and room-transition triggers (house entry / exit, dungeon entry / exit).
+ *
+ * Room entry: press E when adjacent to a building or dungeon-entrance tile.
+ * Room exit: press E when standing on a portal_exit or dungeon_stairs_up tile.
+ *
+ * The controller emits two scene events that GameScene handles:
+ *   'enterRoom' { roomId: string, spawnX: number, spawnY: number }
+ *   'exitRoom'  { returnX: number, returnY: number }
  */
 import Phaser from 'phaser'
 import { db } from '../firebase.ts'
 import { ref, update } from 'firebase/database'
 import { getLocalPlayer, setLocalPlayer } from './Auth.ts'
 import { isPassable, getSpeedMod } from '../world/CollisionMap.ts'
-import { ensureRadius, tileToChunk } from '../world/ChunkManager.ts'
-import { TILE_SIZE } from '../renderer/TilemapRenderer.ts'
+import { ensureRadius, tileToChunk, getActiveRoom } from '../world/ChunkManager.ts'
+import { TILE_SIZE, getTileEntryType, isTileRoomExit } from '../renderer/TilemapRenderer.ts'
+import { getTile } from '../world/ChunkManager.ts'
+import { houseRoomId, HOUSE_ROOM_SIZE } from '../world/HouseGen.ts'
+import { dungeonRoomId } from '../world/DungeonGen.ts'
 
 /** Pixels per second at base speed. */
 const BASE_SPEED = 80
@@ -17,9 +28,14 @@ const SYNC_INTERVAL = 100
 export class PlayerController {
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys
   private wasd!: { up: Phaser.Input.Keyboard.Key; down: Phaser.Input.Keyboard.Key; left: Phaser.Input.Keyboard.Key; right: Phaser.Input.Keyboard.Key }
+  private interactKey!: Phaser.Input.Keyboard.Key
   private sprite!: Phaser.GameObjects.Image
   private lastSync = 0
   private lastChunk = ''
+
+  /** Saved overworld tile position before entering a room. */
+  private _returnX = 0
+  private _returnY = 0
 
   /** World-pixel position (not tile). */
   px = 0
@@ -30,6 +46,23 @@ export class PlayerController {
 
   create(): void {
     const player = getLocalPlayer()
+
+    // If the player logged out inside a room, return them to the overworld
+    // at their saved return position rather than spawning at room-local coords.
+    if (player.room !== '0') {
+      const rx = player.returnX ?? player.x
+      const ry = player.returnY ?? player.y
+      player.room = '0'
+      player.x = rx
+      player.y = ry
+      setLocalPlayer(player)
+      void update(ref(db), {
+        [`players/${player.id}/room`]: '0',
+        [`players/${player.id}/x`]: rx,
+        [`players/${player.id}/y`]: ry,
+      })
+    }
+
     this.px = player.x * TILE_SIZE + TILE_SIZE / 2
     this.py = player.y * TILE_SIZE + TILE_SIZE / 2
 
@@ -46,6 +79,7 @@ export class PlayerController {
         left:  this.scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.A),
         right: this.scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.D),
       }
+      this.interactKey = this.scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.E)
     }
 
     // Follow camera — lerp 1 = instant snap so tiles are always in view
@@ -103,6 +137,102 @@ export class PlayerController {
       this.lastSync = 0
       this._syncPosition()
     }
+
+    // Interact key — E
+    if (this.interactKey && Phaser.Input.Keyboard.JustDown(this.interactKey)) {
+      this._handleInteract()
+    }
+  }
+
+  /**
+   * Handle the E-key interaction:
+   * - If in a room and standing on portal_exit/dungeon_stairs_up → exit room
+   * - If on overworld and adjacent to an enterable building → enter its room
+   */
+  private _handleInteract(): void {
+    const tx = Math.floor(this.px / TILE_SIZE)
+    const ty = Math.floor(this.py / TILE_SIZE)
+
+    if (getActiveRoom() !== null) {
+      // Inside a room — check current tile and adjacent tiles for room exit
+      const currentTile = getTile(tx, ty)
+      const tileTypes = [
+        currentTile?.g,
+        ...(currentTile?.m ?? []),
+        ...this._adjacentTileTypes(tx, ty),
+      ].filter(Boolean) as string[]
+
+      if (tileTypes.some(t => isTileRoomExit(t))) {
+        this.scene.events.emit('exitRoom', { returnX: this._returnX, returnY: this._returnY })
+      }
+      return
+    }
+
+    // Overworld — check adjacent tiles for enterable buildings
+    const adjacentOffsets = [{ dx: 0, dy: -1 }, { dx: 0, dy: 1 }, { dx: -1, dy: 0 }, { dx: 1, dy: 0 }]
+    for (const { dx, dy } of adjacentOffsets) {
+      const atx = tx + dx
+      const aty = ty + dy
+      const tile = getTile(atx, aty)
+      if (!tile) continue
+
+      // Check all tile layers for entry type
+      const allTypes = [tile.g, ...(tile.m ?? [])]
+      for (const type of allTypes) {
+        const entryType = getTileEntryType(type)
+        if (entryType === 'house') {
+          this._returnX = tx
+          this._returnY = ty
+          this._persistReturnPos(tx, ty)
+          const roomId = houseRoomId(atx, aty)
+          const spawnX = Math.floor(HOUSE_ROOM_SIZE / 2)
+          const spawnY = HOUSE_ROOM_SIZE - 3
+          this.scene.events.emit('enterRoom', { roomId, spawnX, spawnY })
+          return
+        }
+        if (entryType === 'dungeon') {
+          this._returnX = tx
+          this._returnY = ty
+          this._persistReturnPos(tx, ty)
+          // Dungeon entrance tile itself is at (atx, aty); room ID is derived
+          const roomId = dungeonRoomId(atx, aty, 1)
+          const spawnX = 2
+          const spawnY = 2
+          this.scene.events.emit('enterRoom', { roomId, spawnX, spawnY })
+          return
+        }
+      }
+    }
+  }
+
+  /** Persist the overworld return position to Firebase so login can restore it. */
+  private _persistReturnPos(tx: number, ty: number): void {
+    const player = getLocalPlayer()
+    player.returnX = tx
+    player.returnY = ty
+    setLocalPlayer(player)
+    void update(ref(db), {
+      [`players/${player.id}/returnX`]: tx,
+      [`players/${player.id}/returnY`]: ty,
+    })
+  }
+
+  /** Returns the tile type strings of the 4 tiles adjacent to (tx, ty). */
+  private _adjacentTileTypes(tx: number, ty: number): string[] {
+    const offsets = [{ dx: 0, dy: -1 }, { dx: 0, dy: 1 }, { dx: -1, dy: 0 }, { dx: 1, dy: 0 }]
+    const types: string[] = []
+    for (const { dx, dy } of offsets) {
+      const tile = getTile(tx + dx, ty + dy)
+      if (tile) types.push(tile.g, ...(tile.m ?? []))
+    }
+    return types
+  }
+
+  /** Move the player sprite to a specific tile position (used on room transitions). */
+  teleport(tx: number, ty: number): void {
+    this.px = tx * TILE_SIZE + TILE_SIZE / 2
+    this.py = ty * TILE_SIZE + TILE_SIZE / 2
+    this.sprite.setPosition(this.px, this.py)
   }
 
   private _syncPosition(): void {
