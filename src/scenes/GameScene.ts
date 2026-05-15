@@ -81,9 +81,17 @@ export class GameScene extends Phaser.Scene {
     this.tilemapRenderer.reset()
     this.playerController.teleport(spawnX, spawnY)
 
-    // Narrow camera bounds to the room size
     const roomSize = roomId.startsWith('house_') ? HOUSE_ROOM_SIZE : 40
-    this.cameras.main.setBounds(0, 0, roomSize * TILE_SIZE, roomSize * TILE_SIZE)
+    const roomPixelSize = roomSize * TILE_SIZE
+
+    if (roomId.startsWith('house_')) {
+      // House rooms are small — stop following and center the room on screen
+      this.cameras.main.stopFollow()
+      this.cameras.main.removeBounds()
+      this.cameras.main.centerOn(roomPixelSize / 2, roomPixelSize / 2)
+    } else {
+      this.cameras.main.setBounds(0, 0, roomPixelSize, roomPixelSize)
+    }
   }
 
   private _handleExitRoom(returnX: number, returnY: number): void {
@@ -96,7 +104,8 @@ export class GameScene extends Phaser.Scene {
     this.tilemapRenderer.reset()
     this.playerController.teleport(returnX, returnY)
 
-    // Restore overworld camera bounds
+    // Restore overworld camera bounds and re-follow the player
     this.cameras.main.setBounds(0, 0, WORLD_PIXEL_SIZE, WORLD_PIXEL_SIZE)
+    this.playerController.startCameraFollow()
   }
 }

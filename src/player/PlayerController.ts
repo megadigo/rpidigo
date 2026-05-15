@@ -3,7 +3,7 @@
  * and room-transition triggers (house entry / exit, dungeon entry / exit).
  *
  * Room entry: press E when adjacent to a building or dungeon-entrance tile.
- * Room exit: press E when standing on a portal_exit or dungeon_stairs_up tile.
+ * Room exit: press E when standing on a house_exit or dungeon_stairs_up tile.
  *
  * The controller emits two scene events that GameScene handles:
  *   'enterRoom' { roomId: string, spawnX: number, spawnY: number }
@@ -146,7 +146,7 @@ export class PlayerController {
 
   /**
    * Handle the E-key interaction:
-   * - If in a room and standing on portal_exit/dungeon_stairs_up → exit room
+   * - If in a room and standing on house_exit/dungeon_stairs_up → exit room
    * - If on overworld and adjacent to an enterable building → enter its room
    */
   private _handleInteract(): void {
@@ -163,6 +163,17 @@ export class PlayerController {
       ].filter(Boolean) as string[]
 
       if (tileTypes.some(t => isTileRoomExit(t))) {
+        // Reset room in Firebase immediately so re-login lands on overworld
+        const player = getLocalPlayer()
+        player.room = '0'
+        player.x = this._returnX
+        player.y = this._returnY
+        setLocalPlayer(player)
+        void update(ref(db), {
+          [`players/${player.id}/room`]: '0',
+          [`players/${player.id}/x`]: this._returnX,
+          [`players/${player.id}/y`]: this._returnY,
+        })
         this.scene.events.emit('exitRoom', { returnX: this._returnX, returnY: this._returnY })
       }
       return
@@ -183,8 +194,8 @@ export class PlayerController {
         if (entryType === 'house') {
           this._returnX = tx
           this._returnY = ty
-          this._persistReturnPos(tx, ty)
           const roomId = houseRoomId(atx, aty)
+          this._persistReturnPos(tx, ty, roomId)
           const spawnX = Math.floor(HOUSE_ROOM_SIZE / 2)
           const spawnY = HOUSE_ROOM_SIZE - 3
           this.scene.events.emit('enterRoom', { roomId, spawnX, spawnY })
@@ -193,9 +204,9 @@ export class PlayerController {
         if (entryType === 'dungeon') {
           this._returnX = tx
           this._returnY = ty
-          this._persistReturnPos(tx, ty)
           // Dungeon entrance tile itself is at (atx, aty); room ID is derived
           const roomId = dungeonRoomId(atx, aty, 1)
+          this._persistReturnPos(tx, ty, roomId)
           const spawnX = 2
           const spawnY = 2
           this.scene.events.emit('enterRoom', { roomId, spawnX, spawnY })
@@ -205,15 +216,17 @@ export class PlayerController {
     }
   }
 
-  /** Persist the overworld return position to Firebase so login can restore it. */
-  private _persistReturnPos(tx: number, ty: number): void {
+  /** Persist the overworld return position and active room to Firebase so re-login restores state. */
+  private _persistReturnPos(tx: number, ty: number, roomId: string): void {
     const player = getLocalPlayer()
     player.returnX = tx
     player.returnY = ty
+    player.room = roomId
     setLocalPlayer(player)
     void update(ref(db), {
       [`players/${player.id}/returnX`]: tx,
       [`players/${player.id}/returnY`]: ty,
+      [`players/${player.id}/room`]: roomId,
     })
   }
 
@@ -233,6 +246,11 @@ export class PlayerController {
     this.px = tx * TILE_SIZE + TILE_SIZE / 2
     this.py = ty * TILE_SIZE + TILE_SIZE / 2
     this.sprite.setPosition(this.px, this.py)
+  }
+
+  /** Re-attach the main camera to follow the player sprite. */
+  startCameraFollow(): void {
+    this.scene.cameras.main.startFollow(this.sprite, true, 1, 1)
   }
 
   private _syncPosition(): void {

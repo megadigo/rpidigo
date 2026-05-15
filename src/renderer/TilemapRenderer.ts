@@ -74,8 +74,8 @@ export const TILE_DEFS: Record<string, TileDef> = {
   moss_rock:           { sprite: 'Nature/RockMoss',           layer: 'MIDDLE', impassable: true },
   stump:               { sprite: 'Nature/Stump',              layer: 'MIDDLE' },
   // ── River ─────────────────────────────────────────────────────────────────
-  water_shallow:       { sprite: 'Ground/WaterShallow',       layer: 'GROUND', speedMod: 0.2  },
-  water_deep:          { sprite: 'Ground/WaterDeep',          layer: 'GROUND', speedMod: 0.1  },
+  water_shallow:       { sprite: 'Ground/WaterShallow',       layer: 'GROUND', speedMod: 0.1  },
+  water_deep:          { sprite: 'Ground/WaterDeep',          layer: 'GROUND', speedMod: 0.2  },
   sand_bank:           { sprite: 'Ground/Sand',               layer: 'GROUND' },
   reeds:               { sprite: 'Ground/GrassTall',          layer: 'GROUND', speedMod: 0.7 },
   mud:                 { sprite: 'Ground/Mud',                layer: 'GROUND', speedMod: 0.5 },
@@ -115,7 +115,7 @@ export const TILE_DEFS: Record<string, TileDef> = {
   dungeon_tombstones:  { sprite: 'Miscellaneous/Tombstones',  layer: 'MIDDLE', impassable: true },
   // ── Special / Interior ────────────────────────────────────────────────────
   house_floor:         { sprite: 'Ground/HouseFloor',         layer: 'GROUND' },
-  portal_exit:         { sprite: 'Miscellaneous/Portal',      layer: 'MIDDLE', roomExit: true },
+  house_exit:         { sprite:  'Buildings/Door',         layer: 'MIDDLE', roomExit: true },
   workbench:           { sprite: 'Miscellaneous/WorkBench',   layer: 'MIDDLE', impassable: true },
   table:               { sprite: 'Miscellaneous/Table',       layer: 'MIDDLE', impassable: true },
   bed:                 { sprite: 'Miscellaneous/Bed',         layer: 'MIDDLE', impassable: true },

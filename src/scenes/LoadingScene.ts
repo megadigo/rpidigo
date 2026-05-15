@@ -72,16 +72,25 @@ export class LoadingScene extends Phaser.Scene {
     void this._boot()
   }
 
-  private setProgress(v: number, msg: string): void {
-    this.bar.width = this.scale.width * 0.7 * v
+  private setProgress(v: number, msg: string): Promise<void> {
+    const targetWidth = this.scale.width * 0.7 * v
     this.label.setText(msg)
+    return new Promise(resolve => {
+      this.tweens.add({
+        targets: this.bar,
+        width: targetWidth,
+        duration: 400,
+        ease: 'Sine.easeInOut',
+        onComplete: () => resolve(),
+      })
+    })
   }
 
   private async _boot(): Promise<void> {
     try {
-      this.setProgress(0.1, 'Connecting…')
+      await this.setProgress(0.1, 'Connecting…')
       await ensureWorldReady()
-      this.setProgress(0.5, 'Generating spawn area…')
+      await this.setProgress(0.5, 'Generating spawn area…')
 
       const player = getLocalPlayer()
       const cx = Math.floor(player.x / 32)
@@ -110,7 +119,7 @@ export class LoadingScene extends Phaser.Scene {
         })
       }
 
-      this.setProgress(1, 'Ready!')
+      await this.setProgress(1, 'Ready!')
       await new Promise(r => setTimeout(r, 300))
       this.scene.start('GameScene')
     } catch (err) {

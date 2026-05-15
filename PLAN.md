@@ -131,7 +131,7 @@
 1. Press **E** adjacent to any building tile (`house_hut`, `house_cabin`, `barracks`, `chapel`, `tavern`, `workshop`) — `PlayerController._handleInteract()` emits `'enterRoom'` with the room ID `house_${tx.padStart(4,'0')}_${ty.padStart(4,'0')}` and spawn coordinates.
 2. `GameScene` handles the event: calls `ChunkManager.enterRoom(roomId)` to load the room's tiles from Firebase, resets `TilemapRenderer`, teleports the player to `(spawnX, spawnY)`, and narrows camera bounds to `12×12` tiles.
 3. The room is already generated and persisted when the village chunk was first loaded (`HouseGen.generateHouseRoom` → `ChunkManager._generateAndPersistChunk`). Each building receives a **seeded-random furniture layout** themed by type: residential buildings get a bed, optional table/sofa, and chest; taverns get tables, sofas, and a chest; workshops get workbenches and a chest; barracks get a quest board and chests; chapels get a dungeon altar and chests. No two buildings of the same type at different positions look identical.
-4. The `portal_exit` tile in the room is adjacent-interactable: press **E** → `'exitRoom'` event → `ChunkManager.exitRoom()` → camera bounds restored to 1000×1000 → player returns to saved overworld tile.
+4. The `house_exit` tile in the room is adjacent-interactable: press **E** → `'exitRoom'` event → `ChunkManager.exitRoom()` → camera bounds restored to 1000×1000 → player returns to saved overworld tile.
 5. **Checkpoint**: Walk up to a house sprite, press **E**; interior room appears with `house_floor` tiles and themed furniture; pressing **E** near the portal returns the player to the village.
 
 ---
@@ -141,7 +141,7 @@
 
 1. Press **E** adjacent to a `dungeon_entrance` tile → `PlayerController._handleInteract()` emits `'enterRoom'` with room ID `dungeon_${tx.padStart(4,'0')}_${ty.padStart(4,'0')}_floor_1`.
 2. `GameScene` loads the dungeon floor from `/map/{room}` (same `enterRoom` path as houses), adjusts camera bounds to `40×40` tiles.
-3. `dungeon_stairs_down` on floor N transitions to floor N+1; `dungeon_stairs_up` / `portal_exit` returns to overworld or the previous floor.
+3. `dungeon_stairs_down` on floor N transitions to floor N+1; `dungeon_stairs_up` / `house_exit` returns to overworld or the previous floor.
 4. Boss room: lock on aggro (`onDisconnect` release); chest drops gold/loot on interaction.
 5. **Checkpoint**: Walk up to a dungeon entrance, press **E**; the dungeon floor appears; stairs lead deeper; pressing **E** near stairs_up returns to the overworld.
 

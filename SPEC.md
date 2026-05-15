@@ -132,7 +132,7 @@ All sprite paths are relative to `public/assets/sprites/`.
 | `chest` | `Miscellaneous/Chests.png` | Storage / loot chest |
 | `quest_board` | `Miscellaneous/QuestBoard.png` | Barracks notice board |
 | `dungeon_altar` | `Miscellaneous/DungeonAltar.png` | Chapel altar |
-| `portal_exit` | `Miscellaneous/Portal.png` | Returns player to overworld |
+| `house_exit` | `Miscellaneous/Portal.png` | Returns player to overworld |
 
 **Dungeon**
 
@@ -167,7 +167,7 @@ Every enterable village building (house_hut, house_cabin, barracks, chapel, tave
 - Room size: **12×12 tiles**
 - `dungeon_wall` borders the room perimeter (impassable)
 - `house_floor` fills the interior
-- `portal_exit` tile at bottom-centre (col 6, row 10) returns the player to the overworld
+- `house_exit` tile at bottom-centre (col 6, row 10) returns the player to the overworld
 - Furniture is **seeded-random per building**, themed by type:
   - **house_hut / house_cabin**: bed, optional table or sofa, chest with gold
   - **tavern**: 2–4 tables, 1–2 sofas, chest with gold
@@ -180,7 +180,7 @@ The room ID `house_${tx.padStart(4,'0')}_${ty.padStart(4,'0')}` is derived deter
 
 ### Entering and exiting
 - Stand adjacent to a building tile → press **E** → camera transitions to the interior room
-- Stand on or adjacent to the `portal_exit` tile → press **E** → return to the overworld at the original entry position
+- Stand on or adjacent to the `house_exit` tile → press **E** → return to the overworld at the original entry position
 
 ---
 

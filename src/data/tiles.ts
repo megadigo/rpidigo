@@ -124,7 +124,7 @@ export const tiles: TileDefinition[] = [
   { id: 'dungeon_altar',       passable: true,  speedMod: 1.0, destructible: false, spriteFrame: 'Buildings/Dungeon.png' },
 
   // ── Special / Interior ────────────────────────────────────────────────────
-  { id: 'portal_exit', passable: true,  speedMod: 1.0, destructible: false, spriteFrame: 'Miscellaneous/Portal.png' },
+  { id: 'house_exit', passable: true,  speedMod: 1.0, destructible: false, spriteFrame: 'Miscellaneous/Portal.png' },
   { id: 'workbench',   passable: false, speedMod: 0,   destructible: false, spriteFrame: 'Buildings/Workshops.png' },
   { id: 'chest',       passable: true,  speedMod: 1.0, destructible: false, spriteFrame: 'Miscellaneous/Chests.png' },
   { id: 'void',        passable: false, speedMod: 0,   destructible: false, spriteFrame: 'Ground/GrassDead.png' },

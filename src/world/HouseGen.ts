@@ -6,7 +6,7 @@
  *
  *   Border    : dungeon_wall (impassable)
  *   Inner     : house_floor
- *   portal_exit at (6, 10) — centre-bottom, one tile above the south wall
+ *   house_exit at (6, 10) — centre-bottom, one tile above the south wall
  *   Furniture : seeded-random positions, themed per building type
  *
  * The room ID doubles as the Firebase room key under `map/{roomId}`.
@@ -66,10 +66,10 @@ export function generateHouseRoom(
     tiles.set(tileKey(S - 1, y), { g: 'house_floor', m: ['dungeon_wall'] })
   }
 
-  // Exit portal — centre of bottom interior row
+  // Door — centre of south wall
   const portalX = Math.floor(S / 2)
-  const portalY = S - 2
-  tiles.set(tileKey(portalX, portalY), { g: 'house_floor', m: ['portal_exit'] })
+  const portalY = S - 1
+  tiles.set(tileKey(portalX, portalY), { g: 'house_floor', m: ['house_exit'] })
 
   // ── Furniture placement helpers ──────────────────────────────────────────
 
