@@ -6,6 +6,8 @@
  *
  * Step 5: subscribes to /presence/{room}/players and renders remote player
  * sprites with name labels, tweening positions on each Firebase update.
+ * Step 6: subscribes to /presence/{room}/enemies and /presence/{room}/npcs and
+ * renders entity sprites at frame 0 (display only, no AI).
  */
 import Phaser from 'phaser'
 import { ref, onValue } from 'firebase/database'
@@ -19,6 +21,7 @@ import { HOUSE_ROOM_SIZE } from '../world/HouseGen.ts'
 import { CELLAR_ROOM_SIZE } from '../world/CellarGen.ts'
 import { getLocalPlayer, setLocalPlayer } from '../player/Auth.ts'
 import { remotePlayerTiles, isPassable } from '../world/CollisionMap.ts'
+import { EnemyRegistry } from '../registry/registries.ts'
 
 /** Tile bounds of the 1000×1000 overworld in pixels. */
 const WORLD_PIXEL_SIZE = 1000 * TILE_SIZE
@@ -34,6 +37,23 @@ interface PresenceEntry {
   direction: Direction
 }
 
+/** Shape of each entry under /presence/{room}/enemies/{id}. */
+interface EnemyPresenceEntry {
+  x: number
+  y: number
+  templateId: string
+  state: string
+  hp: number
+}
+
+/** Shape of each entry under /presence/{room}/npcs/{id}. */
+interface NpcPresenceEntry {
+  x: number
+  y: number
+  templateId: string
+  state: string
+}
+
 export class GameScene extends Phaser.Scene {
   private tilemapRenderer!: TilemapRenderer
   private playerController!: PlayerController
@@ -43,8 +63,17 @@ export class GameScene extends Phaser.Scene {
     sprite: Phaser.GameObjects.Image
     label: Phaser.GameObjects.Text
   }>()
+  /** Enemy sprites keyed by enemy instance ID. */
+  private _remoteEnemies = new Map<string, Phaser.GameObjects.Image>()
+  /** NPC sprites keyed by NPC instance ID. */
+  private _remoteNpcs = new Map<string, Phaser.GameObjects.Image>()
+
   /** Unsubscribe function for the current Firebase presence listener. */
   private _presenceUnsub: (() => void) | null = null
+  /** Unsubscribe function for the current Firebase enemy listener. */
+  private _enemyUnsub: (() => void) | null = null
+  /** Unsubscribe function for the current Firebase NPC listener. */
+  private _npcUnsub: (() => void) | null = null
 
   constructor() {
     super({ key: 'GameScene' })
@@ -88,9 +117,11 @@ export class GameScene extends Phaser.Scene {
     // Subscribe to the overworld presence room on startup
     this._subscribePresence(getLocalPlayer().room)
 
-    // Clean up Firebase listener when the scene shuts down
+    // Clean up Firebase listeners when the scene shuts down
     this.events.on(Phaser.Scenes.Events.SHUTDOWN, () => {
       if (this._presenceUnsub) { this._presenceUnsub(); this._presenceUnsub = null }
+      if (this._enemyUnsub)    { this._enemyUnsub();    this._enemyUnsub    = null }
+      if (this._npcUnsub)      { this._npcUnsub();      this._npcUnsub      = null }
     })
   }
 
@@ -177,18 +208,27 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
-   * Subscribe to /presence/{room}/players, rendering a sprite + name label for
-   * every remote player. Tweens position on each update; removes on disconnect.
-   * Automatically tears down the previous listener before attaching a new one.
+   * Subscribe to /presence/{room}/players, /presence/{room}/enemies, and
+   * /presence/{room}/npcs. Renders sprites for all entities; tweens player
+   * positions. Tears down previous listeners before attaching new ones.
    */
   private _subscribePresence(room: string): void {
-    // Tear down previous listener and clear all remote sprites
+    // Tear down previous listeners and clear all remote sprites
     if (this._presenceUnsub) { this._presenceUnsub(); this._presenceUnsub = null }
+    if (this._enemyUnsub)    { this._enemyUnsub();    this._enemyUnsub    = null }
+    if (this._npcUnsub)      { this._npcUnsub();      this._npcUnsub      = null }
+
     for (const { sprite, label } of this._remotePlayers.values()) {
       sprite.destroy(); label.destroy()
     }
     this._remotePlayers.clear()
     remotePlayerTiles.clear()
+
+    for (const sprite of this._remoteEnemies.values()) sprite.destroy()
+    this._remoteEnemies.clear()
+
+    for (const sprite of this._remoteNpcs.values()) sprite.destroy()
+    this._remoteNpcs.clear()
 
     const localId = getLocalPlayer().id
     const presRef = ref(db, `presence/${room}/players`)
@@ -243,6 +283,74 @@ export class GameScene extends Phaser.Scene {
         if (!incoming.has(id)) {
           sprite.destroy(); label.destroy()
           this._remotePlayers.delete(id)
+        }
+      }
+    })
+
+    // ── Enemy sprites ──────────────────────────────────────────────────────
+    const enemyRef = ref(db, `presence/${room}/enemies`)
+    this._enemyUnsub = onValue(enemyRef, (snap) => {
+      const data = snap.val() as Record<string, EnemyPresenceEntry> | null
+      const incoming = new Set<string>()
+
+      if (data) {
+        for (const [id, entry] of Object.entries(data)) {
+          incoming.add(id)
+          const px = entry.x * TILE_SIZE + TILE_SIZE / 2
+          const py = entry.y * TILE_SIZE + TILE_SIZE / 2
+
+          if (this._remoteEnemies.has(id)) {
+            this._remoteEnemies.get(id)!.setPosition(px, py)
+          } else {
+            let textureKey = 'Enemies/wolf' // fallback
+            try {
+              const def = EnemyRegistry.get(entry.templateId)
+              textureKey = `Enemies/${def.spriteFrame.replace('.png', '')}`
+            } catch { /* unknown template — use fallback */ }
+            const sprite = this.add.image(px, py, textureKey)
+              .setFrame(0)
+              .setDepth(9)
+            this._remoteEnemies.set(id, sprite)
+          }
+        }
+      }
+
+      for (const [id, sprite] of this._remoteEnemies.entries()) {
+        if (!incoming.has(id)) {
+          sprite.destroy()
+          this._remoteEnemies.delete(id)
+        }
+      }
+    })
+
+    // ── NPC sprites ────────────────────────────────────────────────────────
+    const npcRef = ref(db, `presence/${room}/npcs`)
+    this._npcUnsub = onValue(npcRef, (snap) => {
+      const data = snap.val() as Record<string, NpcPresenceEntry> | null
+      const incoming = new Set<string>()
+
+      if (data) {
+        for (const [id, entry] of Object.entries(data)) {
+          incoming.add(id)
+          const px = entry.x * TILE_SIZE + TILE_SIZE / 2
+          const py = entry.y * TILE_SIZE + TILE_SIZE / 2
+
+          if (this._remoteNpcs.has(id)) {
+            this._remoteNpcs.get(id)!.setPosition(px, py)
+          } else {
+            const textureKey = `NPCs/${entry.templateId}`
+            const sprite = this.add.image(px, py, textureKey)
+              .setFrame(0)
+              .setDepth(9)
+            this._remoteNpcs.set(id, sprite)
+          }
+        }
+      }
+
+      for (const [id, sprite] of this._remoteNpcs.entries()) {
+        if (!incoming.has(id)) {
+          sprite.destroy()
+          this._remoteNpcs.delete(id)
         }
       }
     })

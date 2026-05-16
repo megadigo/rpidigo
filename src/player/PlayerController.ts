@@ -100,6 +100,9 @@ export class PlayerController {
   update(delta: number): void {
     if (!this.cursors) return
 
+    // Freeze movement while the chat input (or any text input) has keyboard focus
+    if (document.activeElement instanceof HTMLInputElement) return
+
     const up    = this.cursors.up.isDown    || this.wasd.up.isDown
     const down  = this.cursors.down.isDown  || this.wasd.down.isDown
     const left  = this.cursors.left.isDown  || this.wasd.left.isDown
