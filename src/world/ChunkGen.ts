@@ -9,6 +9,9 @@ import { mulberry32, seededRandInt, tileKey } from './utils.ts'
 import { generateVillage } from './VillageGen.ts'
 import { generateDungeon } from './DungeonGen.ts'
 import { generateHouseRoom } from './HouseGen.ts'
+import { generateCellarRoom } from './CellarGen.ts'
+
+const CELLAR_SEED_OFFSET = 0x51e11a2
 
 export const CHUNK_SIZE = 32
 export const WORLD_MAX = 1000   // tiles 0–999 are valid; 1000+ are void
@@ -152,12 +155,17 @@ export function generateChunk(
   // Pre-generate village overlays for this chunk
   const villageTiles = new Map<string, TileData>()
   const houseRooms: ReturnType<typeof generateHouseRoom>[] = []
+  const cellarRooms: ReturnType<typeof generateCellarRoom>[] = []
   const villageNpcs = villagesInChunk.flatMap(v => {
     const layout = generateVillage(v.id, v.x, v.y, seed ^ v.x ^ v.y)
     for (const [k, t] of layout.tiles) villageTiles.set(k, t)
     // Generate a house interior for every building with an interior room
     for (const bp of layout.buildingPositions) {
-      houseRooms.push(generateHouseRoom(bp.x, bp.y, seed ^ bp.x ^ bp.y, bp.type))
+      const houseRoom = generateHouseRoom(bp.x, bp.y, seed ^ bp.x ^ bp.y, bp.type)
+      houseRooms.push(houseRoom)
+      if (houseRoom.hasCellar) {
+        cellarRooms.push(generateCellarRoom(bp.x, bp.y, seed ^ bp.x ^ bp.y ^ CELLAR_SEED_OFFSET))
+      }
     }
     return layout.npcs
   })
@@ -236,9 +244,11 @@ export function generateChunk(
   const result = { tiles, enemies, npcs } as ChunkData & {
     dungeonFloors?: ReturnType<typeof generateDungeon>[]
     houseRooms?: ReturnType<typeof generateHouseRoom>[]
+    cellarRooms?: ReturnType<typeof generateCellarRoom>[]
   }
   if (_dungeonFloors.length > 0) result.dungeonFloors = _dungeonFloors
   if (houseRooms.length > 0) result.houseRooms = houseRooms
+  if (cellarRooms.length > 0) result.cellarRooms = cellarRooms
 
   return result
 }

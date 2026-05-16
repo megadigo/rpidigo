@@ -11,6 +11,16 @@ export function dungeonRoomId(tx: number, ty: number, floor: number): string {
   return `dungeon_${String(tx).padStart(4, '0')}_${String(ty).padStart(4, '0')}_floor_${floor}`
 }
 
+export function parseDungeonRoomId(roomId: string): { tx: number; ty: number; floor: number } | null {
+  const m = /^dungeon_(\d{4})_(\d{4})_floor_(\d+)$/.exec(roomId)
+  if (!m) return null
+  return {
+    tx: parseInt(m[1], 10),
+    ty: parseInt(m[2], 10),
+    floor: parseInt(m[3], 10),
+  }
+}
+
 export interface DungeonFloor {
   room: string
   tiles: Map<string, TileData>
