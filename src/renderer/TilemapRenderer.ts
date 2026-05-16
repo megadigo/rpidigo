@@ -60,7 +60,7 @@ export const TILE_DEFS: Record<string, TileDef> = {
   grass_tall:          { sprite: 'Ground/GrassTall',          layer: 'GROUND', speedMod: 0.6 },
   flower_yellow:       { sprite: 'Ground/GrassFlowerYellow',  layer: 'GROUND' },
   flower_red:          { sprite: 'Ground/GrassFlowerRed',     layer: 'GROUND' },
-  dirt_path:           { sprite: 'Ground/GrassDead',          layer: 'GROUND' },
+  dirt_path:           { sprite: 'Ground/PathDirt',           layer: 'GROUND', speedMod: 1.1},
   rock_small:          { sprite: 'Nature/RockSmall',          layer: 'MIDDLE', impassable: true },
   rock_large:          { sprite: 'Nature/RocksBig',           layer: 'MIDDLE', impassable: true },
   // ── Forest ────────────────────────────────────────────────────────────────
@@ -107,7 +107,7 @@ export const TILE_DEFS: Record<string, TileDef> = {
   dungeon_floor:       { sprite: 'Ground/DungeonFloor',       layer: 'GROUND' },
   dungeon_wall:        { sprite: 'Buildings/DungeonWall',     layer: 'MIDDLE', impassable: true },
   dungeon_stairs_down: { sprite: 'Ground/StairDown',          layer: 'GROUND' },
-  dungeon_stairs_up:   { sprite: 'Ground/StairUp',            layer: 'GROUND', roomExit: true },
+  dungeon_stairs_up:   { sprite: 'Ground/StairUp',            layer: 'MIDDLE', roomExit: true },
   dungeon_pillar:      { sprite: 'Buildings/DungeonPillar',   layer: 'MIDDLE', impassable: true },
   dungeon_trap:        { sprite: 'Miscellaneous/DungeonTrap', layer: 'GROUND' },
   dungeon_chest:       { sprite: 'Miscellaneous/Chests',      layer: 'MIDDLE' },
