@@ -2,11 +2,11 @@
  * HouseGen — generates a randomised interior room for each house sprite.
  *
  * Each building tile (house_hut, house_cabin, barracks, chapel, tavern, workshop)
- * at overworld position (tx, ty) gets a unique 12×12 interior room:
+ * at overworld position (tx, ty) gets a unique 8×8 interior room:
  *
  *   Border    : dungeon_wall (impassable)
  *   Inner     : house_floor
- *   house_exit at (6, 10) — centre-bottom, one tile above the south wall
+ *   house_exit at (4, 7) — centre-bottom of the south wall
  *   Furniture : seeded-random positions, themed per building type
  *
  * The room ID doubles as the Firebase room key under `map/{roomId}`.
@@ -14,7 +14,7 @@
 import type { TileData } from './types.ts'
 import { mulberry32, seededRandInt, tileKey } from './utils.ts'
 
-export const HOUSE_ROOM_SIZE = 12
+export const HOUSE_ROOM_SIZE = 8
 
 /** Zero-pad a world coordinate to 4 digits, e.g. 42 → '0042'. */
 function pad4(n: number): string {
@@ -75,11 +75,12 @@ export function generateHouseRoom(
 
   /** All occupied interior positions (walls + portal + spawn path). */
   const occupied = new Set<string>()
-  occupied.add(tileKey(portalX, portalY))       // exit tile
-  occupied.add(tileKey(portalX, portalY - 1))   // tile in front of exit (row S-2)
+  occupied.add(tileKey(portalX, portalY))           // exit tile
+  occupied.add(tileKey(portalX, portalY - 1))       // tile in front of exit (row S-2)
   const spawnTileX = Math.floor(S / 2)
   const spawnTileY = S - 3
-  occupied.add(tileKey(spawnTileX, spawnTileY)) // player spawn position
+  occupied.add(tileKey(spawnTileX, spawnTileY))     // player spawn position
+  occupied.add(tileKey(spawnTileX, spawnTileY - 1)) // one tile above spawn (walkway)
 
   /**
    * Place one furniture item at a random free position.
@@ -89,7 +90,7 @@ export function generateHouseRoom(
   function place(
     item: string,
     minX = 1, maxX = S - 2,
-    minY = 1, maxY = S - 3,   // y < S-2 keeps furniture away from portal row
+    minY = 1, maxY = S - 4,   // S-4 = row 8 max — keeps furniture clear of spawn row (S-3) and below
     metadata?: Record<string, unknown>,
   ): boolean {
     for (let attempt = 0; attempt < 30; attempt++) {
@@ -112,12 +113,12 @@ export function generateHouseRoom(
   switch (buildingType) {
 
     case 'workshop': {
-      // 2–3 workbenches scattered in the upper half, 1 chest
+      // 2–3 workbenches in the upper half, 1 chest
       const benches = 2 + (rand() < 0.5 ? 1 : 0)
-      for (let i = 0; i < benches; i++) place('workbench', 1, S - 2, 1, 5)
-      place('chest', 1, S - 2, 1, S - 3)
+      for (let i = 0; i < benches; i++) place('workbench', 1, S - 2, 1, Math.floor(S / 2) - 1)
+      place('chest', 1, S - 2, 1, S - 4)
       // Optional extra table
-      if (rand() < 0.4) place('table', 1, S - 2, 1, S - 3)
+      if (rand() < 0.4) place('table', 1, S - 2, 1, S - 4)
       break
     }
 
@@ -126,31 +127,31 @@ export function generateHouseRoom(
       place('quest_board', 2, S - 3, 1, 3)
       const chests = 2 + (rand() < 0.4 ? 1 : 0)
       for (let i = 0; i < chests; i++)
-        place('chest', 1, S - 2, 1, S - 3)
+        place('chest', 1, S - 2, 1, S - 4)
       // Occasional table (briefing table)
-      if (rand() < 0.5) place('table', 1, S - 2, 4, 7)
+      if (rand() < 0.5) place('table', 1, S - 2, Math.floor(S / 3), S - 4)
       break
     }
 
     case 'chapel': {
       // Altar fixed near top-centre, 1–2 chests, optional sofa
-      const altarX = seededRandInt(rand, 3, S - 4)
+      const altarX = seededRandInt(rand, 2, S - 3)
       const altarK = tileKey(altarX, 2)
       occupied.add(altarK)
       tiles.set(altarK, { g: 'house_floor', m: ['dungeon_altar'] })
       const chests = 1 + (rand() < 0.6 ? 1 : 0)
-      for (let i = 0; i < chests; i++) place('chest', 1, S - 2, 4, S - 3)
-      if (rand() < 0.4) place('sofa', 1, S - 2, 6, S - 3)
+      for (let i = 0; i < chests; i++) place('chest', 1, S - 2, 2, S - 4)
+      if (rand() < 0.4) place('sofa', 1, S - 2, Math.floor(S / 2), S - 4)
       break
     }
 
     case 'tavern': {
       // Tables and sofas fill the middle; chest in a corner
       const tables = 2 + seededRandInt(rand, 0, 2)
-      for (let i = 0; i < tables; i++) place('table', 2, S - 3, 2, 7)
+      for (let i = 0; i < tables; i++) place('table', 2, S - 3, 2, S - 4)
       const sofas = 1 + (rand() < 0.5 ? 1 : 0)
-      for (let i = 0; i < sofas; i++) place('sofa', 2, S - 3, 2, 7)
-      place('chest', 1, S - 2, 1, S - 3,
+      for (let i = 0; i < sofas; i++) place('sofa', 2, S - 3, 2, S - 4)
+      place('chest', 1, S - 2, 1, S - 4,
         { gold: seededRandInt(rand, 5, 25) })
       break
     }
@@ -158,9 +159,9 @@ export function generateHouseRoom(
     default: {
       // house_hut / house_cabin — residential: bed, maybe sofa/table, chest
       place('bed', 1, S - 2, 1, 4)
-      if (rand() < 0.6) place(rand() < 0.5 ? 'table' : 'sofa', 1, S - 2, 3, 7)
-      if (rand() < 0.35) place('sofa', 1, S - 2, 3, 7)
-      place('chest', 1, S - 2, 1, S - 3,
+      if (rand() < 0.6) place(rand() < 0.5 ? 'table' : 'sofa', 1, S - 2, 2, S - 4)
+      if (rand() < 0.35) place('sofa', 1, S - 2, 2, S - 4)
+      place('chest', 1, S - 2, 1, S - 4,
         { gold: seededRandInt(rand, 10, 50) })
       break
     }

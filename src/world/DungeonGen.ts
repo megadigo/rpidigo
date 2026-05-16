@@ -81,6 +81,26 @@ function generateFloor(
 
   split({ x: 0, y: 0, w: SIZE, h: SIZE }, 3)
 
+  // Pre-compute stair tile positions so decorations and enemies never block them.
+  // Protect each stair tile plus all 4 orthogonal neighbours and the spots where
+  // r.x,r.y corner pillars and r.x,r.y+1 traps land for the entrance/exit rooms.
+  const protectedTiles = new Set<string>()
+  const _protectAround = (sx: number, sy: number): void => {
+    protectedTiles.add(tileKey(sx,     sy    ))
+    protectedTiles.add(tileKey(sx + 1, sy    ))
+    protectedTiles.add(tileKey(sx - 1, sy    ))
+    protectedTiles.add(tileKey(sx,     sy + 1))
+    protectedTiles.add(tileKey(sx,     sy - 1))
+    protectedTiles.add(tileKey(sx - 1, sy - 1)) // matches r.x,r.y corner pillar
+    protectedTiles.add(tileKey(sx - 1, sy + 1)) // matches r.x,r.y+1 trap
+  }
+  if (rooms.length >= 2) {
+    const ent = rooms[0]
+    const ext = rooms[rooms.length - 1]
+    _protectAround(ent.x + 1, ent.y + 1)
+    if (floorIndex < totalFloors) _protectAround(ext.x + 1, ext.y + 1)
+  }
+
   // Connect rooms with corridors
   for (let i = 0; i < rooms.length - 1; i++) {
     const a = rooms[i]
@@ -97,17 +117,9 @@ function generateFloor(
     const minY = Math.min(ay, by)
     const maxY = Math.max(ay, by)
     for (let y = minY; y <= maxY; y++) tiles.set(tileKey(bx, y), { g: 'dungeon_floor' })
-    // Pillar at junction
-    tiles.set(tileKey(bx, ay), { g: 'dungeon_floor', m: ['dungeon_pillar'] })
-  }
-
-  // Pre-compute stair tile positions so decorations and enemies never block them
-  const protectedTiles = new Set<string>()
-  if (rooms.length >= 2) {
-    const ent = rooms[0]
-    const ext = rooms[rooms.length - 1]
-    protectedTiles.add(tileKey(ent.x + 1, ent.y + 1))
-    if (floorIndex < totalFloors) protectedTiles.add(tileKey(ext.x + 1, ext.y + 1))
+    // Pillar at junction — also skip if it would land on a protected tile
+    if (!protectedTiles.has(tileKey(bx, ay)))
+      tiles.set(tileKey(bx, ay), { g: 'dungeon_floor', m: ['dungeon_pillar'] })
   }
 
   // Decorations and loot

@@ -28,7 +28,6 @@ const SYNC_INTERVAL = 100
 export class PlayerController {
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys
   private wasd!: { up: Phaser.Input.Keyboard.Key; down: Phaser.Input.Keyboard.Key; left: Phaser.Input.Keyboard.Key; right: Phaser.Input.Keyboard.Key }
-  private interactKey!: Phaser.Input.Keyboard.Key
   private sprite!: Phaser.GameObjects.Image
   private lastSync = 0
   private lastChunk = ''
@@ -82,7 +81,6 @@ export class PlayerController {
         left:  this.scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.A),
         right: this.scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.D),
       }
-      this.interactKey = this.scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.E)
     }
 
     // Follow camera — lerp 1 = instant snap so tiles are always in view
@@ -193,19 +191,47 @@ export class PlayerController {
         const entryType = getTileEntryType(type)
         if (entryType === 'dungeon') {
           this._transitionCooldown = 800
-          this._returnX = tx
-          this._returnY = ty
+          // Return position: step back 2 tiles from the entrance so the player
+          // doesn't land on it again. Try each cardinal direction until a
+          // passable non-entrance tile is found; fall back to the entrance itself.
+          const candidates = [
+            { rx: tx, ry: ty + 2 },
+            { rx: tx, ry: ty - 2 },
+            { rx: tx + 2, ry: ty },
+            { rx: tx - 2, ry: ty },
+          ]
+          let retX = tx
+          let retY = ty
+          for (const { rx, ry } of candidates) {
+            const cTile = getTile(rx, ry)
+            const cTypes = cTile ? [cTile.g, ...(cTile.m ?? [])] : []
+            if (isPassable(rx, ry) && !cTypes.some(t => getTileEntryType(t) === 'dungeon')) {
+              retX = rx; retY = ry; break
+            }
+          }
+          this._returnX = retX
+          this._returnY = retY
           const roomId = dungeonRoomId(tx, ty, 1)
-          this._persistReturnPos(tx, ty, roomId)
+          this._persistReturnPos(retX, retY, roomId)
           this.scene.events.emit('enterRoom', { roomId, spawnX: 2, spawnY: 2 })
           return
         }
       }
     }
 
-    // Overworld — check adjacent tiles for impassable entry tiles (buildings)
+    // Overworld — check adjacent tiles for impassable entry tiles (buildings).
+    // Guard with pixel proximity so the trigger only fires when the player's
+    // centre is within half a tile of the shared boundary (i.e. actually touching).
+    const ENTRY_THRESHOLD = TILE_SIZE / 2
     const adjacentOffsets = [{ dx: 0, dy: -1 }, { dx: 0, dy: 1 }, { dx: -1, dy: 0 }, { dx: 1, dy: 0 }]
     for (const { dx, dy } of adjacentOffsets) {
+      // Skip this direction if the player is still more than ENTRY_THRESHOLD px
+      // away from the tile boundary shared with the candidate building tile.
+      if (dx === 1  && this.px < (tx + 1) * TILE_SIZE - ENTRY_THRESHOLD) continue
+      if (dx === -1 && this.px > tx       * TILE_SIZE + ENTRY_THRESHOLD) continue
+      if (dy === 1  && this.py < (ty + 1) * TILE_SIZE - ENTRY_THRESHOLD) continue
+      if (dy === -1 && this.py > ty       * TILE_SIZE + ENTRY_THRESHOLD) continue
+
       const atx = tx + dx
       const aty = ty + dy
       const tile = getTile(atx, aty)
