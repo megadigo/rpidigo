@@ -8,6 +8,7 @@ import type { ChunkData, TileData, EnemyInstance, PoiLayout } from './types.ts'
 import { generateChunk, CHUNK_SIZE, buildNoise, type NoiseConfig } from './ChunkGen.ts'
 import type { RoadNetwork } from './RoadNetwork.ts'
 import type { generateHouseRoom } from './HouseGen.ts'
+import type { generateCellarRoom } from './CellarGen.ts'
 import { tileKey, chunkKey } from './utils.ts'
 
 /** In-memory tile cache — key `tileKey(x,y)` for overworld. */
@@ -138,6 +139,7 @@ async function _generateAndPersistChunk(cx: number, cy: number, key: string): Pr
   const chunkData = generateChunk(cx, cy, _seed, _pois, _roads, _noise) as ChunkData & {
     dungeonFloors?: Array<Array<{ room: string; tiles: Map<string, TileData>; enemies: EnemyInstance[] }>>
     houseRooms?: Array<ReturnType<typeof generateHouseRoom>>
+    cellarRooms?: Array<ReturnType<typeof generateCellarRoom>>
   }
 
   // 1. Overworld tiles — single update per chunk (~30KB, under Firebase's 256KB limit)
@@ -198,6 +200,17 @@ async function _generateAndPersistChunk(cx: number, cy: number, key: string): Pr
   // 4. House rooms — each room's tiles batched separately (rooms are small, ~144 tiles)
   if (chunkData.houseRooms) {
     for (const room of chunkData.houseRooms) {
+      const roomUpdate: Record<string, unknown> = {}
+      for (const [k, t] of room.tiles) {
+        roomUpdate[`map/${room.roomId}/${k}`] = JSON.parse(JSON.stringify(t))
+      }
+      await update(ref(db), roomUpdate)
+    }
+  }
+
+  // 4b. Cellar rooms — each room's tiles batched separately
+  if (chunkData.cellarRooms) {
+    for (const room of chunkData.cellarRooms) {
       const roomUpdate: Record<string, unknown> = {}
       for (const [k, t] of room.tiles) {
         roomUpdate[`map/${room.roomId}/${k}`] = JSON.parse(JSON.stringify(t))

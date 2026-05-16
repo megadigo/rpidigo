@@ -9,6 +9,7 @@ import { TilemapRenderer, TILE_SIZE } from '../renderer/TilemapRenderer.ts'
 import { PlayerController } from '../player/PlayerController.ts'
 import { enterRoom, exitRoom } from '../world/ChunkManager.ts'
 import { HOUSE_ROOM_SIZE } from '../world/HouseGen.ts'
+import { CELLAR_ROOM_SIZE } from '../world/CellarGen.ts'
 import { getLocalPlayer, setLocalPlayer } from '../player/Auth.ts'
 
 /** Tile bounds of the 1000×1000 overworld in pixels. */
@@ -81,7 +82,11 @@ export class GameScene extends Phaser.Scene {
     this.tilemapRenderer.reset()
     this.playerController.teleport(spawnX, spawnY)
 
-    const roomSize = roomId.startsWith('house_') ? HOUSE_ROOM_SIZE : 40
+    const roomSize = roomId.startsWith('house_')
+      ? HOUSE_ROOM_SIZE
+      : roomId.startsWith('cellar_')
+        ? CELLAR_ROOM_SIZE
+        : 40
     const roomPixelSize = roomSize * TILE_SIZE
 
     if (roomId.startsWith('house_')) {

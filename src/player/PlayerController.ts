@@ -19,6 +19,7 @@ import { TILE_SIZE, getTileEntryType, isTileRoomExit } from '../renderer/Tilemap
 import { getTile } from '../world/ChunkManager.ts'
 import { houseRoomId, HOUSE_ROOM_SIZE } from '../world/HouseGen.ts'
 import { dungeonRoomId } from '../world/DungeonGen.ts'
+import { cellarRoomId, parseCellarRoomId } from '../world/CellarGen.ts'
 
 /** Pixels per second at base speed. */
 const BASE_SPEED = 80
@@ -165,6 +166,70 @@ export class PlayerController {
         ...(currentTile?.m ?? []),
       ].filter(Boolean) as string[]
 
+      if (tileTypes.includes('dungeon_stairs_down')) {
+        const activeRoom = getActiveRoom()!
+
+        // House cellar entrance: house_XXXX_YYYY -> cellar_XXXX_YYYY
+        if (activeRoom.startsWith('house_')) {
+          const coords = /^house_(\d{4})_(\d{4})$/.exec(activeRoom)
+          if (coords) {
+            const hx = parseInt(coords[1], 10)
+            const hy = parseInt(coords[2], 10)
+            const roomId = cellarRoomId(hx, hy)
+            this._transitionCooldown = 800
+            this._persistRoomOnly(roomId)
+            this.scene.events.emit('enterRoom', { roomId, spawnX: 2, spawnY: 2 })
+            return
+          }
+        }
+
+        // Dungeon floor descent: dungeon_XXXX_YYYY_floor_N -> floor N+1
+        const d = /^dungeon_(\d{4})_(\d{4})_floor_(\d+)$/.exec(activeRoom)
+        if (d) {
+          const dx = parseInt(d[1], 10)
+          const dy = parseInt(d[2], 10)
+          const floor = parseInt(d[3], 10)
+          const roomId = dungeonRoomId(dx, dy, floor + 1)
+          this._transitionCooldown = 800
+          this._persistRoomOnly(roomId)
+          this.scene.events.emit('enterRoom', { roomId, spawnX: 2, spawnY: 2 })
+          return
+        }
+      }
+
+      if (tileTypes.includes('dungeon_stairs_up')) {
+        const activeRoom = getActiveRoom()!
+
+        // Cellar ascent returns to the source house interior.
+        if (activeRoom.startsWith('cellar_')) {
+          const parsed = parseCellarRoomId(activeRoom)
+          if (parsed) {
+            const roomId = houseRoomId(parsed.tx, parsed.ty)
+            this._transitionCooldown = 800
+            this._persistRoomOnly(roomId)
+            const spawnX = Math.floor(HOUSE_ROOM_SIZE / 2)
+            const spawnY = HOUSE_ROOM_SIZE - 3
+            this.scene.events.emit('enterRoom', { roomId, spawnX, spawnY })
+            return
+          }
+        }
+
+        // Dungeon floor ascent: floor N>1 goes to N-1, floor 1 exits overworld.
+        const d = /^dungeon_(\d{4})_(\d{4})_floor_(\d+)$/.exec(activeRoom)
+        if (d) {
+          const dx = parseInt(d[1], 10)
+          const dy = parseInt(d[2], 10)
+          const floor = parseInt(d[3], 10)
+          if (floor > 1) {
+            const roomId = dungeonRoomId(dx, dy, floor - 1)
+            this._transitionCooldown = 800
+            this._persistRoomOnly(roomId)
+            this.scene.events.emit('enterRoom', { roomId, spawnX: 2, spawnY: 2 })
+            return
+          }
+        }
+      }
+
       if (tileTypes.some(t => isTileRoomExit(t))) {
         this._transitionCooldown = 800
         // Reset room in Firebase immediately so re-login lands on overworld
@@ -265,6 +330,16 @@ export class PlayerController {
     void update(ref(db), {
       [`players/${player.id}/returnX`]: tx,
       [`players/${player.id}/returnY`]: ty,
+      [`players/${player.id}/room`]: roomId,
+    })
+  }
+
+  /** Persist room-only transitions while keeping original overworld return coordinates. */
+  private _persistRoomOnly(roomId: string): void {
+    const player = getLocalPlayer()
+    player.room = roomId
+    setLocalPlayer(player)
+    void update(ref(db), {
       [`players/${player.id}/room`]: roomId,
     })
   }

@@ -33,6 +33,7 @@ export function houseRoomId(tx: number, ty: number): string {
 export interface HouseRoom {
   roomId: string
   tiles: Map<string, TileData>
+  hasCellar: boolean
 }
 
 /**
@@ -167,5 +168,13 @@ export function generateHouseRoom(
     }
   }
 
-  return { roomId, tiles }
+  // Some residential houses get a cellar stairs-down tile.
+  // Keep this after furniture so the stair lands in a truly free spot.
+  const isResidential = buildingType === 'house_hut' || buildingType === 'house_cabin'
+  const hasCellar = isResidential && rand() < 0.4
+  if (hasCellar) {
+    place('dungeon_stairs_down', 1, S - 2, 1, S - 4)
+  }
+
+  return { roomId, tiles, hasCellar }
 }
