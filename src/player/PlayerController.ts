@@ -167,16 +167,24 @@ export class PlayerController {
 
       if (tileTypes.some(t => isTileRoomExit(t))) {
         this._transitionCooldown = 800
-        // Reset room in Firebase immediately so re-login lands on overworld
         const player = getLocalPlayer()
+        const oldRoom = player.room
         player.room = '0'
         player.x = this._returnX
         player.y = this._returnY
         setLocalPlayer(player)
+        // Remove from room presence; restore full overworld presence entry
         void update(ref(db), {
           [`players/${player.id}/room`]: '0',
           [`players/${player.id}/x`]: this._returnX,
           [`players/${player.id}/y`]: this._returnY,
+          [`presence/${oldRoom}/players/${player.id}`]: null,
+          [`presence/0/players/${player.id}/x`]: this._returnX,
+          [`presence/0/players/${player.id}/y`]: this._returnY,
+          [`presence/0/players/${player.id}/name`]: player.name,
+          [`presence/0/players/${player.id}/level`]: player.level,
+          [`presence/0/players/${player.id}/spriteFrame`]: `${player.championId}.png`,
+          [`presence/0/players/${player.id}/state`]: 'idle',
         })
         this.scene.events.emit('exitRoom', { returnX: this._returnX, returnY: this._returnY })
       }
@@ -212,7 +220,7 @@ export class PlayerController {
           this._returnX = retX
           this._returnY = retY
           const roomId = dungeonRoomId(tx, ty, 1)
-          this._persistReturnPos(retX, retY, roomId)
+          this._persistReturnPos(retX, retY, roomId, 2, 2)
           this.scene.events.emit('enterRoom', { roomId, spawnX: 2, spawnY: 2 })
           return
         }
@@ -245,9 +253,9 @@ export class PlayerController {
           this._returnX = tx
           this._returnY = ty
           const roomId = houseRoomId(atx, aty)
-          this._persistReturnPos(tx, ty, roomId)
           const spawnX = Math.floor(HOUSE_ROOM_SIZE / 2)
           const spawnY = HOUSE_ROOM_SIZE - 3
+          this._persistReturnPos(tx, ty, roomId, spawnX, spawnY)
           this.scene.events.emit('enterRoom', { roomId, spawnX, spawnY })
           return
         }
@@ -255,17 +263,34 @@ export class PlayerController {
     }
   }
 
-  /** Persist the overworld return position and active room to Firebase so re-login restores state. */
-  private _persistReturnPos(tx: number, ty: number, roomId: string): void {
+  /**
+   * Persist the overworld return position and active room to Firebase so re-login
+   * restores state. Also atomically removes the player from the old presence room
+   * and writes a full initial entry in the new room.
+   */
+  private _persistReturnPos(
+    tx: number, ty: number,
+    roomId: string,
+    spawnX: number, spawnY: number,
+  ): void {
     const player = getLocalPlayer()
+    const oldRoom = player.room
     player.returnX = tx
     player.returnY = ty
     player.room = roomId
     setLocalPlayer(player)
+    // null removes the old-room presence entry in a single multi-path write
     void update(ref(db), {
       [`players/${player.id}/returnX`]: tx,
       [`players/${player.id}/returnY`]: ty,
       [`players/${player.id}/room`]: roomId,
+      [`presence/${oldRoom}/players/${player.id}`]: null,
+      [`presence/${roomId}/players/${player.id}/x`]: spawnX,
+      [`presence/${roomId}/players/${player.id}/y`]: spawnY,
+      [`presence/${roomId}/players/${player.id}/name`]: player.name,
+      [`presence/${roomId}/players/${player.id}/level`]: player.level,
+      [`presence/${roomId}/players/${player.id}/spriteFrame`]: `${player.championId}.png`,
+      [`presence/${roomId}/players/${player.id}/state`]: 'idle',
     })
   }
 

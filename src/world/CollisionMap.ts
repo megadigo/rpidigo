@@ -6,6 +6,12 @@
 import { getTile } from './ChunkManager.ts'
 import { isTileImpassable, getTileSpeedMod } from '../renderer/TilemapRenderer.ts'
 
+/**
+ * Tile positions (`"${x}_${y}"`) currently occupied by remote players.
+ * Updated by GameScene whenever the presence snapshot changes.
+ */
+export const remotePlayerTiles = new Set<string>()
+
 /** Returns false for tiles not yet loaded or out of bounds [0, 999]. */
 export function isPassable(x: number, y: number): boolean {
   if (x < 0 || y < 0 || x >= 1000 || y >= 1000) return false
@@ -13,6 +19,7 @@ export function isPassable(x: number, y: number): boolean {
   if (!tile) return false   // chunk not yet loaded → treat as blocked
   if (isTileImpassable(tile.g)) return false
   if (tile.m?.some(m => isTileImpassable(m))) return false
+  if (remotePlayerTiles.has(`${x}_${y}`)) return false
   return true
 }
 

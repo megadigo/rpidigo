@@ -3,20 +3,44 @@
  *
  * Listens for 'enterRoom' and 'exitRoom' events from PlayerController to handle
  * transitions between the overworld and house/dungeon interior rooms.
+ *
+ * Step 5: subscribes to /presence/{room}/players and renders remote player
+ * sprites with name labels, tweening positions on each Firebase update.
  */
 import Phaser from 'phaser'
+import { ref, onValue } from 'firebase/database'
+import { db } from '../firebase.ts'
 import { TilemapRenderer, TILE_SIZE } from '../renderer/TilemapRenderer.ts'
 import { PlayerController } from '../player/PlayerController.ts'
 import { enterRoom, exitRoom } from '../world/ChunkManager.ts'
 import { HOUSE_ROOM_SIZE } from '../world/HouseGen.ts'
 import { getLocalPlayer, setLocalPlayer } from '../player/Auth.ts'
+import { remotePlayerTiles } from '../world/CollisionMap.ts'
 
 /** Tile bounds of the 1000×1000 overworld in pixels. */
 const WORLD_PIXEL_SIZE = 1000 * TILE_SIZE
 
+/** Shape of each entry under /presence/{room}/players/{id}. */
+interface PresenceEntry {
+  x: number
+  y: number
+  name: string
+  level: number
+  spriteFrame: string  // e.g. "champion_warrior.png"
+  state: string
+}
+
 export class GameScene extends Phaser.Scene {
   private tilemapRenderer!: TilemapRenderer
   private playerController!: PlayerController
+
+  /** Remote player sprites keyed by player ID. */
+  private _remotePlayers = new Map<string, {
+    sprite: Phaser.GameObjects.Image
+    label: Phaser.GameObjects.Text
+  }>()
+  /** Unsubscribe function for the current Firebase presence listener. */
+  private _presenceUnsub: (() => void) | null = null
 
   constructor() {
     super({ key: 'GameScene' })
@@ -56,6 +80,14 @@ export class GameScene extends Phaser.Scene {
         this._handleExitRoom(data.returnX, data.returnY)
       },
     )
+
+    // Subscribe to the overworld presence room on startup
+    this._subscribePresence(getLocalPlayer().room)
+
+    // Clean up Firebase listener when the scene shuts down
+    this.events.on(Phaser.Scenes.Events.SHUTDOWN, () => {
+      if (this._presenceUnsub) { this._presenceUnsub(); this._presenceUnsub = null }
+    })
   }
 
   update(_time: number, delta: number): void {
@@ -92,6 +124,8 @@ export class GameScene extends Phaser.Scene {
     } else {
       this.cameras.main.setBounds(0, 0, roomPixelSize, roomPixelSize)
     }
+
+    this._subscribePresence(roomId)
   }
 
   private _handleExitRoom(returnX: number, returnY: number): void {
@@ -107,5 +141,78 @@ export class GameScene extends Phaser.Scene {
     // Restore overworld camera bounds and re-follow the player
     this.cameras.main.setBounds(0, 0, WORLD_PIXEL_SIZE, WORLD_PIXEL_SIZE)
     this.playerController.startCameraFollow()
+
+    this._subscribePresence('0')
+  }
+
+  /**
+   * Subscribe to /presence/{room}/players, rendering a sprite + name label for
+   * every remote player. Tweens position on each update; removes on disconnect.
+   * Automatically tears down the previous listener before attaching a new one.
+   */
+  private _subscribePresence(room: string): void {
+    // Tear down previous listener and clear all remote sprites
+    if (this._presenceUnsub) { this._presenceUnsub(); this._presenceUnsub = null }
+    for (const { sprite, label } of this._remotePlayers.values()) {
+      sprite.destroy(); label.destroy()
+    }
+    this._remotePlayers.clear()
+    remotePlayerTiles.clear()
+
+    const localId = getLocalPlayer().id
+    const presRef = ref(db, `presence/${room}/players`)
+
+    this._presenceUnsub = onValue(presRef, (snap) => {
+      const data = snap.val() as Record<string, PresenceEntry> | null
+      const incoming = new Set<string>()
+
+      // Rebuild occupied tiles from the full snapshot each update
+      remotePlayerTiles.clear()
+
+      if (data) {
+        for (const [id, entry] of Object.entries(data)) {
+          if (id === localId) continue  // never render self
+          incoming.add(id)
+          remotePlayerTiles.add(`${entry.x}_${entry.y}`)
+
+          const px = entry.x * TILE_SIZE + TILE_SIZE / 2
+          const py = entry.y * TILE_SIZE + TILE_SIZE / 2
+
+          if (this._remotePlayers.has(id)) {
+            // Tween existing sprite to the new position; label tracks the sprite
+            const { sprite, label } = this._remotePlayers.get(id)!
+            this.tweens.add({
+              targets: sprite,
+              x: px, y: py,
+              duration: 180,
+              ease: 'Linear',
+              onUpdate: () => label.setPosition(sprite.x, sprite.y - TILE_SIZE - 2),
+            })
+          } else {
+            // First appearance — create sprite and name label
+            const textureKey = entry.spriteFrame.replace('.png', '')
+            const sprite = this.add.image(px, py, textureKey)
+              .setFrame(0)
+              .setDepth(10)
+            const label = this.add.text(px, py - TILE_SIZE - 2, entry.name, {
+              fontFamily: 'monospace',
+              fontSize: '8px',
+              color: '#ffffff',
+              stroke: '#000000',
+              strokeThickness: 2,
+            }).setOrigin(0.5, 1).setDepth(11)
+            this._remotePlayers.set(id, { sprite, label })
+          }
+        }
+      }
+
+      // Destroy sprites for players who left the room
+      for (const [id, { sprite, label }] of this._remotePlayers.entries()) {
+        if (!incoming.has(id)) {
+          sprite.destroy(); label.destroy()
+          this._remotePlayers.delete(id)
+        }
+      }
+    })
   }
 }

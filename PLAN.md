@@ -56,13 +56,14 @@
 
 ---
 
-## Step 5 — Other Players (Multiplayer Presence)
-*Goal: two logged-in tabs can see each other’s champion sprites moving in real time.*
+## Step 5 — Other Players (Multiplayer Presence) ✅
+*Goal: two logged-in tabs can see each other's champion sprites moving in real time.*
 
-1. In `GameScene.create()`, subscribe to `/presence/{room}/players` with Firebase `onValue`.
-2. For each remote entry, render a champion `Image` sprite at frame 0 with a small name `Text` above it.
-3. On value change, update the position with a short tween for smooth movement; remove the sprite when the entry is deleted.
-4. **Checkpoint**: Open two browser tabs and log in as two different players; both see the other move in real time.
+1. ✅ `GameScene` declares `_remotePlayers: Map<string, { sprite, label }>` and `_presenceUnsub`.
+2. ✅ `_subscribePresence(room)` — tears down previous `onValue` listener, clears all remote sprites, then subscribes to `/presence/{room}/players`. On each snapshot it creates/tweens/removes sprites and labels.
+3. ✅ Called on startup (`create()`), on room enter (`_handleEnterRoom`) and on room exit (`_handleExitRoom`).
+4. ✅ Listener is cleaned up in `SHUTDOWN` event.
+5. **Checkpoint**: Open two browser tabs and log in as two different players; both see the other move in real time.
 
 ---
 
