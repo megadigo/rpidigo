@@ -10,13 +10,13 @@
 import Phaser from 'phaser'
 import { ref, onValue } from 'firebase/database'
 import { db } from '../firebase.ts'
-import { TilemapRenderer, TILE_SIZE } from '../renderer/TilemapRenderer.ts'
+import { TilemapRenderer, TILE_SIZE, isTileRoomExit } from '../renderer/TilemapRenderer.ts'
 import { PlayerController } from '../player/PlayerController.ts'
-import { enterRoom, exitRoom } from '../world/ChunkManager.ts'
+import { enterRoom, exitRoom, findTileInRoom, getTile } from '../world/ChunkManager.ts'
 import { HOUSE_ROOM_SIZE } from '../world/HouseGen.ts'
 import { CELLAR_ROOM_SIZE } from '../world/CellarGen.ts'
 import { getLocalPlayer, setLocalPlayer } from '../player/Auth.ts'
-import { remotePlayerTiles } from '../world/CollisionMap.ts'
+import { remotePlayerTiles, isPassable } from '../world/CollisionMap.ts'
 
 /** Tile bounds of the 1000×1000 overworld in pixels. */
 const WORLD_PIXEL_SIZE = 1000 * TILE_SIZE
@@ -70,8 +70,8 @@ export class GameScene extends Phaser.Scene {
     // Room transition events emitted by PlayerController
     this.events.on(
       'enterRoom',
-      (data: { roomId: string; spawnX: number; spawnY: number }) => {
-        void this._handleEnterRoom(data.roomId, data.spawnX, data.spawnY)
+      (data: { roomId: string; spawnNear: string }) => {
+        void this._handleEnterRoom(data.roomId, data.spawnNear)
       },
     )
 
@@ -104,7 +104,29 @@ export class GameScene extends Phaser.Scene {
     )
   }
 
-  private async _handleEnterRoom(roomId: string, spawnX: number, spawnY: number): Promise<void> {
+  /**
+   * Find the first tile of `tileType` in the loaded room, then return the
+   * nearest passable non-trigger adjacent tile (S → E → N → W). Falls back
+   * to the anchor itself if no adjacent tile qualifies.
+   */
+  private _spawnNextTo(tileType: string): { x: number; y: number } {
+    const anchor = findTileInRoom(tileType)
+    if (anchor) {
+      for (const [dx, dy] of [[0, 1], [1, 0], [0, -1], [-1, 0]] as [number, number][]) {
+        const nx = anchor.x + dx
+        const ny = anchor.y + dy
+        if (!isPassable(nx, ny)) continue
+        const t = getTile(nx, ny)
+        const types = t ? [t.g, ...(t.m ?? [])] : []
+        if (types.some(isTileRoomExit) || types.some(s => s.includes('stairs'))) continue
+        return { x: nx, y: ny }
+      }
+      return anchor
+    }
+    return { x: 2, y: 2 }
+  }
+
+  private async _handleEnterRoom(roomId: string, spawnNear: string): Promise<void> {
     // Persist room in player record so HUD/presence stays consistent
     const player = getLocalPlayer()
     player.room = roomId
@@ -112,6 +134,7 @@ export class GameScene extends Phaser.Scene {
 
     await enterRoom(roomId)
     this.tilemapRenderer.reset()
+    const { x: spawnX, y: spawnY } = this._spawnNextTo(spawnNear)
     this.playerController.teleport(spawnX, spawnY)
 
     const roomSize = roomId.startsWith('house_')

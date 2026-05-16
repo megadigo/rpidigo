@@ -149,6 +149,17 @@ export class PlayerController {
   }
 
   /**
+   * Returns true when the player's pixel centre is within 40% of TILE_SIZE
+   * from the centre of tile (tx, ty) — i.e. the player is solidly on top of it.
+   */
+  private _isOnTile(tx: number, ty: number): boolean {
+    const cx = tx * TILE_SIZE + TILE_SIZE / 2
+    const cy = ty * TILE_SIZE + TILE_SIZE / 2
+    return Math.abs(this.px - cx) < TILE_SIZE * 0.4
+        && Math.abs(this.py - cy) < TILE_SIZE * 0.4
+  }
+
+  /**
    * Auto room-transition: fires every frame when cooldown is zero.
    * - If in a room and standing on a house_exit/dungeon_stairs_up tile → exit room
    * - If on overworld and standing on a passable entry tile (dungeon_entrance)
@@ -159,6 +170,8 @@ export class PlayerController {
     const ty = Math.floor(this.py / TILE_SIZE)
 
     if (getActiveRoom() !== null) {
+      // Inside a room — only trigger when solidly centred on the tile.
+      if (!this._isOnTile(tx, ty)) return
       // Inside a room — check only the current tile for a room-exit marker
       const currentTile = getTile(tx, ty)
       const tileTypes = [
@@ -176,7 +189,7 @@ export class PlayerController {
             const roomId = cellarRoomId(parsed.tx, parsed.ty)
             this._transitionCooldown = 800
             this._persistRoomOnly(roomId)
-            this.scene.events.emit('enterRoom', { roomId, spawnX: 2, spawnY: 2 })
+            this.scene.events.emit('enterRoom', { roomId, spawnNear: 'dungeon_stairs_up' })
             return
           }
         }
@@ -187,7 +200,7 @@ export class PlayerController {
           const roomId = dungeonRoomId(d.tx, d.ty, d.floor + 1)
           this._transitionCooldown = 800
           this._persistRoomOnly(roomId)
-          this.scene.events.emit('enterRoom', { roomId, spawnX: 2, spawnY: 2 })
+          this.scene.events.emit('enterRoom', { roomId, spawnNear: 'dungeon_stairs_up' })
           return
         }
       }
@@ -202,9 +215,7 @@ export class PlayerController {
             const roomId = houseRoomId(parsed.tx, parsed.ty)
             this._transitionCooldown = 800
             this._persistRoomOnly(roomId)
-            const spawnX = Math.floor(HOUSE_ROOM_SIZE / 2)
-            const spawnY = HOUSE_ROOM_SIZE - 3
-            this.scene.events.emit('enterRoom', { roomId, spawnX, spawnY })
+            this.scene.events.emit('enterRoom', { roomId, spawnNear: 'dungeon_stairs_down' })
             return
           }
         }
@@ -216,7 +227,7 @@ export class PlayerController {
             const roomId = dungeonRoomId(d.tx, d.ty, d.floor - 1)
             this._transitionCooldown = 800
             this._persistRoomOnly(roomId)
-            this.scene.events.emit('enterRoom', { roomId, spawnX: 2, spawnY: 2 })
+            this.scene.events.emit('enterRoom', { roomId, spawnNear: 'dungeon_stairs_down' })
             return
           }
         }
@@ -248,55 +259,62 @@ export class PlayerController {
       return
     }
 
-    // Overworld — check current tile first (passable entry tiles like dungeon_entrance)
-    const currentTile = getTile(tx, ty)
-    if (currentTile) {
-      const allTypes = [currentTile.g, ...(currentTile.m ?? [])]
-      for (const type of allTypes) {
-        const entryType = getTileEntryType(type)
-        if (entryType === 'dungeon') {
-          this._transitionCooldown = 800
-          // Return position: step back 2 tiles from the entrance so the player
-          // doesn't land on it again. Try each cardinal direction until a
-          // passable non-entrance tile is found; fall back to the entrance itself.
-          const candidates = [
-            { rx: tx, ry: ty + 2 },
-            { rx: tx, ry: ty - 2 },
-            { rx: tx + 2, ry: ty },
-            { rx: tx - 2, ry: ty },
-          ]
-          let retX = tx
-          let retY = ty
-          for (const { rx, ry } of candidates) {
-            const cTile = getTile(rx, ry)
-            const cTypes = cTile ? [cTile.g, ...(cTile.m ?? [])] : []
-            if (isPassable(rx, ry) && !cTypes.some(t => getTileEntryType(t) === 'dungeon')) {
-              retX = rx; retY = ry; break
+    // Overworld — check current tile first (passable entry tiles like dungeon_entrance).
+    // Require the player to be solidly on the tile before triggering.
+    if (this._isOnTile(tx, ty)) {
+      const currentTile = getTile(tx, ty)
+      if (currentTile) {
+        const allTypes = [currentTile.g, ...(currentTile.m ?? [])]
+        for (const type of allTypes) {
+          const entryType = getTileEntryType(type)
+          if (entryType === 'dungeon') {
+            this._transitionCooldown = 800
+            // Return position: step back 2 tiles from the entrance so the player
+            // doesn't land on it again. Try each cardinal direction until a
+            // passable non-entrance tile is found; fall back to the entrance itself.
+            const candidates = [
+              { rx: tx, ry: ty + 2 },
+              { rx: tx, ry: ty - 2 },
+              { rx: tx + 2, ry: ty },
+              { rx: tx - 2, ry: ty },
+            ]
+            let retX = tx
+            let retY = ty
+            for (const { rx, ry } of candidates) {
+              const cTile = getTile(rx, ry)
+              const cTypes = cTile ? [cTile.g, ...(cTile.m ?? [])] : []
+              if (isPassable(rx, ry) && !cTypes.some(t => getTileEntryType(t) === 'dungeon')) {
+                retX = rx; retY = ry; break
+              }
             }
+            this._returnX = retX
+            this._returnY = retY
+            const roomId = dungeonRoomId(tx, ty, 1)
+            this._persistReturnPos(retX, retY, roomId, 2, 2)
+            this.scene.events.emit('enterRoom', { roomId, spawnNear: 'dungeon_stairs_up' })
+            return
           }
-          this._returnX = retX
-          this._returnY = retY
-          const roomId = dungeonRoomId(tx, ty, 1)
-          this._persistReturnPos(retX, retY, roomId, 2, 2)
-          this.scene.events.emit('enterRoom', { roomId, spawnX: 2, spawnY: 2 })
-          return
         }
       }
     }
 
     // Overworld — check adjacent tiles for impassable entry tiles (buildings).
-    // Guard with pixel proximity so the trigger only fires when the player's
-    // centre is within half a tile of the shared boundary (i.e. actually touching).
-    const ENTRY_THRESHOLD = TILE_SIZE / 2
+    // Two conditions must both be met:
+    //   1. Directional: player is in the near half of their tile toward the building wall.
+    //   2. Alignment: player is centred with the building tile on the parallel axis
+    //      (i.e. aligned with the door/building sprite before triggering entry).
     const adjacentOffsets = [{ dx: 0, dy: -1 }, { dx: 0, dy: 1 }, { dx: -1, dy: 0 }, { dx: 1, dy: 0 }]
+    const tileMidX = tx * TILE_SIZE + TILE_SIZE / 2
+    const tileMidY = ty * TILE_SIZE + TILE_SIZE / 2
     for (const { dx, dy } of adjacentOffsets) {
-      // Skip this direction if the player is still more than ENTRY_THRESHOLD px
-      // away from the tile boundary shared with the candidate building tile.
-      if (dx === 1  && this.px < (tx + 1) * TILE_SIZE - ENTRY_THRESHOLD) continue
-      if (dx === -1 && this.px > tx       * TILE_SIZE + ENTRY_THRESHOLD) continue
-      if (dy === 1  && this.py < (ty + 1) * TILE_SIZE - ENTRY_THRESHOLD) continue
-      if (dy === -1 && this.py > ty       * TILE_SIZE + ENTRY_THRESHOLD) continue
-
+      // 1. Directional — must be in the near half of the tile
+      if (dx ===  1 && this.px < tileMidX) continue
+      if (dx === -1 && this.px > tileMidX) continue
+      if (dy ===  1 && this.py < tileMidY) continue
+      if (dy === -1 && this.py > tileMidY) continue
+      // 2. Alignment — must be centred with the building tile on the parallel axis
+      if (dy !== 0 && Math.abs(this.px - tileMidX) >= TILE_SIZE * 0.4) continue
+      if (dx !== 0 && Math.abs(this.py - tileMidY) >= TILE_SIZE * 0.4) continue
       const atx = tx + dx
       const aty = ty + dy
       const tile = getTile(atx, aty)
@@ -313,7 +331,7 @@ export class PlayerController {
           const spawnX = Math.floor(HOUSE_ROOM_SIZE / 2)
           const spawnY = HOUSE_ROOM_SIZE - 3
           this._persistReturnPos(tx, ty, roomId, spawnX, spawnY)
-          this.scene.events.emit('enterRoom', { roomId, spawnX, spawnY })
+          this.scene.events.emit('enterRoom', { roomId, spawnNear: 'house_exit' })
           return
         }
       }

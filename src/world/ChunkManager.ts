@@ -71,6 +71,21 @@ export function exitRoom(): void {
   _roomTileCache.clear()
 }
 
+/**
+ * Search the loaded room tile cache for the first tile that contains `tileType`
+ * in its ground or middle layers. Returns its local coordinates, or null.
+ */
+export function findTileInRoom(tileType: string): { x: number; y: number } | null {
+  for (const [key, tile] of _roomTileCache) {
+    const allTypes = [tile.g, ...(tile.m ?? [])]
+    if (allTypes.includes(tileType)) {
+      const parts = key.split('_')
+      return { x: parseInt(parts[0], 10), y: parseInt(parts[1], 10) }
+    }
+  }
+  return null
+}
+
 /** Ensure a chunk is loaded.  Returns when the chunk is in tileCache. */
 export async function ensureChunk(cx: number, cy: number): Promise<void> {
   const key = chunkKey(cx, cy)
