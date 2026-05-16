@@ -6,6 +6,8 @@ import type { TileData } from './types.ts'
 import { mulberry32, seededRandInt, tileKey } from './utils.ts'
 
 export const CELLAR_ROOM_SIZE = 20
+const CHEST_SPAWN_PROBABILITY = 0.7
+const TRAP_SPAWN_PROBABILITY = 0.4
 
 function pad4(n: number): string {
   return String(n).padStart(4, '0')
@@ -65,7 +67,7 @@ export function generateCellarRoom(tx: number, ty: number, seed: number): Cellar
   tiles.set(tileKey(upX, upY + 1), { g: 'dungeon_floor' })
 
   // Optional loot/trap details.
-  if (rand() < 0.7) {
+  if (rand() < CHEST_SPAWN_PROBABILITY) {
     const chestX = seededRandInt(rand, 2, S - 3)
     const chestY = seededRandInt(rand, 2, S - 3)
     if (chestX !== upX || chestY !== upY) {
@@ -76,7 +78,7 @@ export function generateCellarRoom(tx: number, ty: number, seed: number): Cellar
       })
     }
   }
-  if (rand() < 0.4) {
+  if (rand() < TRAP_SPAWN_PROBABILITY) {
     const trapX = seededRandInt(rand, 2, S - 3)
     const trapY = seededRandInt(rand, 2, S - 3)
     if ((trapX !== upX || trapY !== upY) && tiles.get(tileKey(trapX, trapY))?.m?.[0] !== 'dungeon_chest') {

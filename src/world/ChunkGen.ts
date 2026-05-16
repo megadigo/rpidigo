@@ -11,6 +11,8 @@ import { generateDungeon } from './DungeonGen.ts'
 import { generateHouseRoom } from './HouseGen.ts'
 import { generateCellarRoom } from './CellarGen.ts'
 
+const CELLAR_SEED_OFFSET = 0x51e11a2
+
 export const CHUNK_SIZE = 32
 export const WORLD_MAX = 1000   // tiles 0–999 are valid; 1000+ are void
 
@@ -162,7 +164,7 @@ export function generateChunk(
       const houseRoom = generateHouseRoom(bp.x, bp.y, seed ^ bp.x ^ bp.y, bp.type)
       houseRooms.push(houseRoom)
       if (houseRoom.hasCellar) {
-        cellarRooms.push(generateCellarRoom(bp.x, bp.y, seed ^ bp.x ^ bp.y ^ 0x51e11a2))
+        cellarRooms.push(generateCellarRoom(bp.x, bp.y, seed ^ bp.x ^ bp.y ^ CELLAR_SEED_OFFSET))
       }
     }
     return layout.npcs
