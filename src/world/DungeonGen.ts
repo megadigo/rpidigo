@@ -101,24 +101,35 @@ function generateFloor(
     tiles.set(tileKey(bx, ay), { g: 'dungeon_floor', m: ['dungeon_pillar'] })
   }
 
+  // Pre-compute stair tile positions so decorations and enemies never block them
+  const protectedTiles = new Set<string>()
+  if (rooms.length >= 2) {
+    const ent = rooms[0]
+    const ext = rooms[rooms.length - 1]
+    protectedTiles.add(tileKey(ent.x + 1, ent.y + 1))
+    if (floorIndex < totalFloors) protectedTiles.add(tileKey(ext.x + 1, ext.y + 1))
+  }
+
   // Decorations and loot
   const floorMultiplier = 1 + (floorIndex - 1) * 0.5
   const isBossFloor = floorIndex === totalFloors
   for (const r of rooms) {
     // Scatter pillars
-    if (rand() < 0.4) tiles.set(tileKey(r.x, r.y), { g: 'dungeon_floor', m: ['dungeon_pillar'] })
-    if (rand() < 0.2) tiles.set(tileKey(r.x + 1, r.y + 1), { g: 'dungeon_floor', m: ['dungeon_pillar'] })
-    if (rand() < 0.15) tiles.set(tileKey(r.x, r.y + 1), { g: 'dungeon_trap' })
+    if (rand() < 0.4 && !protectedTiles.has(tileKey(r.x, r.y))) tiles.set(tileKey(r.x, r.y), { g: 'dungeon_floor', m: ['dungeon_pillar'] })
+    if (rand() < 0.2 && !protectedTiles.has(tileKey(r.x + 1, r.y + 1))) tiles.set(tileKey(r.x + 1, r.y + 1), { g: 'dungeon_floor', m: ['dungeon_pillar'] })
+    if (rand() < 0.15 && !protectedTiles.has(tileKey(r.x, r.y + 1))) tiles.set(tileKey(r.x, r.y + 1), { g: 'dungeon_trap' })
 
     // Chest in dead-end-ish rooms (small rooms)
     if (r.w <= 6 && r.h <= 6) {
       const cx = r.x + Math.floor(r.w / 2)
       const cy = r.y + Math.floor(r.h / 2)
-      tiles.set(tileKey(cx, cy), {
-        g: 'dungeon_floor',
-        m: ['dungeon_chest'],
-        metadata: { gold: Math.floor((seededRandInt(rand, 20, 80)) * floorMultiplier) },
-      })
+      if (!protectedTiles.has(tileKey(cx, cy))) {
+        tiles.set(tileKey(cx, cy), {
+          g: 'dungeon_floor',
+          m: ['dungeon_chest'],
+          metadata: { gold: Math.floor((seededRandInt(rand, 20, 80)) * floorMultiplier) },
+        })
+      }
     }
 
     // Enemies
@@ -126,16 +137,21 @@ function generateFloor(
     if (isBossFloor && r === rooms[rooms.length - 1]) {
       const ex = r.x + Math.floor(r.w / 2)
       const ey = r.y + Math.floor(r.h / 2)
-      enemies.push(makeEnemy(`enemy_${String(tx).padStart(4,'0')}_${String(ty).padStart(4,'0')}_f${floorIndex}_boss`, 'dungeon_boss_strong', 'dungeon_boss', 'strong', room, ex, ey, 300, 50))
-      tiles.set(tileKey(ex - 1, ey), { g: 'dungeon_floor', m: ['dungeon_altar'] })
+      if (!protectedTiles.has(tileKey(ex, ey))) {
+        enemies.push(makeEnemy(`enemy_${String(tx).padStart(4,'0')}_${String(ty).padStart(4,'0')}_f${floorIndex}_boss`, 'dungeon_boss_strong', 'dungeon_boss', 'strong', room, ex, ey, 300, 50))
+      }
+      const altarKey = tileKey(ex - 1, ey)
+      if (!protectedTiles.has(altarKey)) tiles.set(altarKey, { g: 'dungeon_floor', m: ['dungeon_altar'] })
     } else if (rand() < spawnChance) {
       const ex = r.x + seededRandInt(rand, 1, r.w - 2)
       const ey = r.y + seededRandInt(rand, 1, r.h - 2)
-      const templateId = floorIndex === 1
-        ? pickFloor1Enemy(rand)
-        : pickFloor2Enemy(rand)
-      const [base, variant = 'standard'] = templateId.split('_') as [string, string | undefined]
-      enemies.push(makeEnemy(`enemy_${String(tx).padStart(4,'0')}_${String(ty).padStart(4,'0')}_f${floorIndex}_${ex}_${ey}`, templateId, base, variant, room, ex, ey, 60 * floorIndex, 15 * floorIndex))
+      if (!protectedTiles.has(tileKey(ex, ey))) {
+        const templateId = floorIndex === 1
+          ? pickFloor1Enemy(rand)
+          : pickFloor2Enemy(rand)
+        const [base, variant = 'standard'] = templateId.split('_') as [string, string | undefined]
+        enemies.push(makeEnemy(`enemy_${String(tx).padStart(4,'0')}_${String(ty).padStart(4,'0')}_f${floorIndex}_${ex}_${ey}`, templateId, base, variant, room, ex, ey, 60 * floorIndex, 15 * floorIndex))
+      }
     }
   }
 

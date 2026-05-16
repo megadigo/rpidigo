@@ -100,19 +100,19 @@ All sprite paths are relative to `public/assets/sprites/`.
 | `oasis_water` | `Ground/WaterOasis.png` |
 | `quicksand` | `Ground/GrassDead.png` *(quicksand frame)* |
 
-**Village** — houses are single-sprite tiles; entering one (press **E** when adjacent) loads a 12×12 interior room.
+**Village** — houses are single-sprite tiles; entering one (walk up to it) automatically loads a 12×12 interior room.
 
 | Tile | Sprite | Notes |
 |---|---|---|
 | `cobblestone` | `Ground/GrassDead.png` | Path / square |
-| `house_hut` | `Buildings/Huts.png` | Small house — opens interior on interact |
-| `house_cabin` | `Buildings/Houses.png` | Medium house — opens interior on interact |
-| `barracks` | `Buildings/Barracks.png` | Guard barracks — opens interior on interact |
-| `chapel` | `Buildings/Chapels.png` | Chapel / temple — opens interior on interact |
-| `tavern` | `Buildings/Taverns.png` | Tavern — opens interior on interact |
+| `house_hut` | `Buildings/Huts.png` | Small house — auto-enters on touch |
+| `house_cabin` | `Buildings/Houses.png` | Medium house — auto-enters on touch |
+| `barracks` | `Buildings/Barracks.png` | Guard barracks — auto-enters on touch |
+| `chapel` | `Buildings/Chapels.png` | Chapel / temple — auto-enters on touch |
+| `tavern` | `Buildings/Taverns.png` | Tavern — auto-enters on touch |
 | `well` | `Miscellaneous/Well.png` | Central landmark |
 | `market_stall` | `Buildings/Market.png` | Merchant NPC spot |
-| `workshop` | `Buildings/Workshops.png` | Blacksmith / crafting — opens interior on interact |
+| `workshop` | `Buildings/Workshops.png` | Blacksmith / crafting — auto-enters on touch |
 | `quest_board` | `Miscellaneous/QuestBoard.png` | Notice board |
 | `street_sign` | `Miscellaneous/StreetSign.png` | Path-end marker |
 | `tombstone` | `Miscellaneous/Tombstones.png` | Cemetery decoration |
@@ -142,7 +142,7 @@ All sprite paths are relative to `public/assets/sprites/`.
 | `dungeon_floor` | `Ground/DungeonFloor.png` |
 | `dungeon_wall` | `Buildings/DungeonWall.png` |
 | `dungeon_stairs_down` | `Ground/StairDown.png` |
-| `dungeon_stairs_up` | `Ground/StairUp.png` *(press E to exit)* |
+| `dungeon_stairs_up` | `Ground/StairUp.png` *(step on to exit)* |
 | `dungeon_pillar` | `Buildings/DungeonPillar.png` |
 | `dungeon_trap` | `Miscellaneous/DungeonTrap.png` |
 | `dungeon_chest` | `Miscellaneous/Chests.png` |
@@ -179,8 +179,9 @@ Every enterable village building (house_hut, house_cabin, barracks, chapel, tave
 The room ID `house_${tx.padStart(4,'0')}_${ty.padStart(4,'0')}` is derived deterministically from the building's world coordinates — no metadata storage is needed. Dungeon rooms use `dungeon_${tx:04d}_${ty:04d}_floor_{n}`.
 
 ### Entering and exiting
-- Stand adjacent to a building tile → press **E** → camera transitions to the interior room
-- Stand on or adjacent to the `house_exit` tile → press **E** → return to the overworld at the original entry position
+- Walk up to a building tile (touch it) → camera automatically transitions to the interior room
+- Step onto the `house_exit` tile → automatically returns the player to the overworld at the original entry position
+- An 800 ms cooldown prevents immediate re-triggering after each transition
 
 ---
 

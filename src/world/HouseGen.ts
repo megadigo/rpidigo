@@ -73,9 +73,13 @@ export function generateHouseRoom(
 
   // ── Furniture placement helpers ──────────────────────────────────────────
 
-  /** All occupied interior positions (walls + portal). */
+  /** All occupied interior positions (walls + portal + spawn path). */
   const occupied = new Set<string>()
-  occupied.add(tileKey(portalX, portalY))
+  occupied.add(tileKey(portalX, portalY))       // exit tile
+  occupied.add(tileKey(portalX, portalY - 1))   // tile in front of exit (row S-2)
+  const spawnTileX = Math.floor(S / 2)
+  const spawnTileY = S - 3
+  occupied.add(tileKey(spawnTileX, spawnTileY)) // player spawn position
 
   /**
    * Place one furniture item at a random free position.
