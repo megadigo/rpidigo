@@ -16,6 +16,8 @@ import { getLocalPlayer, setLocalPlayer } from './Auth.ts'
 import { isPassable, getSpeedMod } from '../world/CollisionMap.ts'
 import { ensureRadius, tileToChunk, getActiveRoom } from '../world/ChunkManager.ts'
 import { TILE_SIZE, getTileEntryType, isTileRoomExit } from '../renderer/TilemapRenderer.ts'
+import type { Direction } from '../renderer/SpriteAnim.ts'
+import { ANIM_FRAMES, FRAME_DURATION_MS, getFrame, directionFromVelocity } from '../renderer/SpriteAnim.ts'
 import { getTile } from '../world/ChunkManager.ts'
 import { houseRoomId, parseHouseRoomId, HOUSE_ROOM_SIZE } from '../world/HouseGen.ts'
 import { dungeonRoomId, parseDungeonRoomId } from '../world/DungeonGen.ts'
@@ -29,9 +31,14 @@ const SYNC_INTERVAL = 100
 export class PlayerController {
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys
   private wasd!: { up: Phaser.Input.Keyboard.Key; down: Phaser.Input.Keyboard.Key; left: Phaser.Input.Keyboard.Key; right: Phaser.Input.Keyboard.Key }
-  private sprite!: Phaser.GameObjects.Image
+  private sprite!: Phaser.GameObjects.Sprite
   private lastSync = 0
   private lastChunk = ''
+
+  private _direction: Direction = 'down'
+  private _lastSyncedDirection: Direction = 'down'
+  private _animFrame = 0
+  private _animTimer = 0
 
   /** Cooldown (ms) to prevent re-triggering a room transition immediately after one fires. */
   private _transitionCooldown = 0
@@ -70,7 +77,7 @@ export class PlayerController {
     this.py = player.y * TILE_SIZE + TILE_SIZE / 2
 
     // Player sprite — champion spritesheet, frame 0 (global sprite convention)
-    this.sprite = this.scene.add.image(this.px, this.py, player.championId)
+    this.sprite = this.scene.add.sprite(this.px, this.py, player.championId)
     this.sprite.setFrame(0)
     this.sprite.setDepth(10)
 
@@ -132,6 +139,20 @@ export class PlayerController {
         void ensureRadius(parseInt(cxStr), parseInt(cyStr), 2)
       }
     }
+
+    // Direction and walk animation
+    if (vx !== 0 || vy !== 0) {
+      this._direction = directionFromVelocity(vx, vy, this._direction)
+      this._animTimer += delta
+      if (this._animTimer >= FRAME_DURATION_MS) {
+        this._animTimer -= FRAME_DURATION_MS
+        this._animFrame = (this._animFrame + 1) % ANIM_FRAMES
+      }
+    } else {
+      this._animFrame = 0
+      this._animTimer = 0
+    }
+    this.sprite.setFrame(getFrame(this._direction, this._animFrame))
 
     // Sync to Firebase at throttled interval
     this.lastSync += delta
@@ -253,6 +274,7 @@ export class PlayerController {
           [`presence/0/players/${player.id}/level`]: player.level,
           [`presence/0/players/${player.id}/spriteFrame`]: `${player.championId}.png`,
           [`presence/0/players/${player.id}/state`]: 'idle',
+          [`presence/0/players/${player.id}/direction`]: this._direction,
         })
         this.scene.events.emit('exitRoom', { returnX: this._returnX, returnY: this._returnY })
       }
@@ -366,6 +388,7 @@ export class PlayerController {
       [`presence/${roomId}/players/${player.id}/level`]: player.level,
       [`presence/${roomId}/players/${player.id}/spriteFrame`]: `${player.championId}.png`,
       [`presence/${roomId}/players/${player.id}/state`]: 'idle',
+      [`presence/${roomId}/players/${player.id}/direction`]: this._direction,
     })
   }
 
@@ -395,17 +418,19 @@ export class PlayerController {
     const player = getLocalPlayer()
     const tx = Math.floor(this.px / TILE_SIZE)
     const ty = Math.floor(this.py / TILE_SIZE)
-    if (tx === player.x && ty === player.y) return
+    if (tx === player.x && ty === player.y && this._direction === this._lastSyncedDirection) return
 
     player.x = tx
     player.y = ty
     setLocalPlayer(player)
+    this._lastSyncedDirection = this._direction
 
     void update(ref(db), {
       [`players/${player.id}/x`]: tx,
       [`players/${player.id}/y`]: ty,
       [`presence/${player.room}/players/${player.id}/x`]: tx,
       [`presence/${player.room}/players/${player.id}/y`]: ty,
+      [`presence/${player.room}/players/${player.id}/direction`]: this._direction,
     })
   }
 }

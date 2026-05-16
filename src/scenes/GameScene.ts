@@ -11,6 +11,8 @@ import Phaser from 'phaser'
 import { ref, onValue } from 'firebase/database'
 import { db } from '../firebase.ts'
 import { TilemapRenderer, TILE_SIZE, isTileRoomExit } from '../renderer/TilemapRenderer.ts'
+import type { Direction } from '../renderer/SpriteAnim.ts'
+import { getFrame } from '../renderer/SpriteAnim.ts'
 import { PlayerController } from '../player/PlayerController.ts'
 import { enterRoom, exitRoom, findTileInRoom, getTile } from '../world/ChunkManager.ts'
 import { HOUSE_ROOM_SIZE } from '../world/HouseGen.ts'
@@ -29,6 +31,7 @@ interface PresenceEntry {
   level: number
   spriteFrame: string  // e.g. "champion_warrior.png"
   state: string
+  direction: Direction
 }
 
 export class GameScene extends Phaser.Scene {
@@ -216,11 +219,12 @@ export class GameScene extends Phaser.Scene {
               ease: 'Linear',
               onUpdate: () => label.setPosition(sprite.x, sprite.y - TILE_SIZE - 2),
             })
+            sprite.setFrame(getFrame(entry.direction ?? 'down', 0))
           } else {
             // First appearance — create sprite and name label
             const textureKey = entry.spriteFrame.replace('.png', '')
-            const sprite = this.add.image(px, py, textureKey)
-              .setFrame(0)
+            const sprite = this.add.sprite(px, py, textureKey)
+              .setFrame(getFrame(entry.direction ?? 'down', 0))
               .setDepth(10)
             const label = this.add.text(px, py - TILE_SIZE - 2, entry.name, {
               fontFamily: 'monospace',
