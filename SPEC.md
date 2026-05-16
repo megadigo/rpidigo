@@ -168,6 +168,7 @@ Every enterable village building (house_hut, house_cabin, barracks, chapel, tave
 - `dungeon_wall` borders the room perimeter (impassable)
 - `house_floor` fills the interior
 - `house_exit` tile at centre-bottom (col 4, row 7) returns the player to the overworld
+- Some residential houses (`house_hut`, `house_cabin`) also include `dungeon_stairs_down`, which enters a small cellar room
 - Furniture is **seeded-random per building**, themed by type:
   - **house_hut / house_cabin**: bed, optional table or sofa, chest with gold
   - **tavern**: 2–4 tables, 1–2 sofas, chest with gold
@@ -176,10 +177,12 @@ Every enterable village building (house_hut, house_cabin, barracks, chapel, tave
   - **chapel**: dungeon_altar (near top-centre), 1–2 chests, optional sofa
 
 ### Room ID derivation
-The room ID `house_${tx.padStart(4,'0')}_${ty.padStart(4,'0')}` is derived deterministically from the building's world coordinates — no metadata storage is needed. Dungeon rooms use `dungeon_${tx:04d}_${ty:04d}_floor_{n}`.
+The room ID `house_${tx.padStart(4,'0')}_${ty.padStart(4,'0')}` is derived deterministically from the building's world coordinates — no metadata storage is needed. Dungeon rooms use `dungeon_${tx:04d}_${ty:04d}_floor_{n}`. House cellars use `cellar_${tx:04d}_${ty:04d}`.
 
 ### Entering and exiting
 - Walk up to a building tile (touch it) → camera automatically transitions to the interior room
+- Step onto `dungeon_stairs_down` inside a qualifying house → transitions to `cellar_${tx}_${ty}`
+- Step onto `dungeon_stairs_up` inside a cellar → returns to the source house interior
 - Step onto the `house_exit` tile → automatically returns the player to the overworld at the original entry position
 - An 800 ms cooldown prevents immediate re-triggering after each transition
 
