@@ -29,6 +29,12 @@ export function houseRoomId(tx: number, ty: number): string {
   return `house_${pad4(tx)}_${pad4(ty)}`
 }
 
+export function parseHouseRoomId(roomId: string): { tx: number; ty: number } | null {
+  const m = /^house_(\d{4})_(\d{4})$/.exec(roomId)
+  if (!m) return null
+  return { tx: parseInt(m[1], 10), ty: parseInt(m[2], 10) }
+}
+
 /** Tile layout for a single house interior. */
 export interface HouseRoom {
   roomId: string
@@ -171,6 +177,7 @@ export function generateHouseRoom(
   // Some residential houses get a cellar stairs-down tile.
   // Keep this after furniture so the stair lands in a truly free spot.
   const isResidential = buildingType === 'house_hut' || buildingType === 'house_cabin'
+  // Keep cellars uncommon so they remain a discoverable bonus in villages.
   const hasCellar = isResidential && rand() < 0.4
   if (hasCellar) {
     place('dungeon_stairs_down', 1, S - 2, 1, S - 4)

@@ -17,8 +17,8 @@ import { isPassable, getSpeedMod } from '../world/CollisionMap.ts'
 import { ensureRadius, tileToChunk, getActiveRoom } from '../world/ChunkManager.ts'
 import { TILE_SIZE, getTileEntryType, isTileRoomExit } from '../renderer/TilemapRenderer.ts'
 import { getTile } from '../world/ChunkManager.ts'
-import { houseRoomId, HOUSE_ROOM_SIZE } from '../world/HouseGen.ts'
-import { dungeonRoomId } from '../world/DungeonGen.ts'
+import { houseRoomId, parseHouseRoomId, HOUSE_ROOM_SIZE } from '../world/HouseGen.ts'
+import { dungeonRoomId, parseDungeonRoomId } from '../world/DungeonGen.ts'
 import { cellarRoomId, parseCellarRoomId } from '../world/CellarGen.ts'
 
 /** Pixels per second at base speed. */
@@ -171,11 +171,9 @@ export class PlayerController {
 
         // House cellar entrance: house_XXXX_YYYY -> cellar_XXXX_YYYY
         if (activeRoom.startsWith('house_')) {
-          const coords = /^house_(\d{4})_(\d{4})$/.exec(activeRoom)
-          if (coords) {
-            const hx = parseInt(coords[1], 10)
-            const hy = parseInt(coords[2], 10)
-            const roomId = cellarRoomId(hx, hy)
+          const parsed = parseHouseRoomId(activeRoom)
+          if (parsed) {
+            const roomId = cellarRoomId(parsed.tx, parsed.ty)
             this._transitionCooldown = 800
             this._persistRoomOnly(roomId)
             this.scene.events.emit('enterRoom', { roomId, spawnX: 2, spawnY: 2 })
@@ -184,12 +182,9 @@ export class PlayerController {
         }
 
         // Dungeon floor descent: dungeon_XXXX_YYYY_floor_N -> floor N+1
-        const d = /^dungeon_(\d{4})_(\d{4})_floor_(\d+)$/.exec(activeRoom)
+        const d = parseDungeonRoomId(activeRoom)
         if (d) {
-          const dx = parseInt(d[1], 10)
-          const dy = parseInt(d[2], 10)
-          const floor = parseInt(d[3], 10)
-          const roomId = dungeonRoomId(dx, dy, floor + 1)
+          const roomId = dungeonRoomId(d.tx, d.ty, d.floor + 1)
           this._transitionCooldown = 800
           this._persistRoomOnly(roomId)
           this.scene.events.emit('enterRoom', { roomId, spawnX: 2, spawnY: 2 })
@@ -215,13 +210,10 @@ export class PlayerController {
         }
 
         // Dungeon floor ascent: floor N>1 goes to N-1, floor 1 exits overworld.
-        const d = /^dungeon_(\d{4})_(\d{4})_floor_(\d+)$/.exec(activeRoom)
+        const d = parseDungeonRoomId(activeRoom)
         if (d) {
-          const dx = parseInt(d[1], 10)
-          const dy = parseInt(d[2], 10)
-          const floor = parseInt(d[3], 10)
-          if (floor > 1) {
-            const roomId = dungeonRoomId(dx, dy, floor - 1)
+          if (d.floor > 1) {
+            const roomId = dungeonRoomId(d.tx, d.ty, d.floor - 1)
             this._transitionCooldown = 800
             this._persistRoomOnly(roomId)
             this.scene.events.emit('enterRoom', { roomId, spawnX: 2, spawnY: 2 })

@@ -200,27 +200,27 @@ async function _generateAndPersistChunk(cx: number, cy: number, key: string): Pr
   // 4. House rooms — each room's tiles batched separately (rooms are small, ~144 tiles)
   if (chunkData.houseRooms) {
     for (const room of chunkData.houseRooms) {
-      const roomUpdate: Record<string, unknown> = {}
-      for (const [k, t] of room.tiles) {
-        roomUpdate[`map/${room.roomId}/${k}`] = JSON.parse(JSON.stringify(t))
-      }
-      await update(ref(db), roomUpdate)
+      await _persistRoomTiles(room.roomId, room.tiles)
     }
   }
 
   // 4b. Cellar rooms — each room's tiles batched separately
   if (chunkData.cellarRooms) {
     for (const room of chunkData.cellarRooms) {
-      const roomUpdate: Record<string, unknown> = {}
-      for (const [k, t] of room.tiles) {
-        roomUpdate[`map/${room.roomId}/${k}`] = JSON.parse(JSON.stringify(t))
-      }
-      await update(ref(db), roomUpdate)
+      await _persistRoomTiles(room.roomId, room.tiles)
     }
   }
 
   // 5. Sentinel last — signals other clients that tiles are fully written
   await set(ref(db, `map/chunks/${key}`), true)
+}
+
+async function _persistRoomTiles(roomId: string, tiles: Map<string, TileData>): Promise<void> {
+  const roomUpdate: Record<string, unknown> = {}
+  for (const [k, t] of tiles) {
+    roomUpdate[`map/${roomId}/${k}`] = JSON.parse(JSON.stringify(t))
+  }
+  await update(ref(db), roomUpdate)
 }
 
 function _trackAccess(key: string): void {

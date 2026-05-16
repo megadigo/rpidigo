@@ -43,6 +43,7 @@ export function generateCellarRoom(tx: number, ty: number, seed: number): Cellar
   }
 
   // Carve a few inner wall clusters to make it feel dungeon-like.
+  // 4–6 clusters keeps the room navigable while adding enough variation.
   const clusters = 4 + seededRandInt(rand, 0, 2)
   for (let i = 0; i < clusters; i++) {
     const cx = seededRandInt(rand, 3, S - 4)
