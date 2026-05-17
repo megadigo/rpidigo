@@ -20,7 +20,7 @@ export interface WorldConfig {
  * Increment this when TileData schema changes to force all clients to
  * discard stale Firebase map data and regenerate from scratch.
  */
-const SCHEMA_VERSION = 5
+const SCHEMA_VERSION = 6
 
 let _worldConfig: WorldConfig | null = null
 

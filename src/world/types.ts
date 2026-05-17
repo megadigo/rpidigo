@@ -51,7 +51,7 @@ export interface EnemyInstance {
   spawnX: number
   spawnY: number
   state: string
-  executingPlayerId: null
+  executingPlayerId: string | null
   lastLogicAt: number
   script: string
   memory: Record<string, unknown>
@@ -76,7 +76,7 @@ export interface NpcInstance {
   villageId: string
   zoneId: string
   state: string
-  executingPlayerId: null
+  executingPlayerId: string | null
   lastLogicAt: number
   script: string
   memory: Record<string, unknown>

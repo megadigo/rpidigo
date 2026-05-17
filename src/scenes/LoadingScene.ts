@@ -11,6 +11,7 @@ import { ref, update } from 'firebase/database'
 import { db } from '../firebase.ts'
 import { getTileSheets } from '../renderer/TilemapRenderer.ts'
 import { enemies } from '../data/enemies.ts'
+import { loadPyodideRuntime } from '../world/ScriptExecutor.ts'
 
 /** Champion id → file mapping (matches SPEC.md). */
 const CHAMPION_FILES: Record<string, string> = {
@@ -90,12 +91,16 @@ export class LoadingScene extends Phaser.Scene {
     try {
       await this.setProgress(0.1, 'Connecting…')
       await ensureWorldReady()
-      await this.setProgress(0.5, 'Generating spawn area…')
+      await this.setProgress(0.4, 'Generating spawn area…')
 
       const player = getLocalPlayer()
       const cx = Math.floor(player.x / 32)
       const cy = Math.floor(player.y / 32)
       await ensureRadius(cx, cy, 2)
+
+      await this.setProgress(0.6, 'Loading AI runtime…')
+      // Loads Pyodide WASM from CDN; continues silently if offline or blocked.
+      await loadPyodideRuntime()
 
       // Ensure spawn is on a passable tile (spawn search runs before chunks load,
       // so the fallback pos (500,500) may land on a tree or other impassable tile).

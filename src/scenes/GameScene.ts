@@ -22,6 +22,8 @@ import { CELLAR_ROOM_SIZE } from '../world/CellarGen.ts'
 import { getLocalPlayer, setLocalPlayer } from '../player/Auth.ts'
 import { remotePlayerTiles, remoteEnemyTiles, isPassable } from '../world/CollisionMap.ts'
 import { EnemyRegistry } from '../registry/registries.ts'
+import { ScriptExecutor } from '../world/ScriptExecutor.ts'
+import type { NearbyPlayer } from '../world/ScriptExecutor.ts'
 
 /** Tile bounds of the 1000×1000 overworld in pixels. */
 const WORLD_PIXEL_SIZE = 1000 * TILE_SIZE
@@ -60,8 +62,9 @@ export class GameScene extends Phaser.Scene {
 
   /** Remote player sprites keyed by player ID. */
   private _remotePlayers = new Map<string, {
-    sprite: Phaser.GameObjects.Image
+    sprite: Phaser.GameObjects.Sprite
     label: Phaser.GameObjects.Text
+    entry: PresenceEntry
   }>()
   /** Enemy sprites keyed by enemy instance ID. */
   private _remoteEnemies = new Map<string, Phaser.GameObjects.Image>()
@@ -76,6 +79,9 @@ export class GameScene extends Phaser.Scene {
   private _enemyUnsub: (() => void) | null = null
   /** Unsubscribe function for the current Firebase NPC listener. */
   private _npcUnsub: (() => void) | null = null
+
+  /** Entity AI runner (Step 9). */
+  private readonly _scriptExecutor = new ScriptExecutor()
 
   constructor() {
     super({ key: 'GameScene' })
@@ -132,11 +138,17 @@ export class GameScene extends Phaser.Scene {
       if (this._presenceUnsub) { this._presenceUnsub(); this._presenceUnsub = null }
       if (this._enemyUnsub)    { this._enemyUnsub();    this._enemyUnsub    = null }
       if (this._npcUnsub)      { this._npcUnsub();      this._npcUnsub      = null }
+      this._scriptExecutor.destroy()
     })
   }
 
   update(_time: number, delta: number): void {
     this.playerController.update(delta)
+
+    // Run entity AI scripts (time-sliced: at most BUDGET_MS wall-clock per frame)
+    const tx = Math.floor(this.playerController.px / TILE_SIZE)
+    const ty = Math.floor(this.playerController.py / TILE_SIZE)
+    this._scriptExecutor.tick(tx, ty, this._buildNearbyPlayers())
 
     const cam = this.cameras.main
     const v = cam.worldView
@@ -146,6 +158,25 @@ export class GameScene extends Phaser.Scene {
       v.right + TILE_SIZE,
       v.bottom + TILE_SIZE,
     )
+  }
+
+  /**
+   * Build the NearbyPlayer list passed to ScriptExecutor each tick.
+   * Includes the local player and all remote players currently in the room.
+   */
+  private _buildNearbyPlayers(): NearbyPlayer[] {
+    const local = getLocalPlayer()
+    const result: NearbyPlayer[] = [{
+      id:    local.id,
+      name:  local.name,
+      x:     local.x,
+      y:     local.y,
+      level: local.level,
+    }]
+    for (const [id, { entry }] of this._remotePlayers) {
+      result.push({ id, name: entry.name, x: entry.x, y: entry.y, level: entry.level })
+    }
+    return result
   }
 
   /**
@@ -242,6 +273,9 @@ export class GameScene extends Phaser.Scene {
     for (const sprite of this._remoteNpcs.values()) sprite.destroy()
     this._remoteNpcs.clear()
 
+    // Tell the AI executor about the room change
+    this._scriptExecutor.setRoom(room)
+
     const localId = getLocalPlayer().id
     const presRef = ref(db, `presence/${room}/players`)
 
@@ -263,7 +297,9 @@ export class GameScene extends Phaser.Scene {
 
           if (this._remotePlayers.has(id)) {
             // Tween existing sprite to the new position; label tracks the sprite
-            const { sprite, label } = this._remotePlayers.get(id)!
+            const rec = this._remotePlayers.get(id)!
+            rec.entry = entry  // keep cached entry current
+            const { sprite, label } = rec
             this.tweens.add({
               targets: sprite,
               x: px, y: py,
@@ -285,7 +321,7 @@ export class GameScene extends Phaser.Scene {
               stroke: '#000000',
               strokeThickness: 2,
             }).setOrigin(0.5, 1).setDepth(11)
-            this._remotePlayers.set(id, { sprite, label })
+            this._remotePlayers.set(id, { sprite, label, entry })
           }
         }
       }
@@ -475,6 +511,7 @@ export class GameScene extends Phaser.Scene {
       // Atomic Firebase write
       await update(ref(db), {
         [`presence/${room}/enemies/${targetId}`]:  null,
+        [`entities/enemies/${targetId}`]:          null,  // remove from ScriptExecutor's feed
         [`players/${player.id}/xp`]:               player.xp,
         [`players/${player.id}/gold`]:             newGold,
         [`players/${player.id}/inventory`]:        newInventory,

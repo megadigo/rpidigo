@@ -5,6 +5,7 @@
  */
 import type { TileData, EnemyInstance } from './types.ts'
 import { mulberry32, seededRandInt, tileKey } from './utils.ts'
+import { EnemyRegistry } from '../registry/registries.ts'
 
 /** Canonical dungeon room ID derived from the entrance tile's world coordinates. */
 export function dungeonRoomId(tx: number, ty: number, floor: number): string {
@@ -211,6 +212,12 @@ function makeEnemy(
   hp: number,
   power: number,
 ): EnemyInstance {
+  let script = 'pass'
+  try {
+    const def = EnemyRegistry.get(templateId)
+    script = def.behaviorScript
+  } catch { /* fallback */ }
+
   return {
     id, templateId, baseType, variant,
     hp, maxHp: hp, mp: 0, maxMp: 0, power,
@@ -219,7 +226,7 @@ function makeEnemy(
     state: 'idle',
     executingPlayerId: null,
     lastLogicAt: 0,
-    script: '# idle patrol script\npass',
+    script,
     memory: {},
     carriedGold: 0,
   }

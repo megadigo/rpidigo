@@ -24,7 +24,9 @@
     // ── entities: readable by all, writable by all (executor assignment + script updates) ──
     "entities": {
       ".read": true,
-      ".write": true
+      ".write": true,
+      "enemies": { ".indexOn": ["room"] },
+      "npcs":    { ".indexOn": ["room"] }
     },
 
     // ── presence: readable by all, writable by all (movement + disconnect cleanup) ──

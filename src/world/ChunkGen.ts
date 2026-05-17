@@ -10,6 +10,7 @@ import { generateVillage } from './VillageGen.ts'
 import { generateDungeon } from './DungeonGen.ts'
 import { generateHouseRoom } from './HouseGen.ts'
 import { generateCellarRoom } from './CellarGen.ts'
+import { EnemyRegistry } from '../registry/registries.ts'
 
 const CELLAR_SEED_OFFSET = 0x51e11a2
 
@@ -111,18 +112,27 @@ function rollEnemy(
   for (const e of table) { roll -= e.weight; if (roll <= 0) { picked = e; break } }
 
   const [base, variant = 'standard'] = picked.id.split('_') as [string, string]
+
+  let hp = 40, power = 10, script = 'pass'
+  try {
+    const def = EnemyRegistry.get(picked.id)
+    hp     = def.baseHp
+    power  = def.basePower
+    script = def.behaviorScript
+  } catch { /* fallback values already set */ }
+
   return {
     id: `enemy_${x}_${y}_${seed & 0xffff}`,
     templateId: picked.id,
     baseType: base,
     variant,
-    hp: 40, maxHp: 40, mp: 0, maxMp: 0, power: 10,
+    hp, maxHp: hp, mp: 0, maxMp: 0, power,
     room: '0', x, y,
     spawnRoom: '0', spawnX: x, spawnY: y,
     state: 'idle',
     executingPlayerId: null,
     lastLogicAt: 0,
-    script: '# idle patrol script\npass',
+    script,
     memory: {},
     carriedGold: 0,
   }
