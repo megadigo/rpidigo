@@ -12,6 +12,12 @@ import { isTileImpassable, getTileSpeedMod } from '../renderer/TilemapRenderer.t
  */
 export const remotePlayerTiles = new Set<string>()
 
+/**
+ * Tile positions (`"${x}_${y}"`) currently occupied by enemies.
+ * Updated by GameScene whenever the enemy presence snapshot changes.
+ */
+export const remoteEnemyTiles = new Set<string>()
+
 /** Returns false for tiles not yet loaded or out of bounds [0, 999]. */
 export function isPassable(x: number, y: number): boolean {
   if (x < 0 || y < 0 || x >= 1000 || y >= 1000) return false
@@ -20,6 +26,7 @@ export function isPassable(x: number, y: number): boolean {
   if (isTileImpassable(tile.g)) return false
   if (tile.m?.some(m => isTileImpassable(m))) return false
   if (remotePlayerTiles.has(`${x}_${y}`)) return false
+  if (remoteEnemyTiles.has(`${x}_${y}`)) return false
   return true
 }
 

@@ -17,7 +17,7 @@ import { isPassable, getSpeedMod } from '../world/CollisionMap.ts'
 import { ensureRadius, tileToChunk, getActiveRoom } from '../world/ChunkManager.ts'
 import { TILE_SIZE, getTileEntryType, isTileRoomExit } from '../renderer/TilemapRenderer.ts'
 import type { Direction } from '../renderer/SpriteAnim.ts'
-import { ANIM_FRAMES, FRAME_DURATION_MS, getFrame, directionFromVelocity } from '../renderer/SpriteAnim.ts'
+import { ANIM_FRAMES, FRAME_DURATION_MS, getFrame, getAttackFrame, directionFromVelocity } from '../renderer/SpriteAnim.ts'
 import { getTile } from '../world/ChunkManager.ts'
 import { houseRoomId, parseHouseRoomId, HOUSE_ROOM_SIZE } from '../world/HouseGen.ts'
 import { dungeonRoomId, parseDungeonRoomId } from '../world/DungeonGen.ts'
@@ -42,6 +42,15 @@ export class PlayerController {
 
   /** Cooldown (ms) to prevent re-triggering a room transition immediately after one fires. */
   private _transitionCooldown = 0
+
+  /** E key for interact / attack. */
+  private eKey: Phaser.Input.Keyboard.Key | null = null
+  /** Cooldown (ms) between attacks. */
+  private _attackCooldown = 0
+  /** Current frame index of the attack animation. */
+  private _attackAnimFrame = 0
+  /** Time accumulator for the attack animation. */
+  private _attackAnimTimer = 0
 
   /** Saved overworld tile position before entering a room. */
   private _returnX = 0
@@ -89,6 +98,7 @@ export class PlayerController {
         left:  this.scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.A),
         right: this.scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.D),
       }
+      this.eKey = this.scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.E)
     }
 
     // Follow camera — lerp 1 = instant snap so tiles are always in view
@@ -155,13 +165,38 @@ export class PlayerController {
       this._animFrame = 0
       this._animTimer = 0
     }
-    this.sprite.setFrame(getFrame(this._direction, this._animFrame))
+
+    // Attack animation overrides walk frame while cooldown is active
+    if (this._attackCooldown > 0) {
+      this._attackAnimTimer += delta
+      if (this._attackAnimTimer >= FRAME_DURATION_MS) {
+        this._attackAnimTimer -= FRAME_DURATION_MS
+        // Advance but clamp at last frame (hold pose until cooldown ends)
+        this._attackAnimFrame = Math.min(this._attackAnimFrame + 1, ANIM_FRAMES - 1)
+      }
+      this.sprite.setFrame(getAttackFrame(this._direction, this._attackAnimFrame))
+    } else {
+      this.sprite.setFrame(getFrame(this._direction, this._animFrame))
+    }
 
     // Sync to Firebase at throttled interval
     this.lastSync += delta
     if (this.lastSync >= SYNC_INTERVAL) {
       this.lastSync = 0
       this._syncPosition()
+    }
+
+    // Attack / interact (E key) — ignore when chat input is focused
+    if (this._attackCooldown > 0) this._attackCooldown -= delta
+    if (this._attackCooldown <= 0
+        && this.eKey?.isDown
+        && !(document.activeElement instanceof HTMLInputElement)) {
+      const tx = Math.floor(this.px / TILE_SIZE)
+      const ty = Math.floor(this.py / TILE_SIZE)
+      this.scene.events.emit('playerAttack', { tx, ty, direction: this._direction })
+      this._attackCooldown = 500
+      this._attackAnimFrame = 0
+      this._attackAnimTimer = 0
     }
 
     // Auto room-transition: trigger when touching an entry/exit tile

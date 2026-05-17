@@ -10,7 +10,7 @@
  * renders entity sprites at frame 0 (display only, no AI).
  */
 import Phaser from 'phaser'
-import { ref, onValue } from 'firebase/database'
+import { ref, onValue, update } from 'firebase/database'
 import { db } from '../firebase.ts'
 import { TilemapRenderer, TILE_SIZE, isTileRoomExit } from '../renderer/TilemapRenderer.ts'
 import type { Direction } from '../renderer/SpriteAnim.ts'
@@ -20,7 +20,7 @@ import { enterRoom, exitRoom, findTileInRoom, getTile } from '../world/ChunkMana
 import { HOUSE_ROOM_SIZE } from '../world/HouseGen.ts'
 import { CELLAR_ROOM_SIZE } from '../world/CellarGen.ts'
 import { getLocalPlayer, setLocalPlayer } from '../player/Auth.ts'
-import { remotePlayerTiles, isPassable } from '../world/CollisionMap.ts'
+import { remotePlayerTiles, remoteEnemyTiles, isPassable } from '../world/CollisionMap.ts'
 import { EnemyRegistry } from '../registry/registries.ts'
 
 /** Tile bounds of the 1000×1000 overworld in pixels. */
@@ -65,6 +65,8 @@ export class GameScene extends Phaser.Scene {
   }>()
   /** Enemy sprites keyed by enemy instance ID. */
   private _remoteEnemies = new Map<string, Phaser.GameObjects.Image>()
+  /** Cached enemy presence data (hp, position, templateId) keyed by instance ID. */
+  private _enemyData = new Map<string, EnemyPresenceEntry>()
   /** NPC sprites keyed by NPC instance ID. */
   private _remoteNpcs = new Map<string, Phaser.GameObjects.Image>()
 
@@ -111,6 +113,14 @@ export class GameScene extends Phaser.Scene {
       'exitRoom',
       (data: { returnX: number; returnY: number }) => {
         this._handleExitRoom(data.returnX, data.returnY)
+      },
+    )
+
+    // Attack: PlayerController emits this when E is pressed adjacent to an enemy
+    this.events.on(
+      'playerAttack',
+      (data: { tx: number; ty: number; direction: Direction }) => {
+        void this._handlePlayerAttack(data.tx, data.ty, data.direction)
       },
     )
 
@@ -226,6 +236,8 @@ export class GameScene extends Phaser.Scene {
 
     for (const sprite of this._remoteEnemies.values()) sprite.destroy()
     this._remoteEnemies.clear()
+    this._enemyData.clear()
+    remoteEnemyTiles.clear()
 
     for (const sprite of this._remoteNpcs.values()) sprite.destroy()
     this._remoteNpcs.clear()
@@ -293,11 +305,18 @@ export class GameScene extends Phaser.Scene {
       const data = snap.val() as Record<string, EnemyPresenceEntry> | null
       const incoming = new Set<string>()
 
+      // Rebuild occupied tiles from the full snapshot
+      remoteEnemyTiles.clear()
+
       if (data) {
         for (const [id, entry] of Object.entries(data)) {
           incoming.add(id)
           const px = entry.x * TILE_SIZE + TILE_SIZE / 2
           const py = entry.y * TILE_SIZE + TILE_SIZE / 2
+
+          // Always refresh cached data (hp may have changed)
+          this._enemyData.set(id, { ...entry })
+          remoteEnemyTiles.add(`${entry.x}_${entry.y}`)
 
           if (this._remoteEnemies.has(id)) {
             this._remoteEnemies.get(id)!.setPosition(px, py)
@@ -319,6 +338,8 @@ export class GameScene extends Phaser.Scene {
         if (!incoming.has(id)) {
           sprite.destroy()
           this._remoteEnemies.delete(id)
+          this._enemyData.delete(id)
+          // remoteEnemyTiles already rebuilt from snapshot above
         }
       }
     })
@@ -354,5 +375,115 @@ export class GameScene extends Phaser.Scene {
         }
       }
     })
+  }
+
+  /**
+   * Handle an attack attempt from the local player.
+   * Scans the 4 cardinal tiles for an enemy (facing direction first).
+   * Deals damage, flashes the sprite red, kills the enemy on HP ≤ 0.
+   */
+  private async _handlePlayerAttack(tx: number, ty: number, direction: Direction): Promise<void> {
+    // Only attack the single tile the player is facing
+    const facingOffset: Record<Direction, [number, number]> = {
+      down:  [0, 1],
+      up:    [0, -1],
+      left:  [-1, 0],
+      right: [1, 0],
+    }
+
+    const [dx, dy] = facingOffset[direction]
+    const atx = tx + dx
+    const aty = ty + dy
+
+    let targetId: string | null = null
+    let targetEntry: EnemyPresenceEntry | null = null
+
+    for (const [id, entry] of this._enemyData.entries()) {
+      if (entry.x === atx && entry.y === aty) {
+        targetId = id
+        targetEntry = { ...entry }
+        break
+      }
+    }
+
+    if (!targetId || !targetEntry) return
+
+    const player = getLocalPlayer()
+    const damage  = Math.max(1, player.power)
+    const newHp   = targetEntry.hp - damage
+
+    // Optimistically update cached HP so rapid key presses don't double-count
+    const cached = this._enemyData.get(targetId)
+    if (cached) cached.hp = newHp
+
+    // Flash the enemy sprite red for 150 ms
+    const sprite = this._remoteEnemies.get(targetId)
+    if (sprite) {
+      sprite.setTint(0xff4444)
+      this.time.delayedCall(150, () => { if (sprite.active) sprite.clearTint() })
+    }
+
+    // Floating damage number
+    const dmgText = this.add.text(
+      targetEntry.x * TILE_SIZE + TILE_SIZE / 2,
+      targetEntry.y * TILE_SIZE,
+      `-${damage}`,
+      { fontFamily: 'monospace', fontSize: '7px', color: '#ff3333', stroke: '#000000', strokeThickness: 2 },
+    ).setOrigin(0.5, 1).setDepth(50)
+    this.tweens.add({
+      targets: dmgText,
+      y:       dmgText.y - TILE_SIZE * 1.5,
+      alpha:   0,
+      duration: 1400,
+      ease: 'Cubic.easeOut',
+      onComplete: () => dmgText.destroy(),
+    })
+
+    const room = player.room
+
+    if (newHp <= 0) {
+      // ── Enemy death ────────────────────────────────────────────────────
+      let template: import('../registry/types.ts').EnemyDefinition | null = null
+      try { template = EnemyRegistry.get(targetEntry.templateId) } catch { /* unknown */ }
+
+      const xpGain = template ? Math.max(1, Math.floor(template.baseHp / 5)) : 1
+
+      // Roll loot table
+      const newInventory = [...player.inventory]
+      let newGold = player.gold
+      if (template) {
+        for (const { itemId, min, max, chance } of template.lootTable) {
+          if (Math.random() < chance) {
+            const qty = Math.floor(Math.random() * (max - min + 1)) + min
+            if (itemId === 'gold_coin') {
+              newGold += qty
+            } else {
+              const slot = newInventory.find(s => s.itemId === itemId)
+              if (slot) slot.quantity += qty
+              else newInventory.push({ itemId, quantity: qty, metadata: {} })
+            }
+          }
+        }
+      }
+
+      // Optimistically update local player
+      player.xp        = player.xp + xpGain
+      player.gold      = newGold
+      player.inventory = newInventory
+      setLocalPlayer(player)
+
+      // Atomic Firebase write
+      await update(ref(db), {
+        [`presence/${room}/enemies/${targetId}`]:  null,
+        [`players/${player.id}/xp`]:               player.xp,
+        [`players/${player.id}/gold`]:             newGold,
+        [`players/${player.id}/inventory`]:        newInventory,
+      })
+    } else {
+      // ── Damage only ────────────────────────────────────────────────────
+      await update(ref(db), {
+        [`presence/${room}/enemies/${targetId}/hp`]: newHp,
+      })
+    }
   }
 }

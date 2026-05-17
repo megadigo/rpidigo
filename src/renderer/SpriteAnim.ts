@@ -21,6 +21,14 @@ export function getFrame(dir: Direction, frameIndex: number): number {
 }
 
 /**
+ * Returns the frame index for the attack animation.
+ * Attack rows are 4–7, same direction order as walk rows 0–3.
+ */
+export function getAttackFrame(dir: Direction, frameIndex: number): number {
+  return (ANIM_ROWS[dir] + 4) * ANIM_FRAMES + frameIndex
+}
+
+/**
  * Derives the facing direction from a velocity vector.
  * Prefers the vertical axis on diagonals.
  * Falls back to `fallback` when both components are zero (idle).

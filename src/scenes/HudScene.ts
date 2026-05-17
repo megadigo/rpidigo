@@ -31,6 +31,8 @@ export class HudScene extends Phaser.Scene {
   private hpText!: Phaser.GameObjects.Text
   private mpText!: Phaser.GameObjects.Text
   private goldText!: Phaser.GameObjects.Text
+  private xpText!: Phaser.GameObjects.Text
+  private levelText!: Phaser.GameObjects.Text
   private posText!: Phaser.GameObjects.Text
 
   private _chatPanel!: HTMLDivElement
@@ -60,11 +62,14 @@ export class HudScene extends Phaser.Scene {
 
     const player = getLocalPlayer()
     this.add.text(6, 3, player.name, { ...style, color: '#ffdd88' }).setDepth(101)
+    this.levelText = this.add.text(110, 3, '', { ...style, color: '#ccff88' }).setDepth(101)
 
     this.hpText   = this.add.text(160, 3, '', style).setDepth(101)
     this.mpText   = this.add.text(300, 3, '', style).setDepth(101)
     this.goldText = this.add.text(440, 3, '', style).setDepth(101)
-    this.posText  = this.add.text(560, 3, '', { ...style, color: '#aaaaaa' }).setDepth(101)
+    this.xpText   = this.add.text(560, 3, '', { ...style, color: '#aaddff' }).setDepth(101)
+    this.posText  = this.add.text(this.scale.width - 6, this.scale.height - 4, '', { ...style, fontSize: '10px', color: '#aaaaaa' })
+      .setOrigin(1, 1).setDepth(101)
 
     this._buildChatPanel()
     this._subscribeChat(player.room)
@@ -243,6 +248,8 @@ export class HudScene extends Phaser.Scene {
     this.hpText.setText(`HP ${p.hp}/${p.maxHp}`)
     this.mpText.setText(`MP ${p.mp}/${p.maxMp}`)
     this.goldText.setText(`Gold ${p.gold}`)
+    this.xpText.setText(`XP ${p.xp}`)
+    this.levelText.setText(`Lv.${p.level}`)
     this.posText.setText(`${p.x},${p.y}`)
   }
 }
