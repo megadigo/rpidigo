@@ -55,3 +55,16 @@ export function randomSeed(): number {
   crypto.getRandomValues(arr)
   return arr[0]
 }
+
+/**
+ * Total cumulative XP required to reach `lvl` from level 1.
+ * Formula: 50 × lvl² − 50 × lvl
+ *   Lv 2 →    100 XP  (~17 wolves at 6 XP each)
+ *   Lv 3 →    300 XP
+ *   Lv 5 →  1 000 XP
+ *   Lv 10 →  4 500 XP
+ *   Lv 20 → 19 000 XP
+ */
+export function xpForLevel(lvl: number): number {
+  return 50 * lvl * lvl - 50 * lvl
+}

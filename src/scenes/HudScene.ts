@@ -7,6 +7,7 @@ import Phaser from 'phaser'
 import { ref, onValue, push, remove } from 'firebase/database'
 import { db } from '../firebase.ts'
 import { getLocalPlayer } from '../player/Auth.ts'
+import { xpForLevel } from '../world/utils.ts'
 
 /** Chebyshev tile radius — messages outside this range are hidden. */
 const CHAT_RANGE  = 15
@@ -248,7 +249,7 @@ export class HudScene extends Phaser.Scene {
     this.hpText.setText(`HP ${p.hp}/${p.maxHp}`)
     this.mpText.setText(`MP ${p.mp}/${p.maxMp}`)
     this.goldText.setText(`Gold ${p.gold}`)
-    this.xpText.setText(`XP ${p.xp}`)
+    this.xpText.setText(`XP ${p.xp}/${xpForLevel(p.level + 1)}`)
     this.levelText.setText(`Lv.${p.level}`)
     this.posText.setText(`${p.x},${p.y}`)
   }

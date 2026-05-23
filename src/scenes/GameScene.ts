@@ -21,6 +21,7 @@ import { HOUSE_ROOM_SIZE } from '../world/HouseGen.ts'
 import { CELLAR_ROOM_SIZE } from '../world/CellarGen.ts'
 import { getLocalPlayer, setLocalPlayer } from '../player/Auth.ts'
 import { remotePlayerTiles, remoteEnemyTiles, isPassable } from '../world/CollisionMap.ts'
+import { xpForLevel } from '../world/utils.ts'
 import { EnemyRegistry } from '../registry/registries.ts'
 import { ScriptExecutor } from '../world/ScriptExecutor.ts'
 import type { NearbyPlayer } from '../world/ScriptExecutor.ts'
@@ -108,6 +109,13 @@ export class GameScene extends Phaser.Scene {
   /** Minimum milliseconds between consecutive enemy hits (invincibility window). */
   private static readonly _INVINCIBILITY_MS = 600
 
+  /** Accumulated delta (ms) since the last regen tick. Reset whenever the player takes damage. */
+  private _healTimer = 0
+  /** Milliseconds the player must be out of combat before regen starts ticking. */
+  private static readonly _HEAL_OOC_DELAY_MS = 5_000
+  /** Milliseconds between regen ticks once out of combat. */
+  private static readonly _HEAL_INTERVAL_MS  = 5_000
+
   constructor() {
     super({ key: 'GameScene' })
   }
@@ -171,6 +179,25 @@ export class GameScene extends Phaser.Scene {
 
   update(_time: number, delta: number): void {
     this.playerController.update(delta)
+
+    // ── Passive HP regen ──────────────────────────────────────────────────────
+    // Ticks every _HEAL_INTERVAL_MS, but only while alive, out of combat for
+    // at least _HEAL_OOC_DELAY_MS, and below max HP.
+    if (!this._isDead) {
+      const oocMs = performance.now() - this._lastDamageAt
+      const player = getLocalPlayer()
+      if (oocMs >= GameScene._HEAL_OOC_DELAY_MS && player.hp < player.maxHp) {
+        this._healTimer += delta
+        if (this._healTimer >= GameScene._HEAL_INTERVAL_MS) {
+          this._healTimer = 0
+          this._applyRegen()
+        }
+      } else {
+        // In combat (or at full HP) — keep timer zeroed so the 5 s window
+        // starts fresh after the last hit.
+        this._healTimer = 0
+      }
+    }
 
     // Run entity AI scripts (time-sliced: at most BUDGET_MS wall-clock per frame)
     const tx = Math.floor(this.playerController.px / TILE_SIZE)
@@ -271,6 +298,39 @@ export class GameScene extends Phaser.Scene {
     void update(ref(db), { [`players/${player.id}/hp`]: newHp })
 
     if (newHp <= 0) this._triggerDeath()
+  }
+
+  /**
+   * Passive regen tick — heals 5 % of maxHp, shows a floating green number above
+   * the player sprite (mirrors the red damage float), and writes HP to Firebase.
+   */
+  private _applyRegen(): void {
+    const player = getLocalPlayer()
+    const amount = Math.max(1, Math.ceil(player.maxHp * 0.05))
+    const newHp  = Math.min(player.maxHp, player.hp + amount)
+    const gained = newHp - player.hp
+    if (gained <= 0) return
+
+    player.hp = newHp
+    setLocalPlayer(player)
+
+    // Floating green heal number — same position, size and tween as damage floats
+    const healText = this.add.text(
+      this.playerController.px,
+      this.playerController.py - TILE_SIZE,
+      `+${gained}`,
+      { fontFamily: 'monospace', fontSize: '7px', color: '#44ff88', stroke: '#000000', strokeThickness: 2 },
+    ).setOrigin(0.5, 1).setDepth(50)
+    this.tweens.add({
+      targets:  healText,
+      y:        healText.y - TILE_SIZE * 1.5,
+      alpha:    0,
+      duration: 1400,
+      ease:     'Cubic.easeOut',
+      onComplete: () => healText.destroy(),
+    })
+
+    void update(ref(db), { [`players/${player.id}/hp`]: newHp })
   }
 
   /**
@@ -748,7 +808,53 @@ export class GameScene extends Phaser.Scene {
       player.xp        = player.xp + xpGain
       player.gold      = newGold
       player.inventory = newInventory
+
+      // ── Level-up check ───────────────────────────────────────────────
+      let levelsGained   = 0
+      let totalHpGained  = 0
+      let totalPwrGained = 0
+      while (player.xp >= xpForLevel(player.level + 1)) {
+        // Gains scale with the level being left behind so each step feels bigger.
+        // maxHp: +11 at Lv2, +15 at Lv6, +20 at Lv11, +30 at Lv21
+        // power: +1 normally, +1 extra every 5 levels (Lv5, 10, 15, 20 …)
+        const hpGain  = 10 + player.level              // pre-increment level
+        const pwrGain = 1 + Math.floor(player.level / 5)
+
+        player.level  += 1
+        player.maxHp  += hpGain
+        player.hp      = Math.min(player.hp + hpGain, player.maxHp)
+        player.power   += pwrGain
+
+        totalHpGained  += hpGain
+        totalPwrGained += pwrGain
+        levelsGained++
+      }
+
       setLocalPlayer(player)
+
+      // Level-up banner — screen-space, shows exact gains
+      if (levelsGained > 0) {
+        const cx = this.cameras.main.width  / 2
+        const cy = this.cameras.main.height / 2
+        const gainLine = `+${totalHpGained} HP   +${totalPwrGained} Power`
+        const lvText = this.add.text(
+          cx, cy - 20,
+          `✦ LEVEL UP!  Lv.${player.level} ✦\n${gainLine}`,
+          {
+            fontFamily: 'monospace', fontSize: '16px', color: '#ffff44',
+            stroke: '#000000', strokeThickness: 3,
+            align: 'center',
+          },
+        ).setOrigin(0.5).setScrollFactor(0).setDepth(200)
+        this.tweens.add({
+          targets:  lvText,
+          y:        cy - 80,
+          alpha:    0,
+          duration: 2800,
+          ease:     'Cubic.easeOut',
+          onComplete: () => lvText.destroy(),
+        })
+      }
 
       // Remove from ScriptExecutor cache immediately so the next tick
       // doesn't re-create the entity in Firebase before the listener fires
@@ -761,6 +867,12 @@ export class GameScene extends Phaser.Scene {
         [`players/${player.id}/xp`]:               player.xp,
         [`players/${player.id}/gold`]:             newGold,
         [`players/${player.id}/inventory`]:        newInventory,
+        ...(levelsGained > 0 && {
+          [`players/${player.id}/level`]:  player.level,
+          [`players/${player.id}/maxHp`]:  player.maxHp,
+          [`players/${player.id}/hp`]:     player.hp,
+          [`players/${player.id}/power`]:  player.power,
+        }),
       })
     } else {
       // ── Damage only ────────────────────────────────────────────────────
