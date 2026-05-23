@@ -7,14 +7,14 @@
  * Step 5: subscribes to /presence/{room}/players and renders remote player
  * sprites with name labels, tweening positions on each Firebase update.
  * Step 6: subscribes to /presence/{room}/enemies and /presence/{room}/npcs and
- * renders entity sprites at frame 0 (display only, no AI).
+ * renders directional 5-frame entity walk animations.
  */
 import Phaser from 'phaser'
 import { ref, onValue, update } from 'firebase/database'
 import { db } from '../firebase.ts'
 import { TilemapRenderer, TILE_SIZE, isTileRoomExit } from '../renderer/TilemapRenderer.ts'
 import type { Direction } from '../renderer/SpriteAnim.ts'
-import { getFrame } from '../renderer/SpriteAnim.ts'
+import { ANIM_FRAMES, FRAME_DURATION_MS, directionFromVelocity, getFrame } from '../renderer/SpriteAnim.ts'
 import { PlayerController } from '../player/PlayerController.ts'
 import { enterRoom, exitRoom, findTileInRoom, getTile } from '../world/ChunkManager.ts'
 import { HOUSE_ROOM_SIZE } from '../world/HouseGen.ts'
@@ -56,6 +56,15 @@ interface NpcPresenceEntry {
   state: string
 }
 
+interface AnimatedEntityRecord<TEntry extends { x: number; y: number }> {
+  sprite: Phaser.GameObjects.Sprite
+  entry: TEntry
+  direction: Direction
+  animFrame: number
+  animTimer: number
+  isMoving: boolean
+}
+
 export class GameScene extends Phaser.Scene {
   private tilemapRenderer!: TilemapRenderer
   private playerController!: PlayerController
@@ -67,11 +76,11 @@ export class GameScene extends Phaser.Scene {
     entry: PresenceEntry
   }>()
   /** Enemy sprites keyed by enemy instance ID. */
-  private _remoteEnemies = new Map<string, Phaser.GameObjects.Image>()
+  private _remoteEnemies = new Map<string, AnimatedEntityRecord<EnemyPresenceEntry>>()
   /** Cached enemy presence data (hp, position, templateId) keyed by instance ID. */
   private _enemyData = new Map<string, EnemyPresenceEntry>()
   /** NPC sprites keyed by NPC instance ID. */
-  private _remoteNpcs = new Map<string, Phaser.GameObjects.Image>()
+  private _remoteNpcs = new Map<string, AnimatedEntityRecord<NpcPresenceEntry>>()
 
   /** Unsubscribe function for the current Firebase presence listener. */
   private _presenceUnsub: (() => void) | null = null
@@ -158,6 +167,29 @@ export class GameScene extends Phaser.Scene {
       v.right + TILE_SIZE,
       v.bottom + TILE_SIZE,
     )
+
+    for (const rec of this._remoteEnemies.values()) this._tickEntityAnim(rec, delta)
+    for (const rec of this._remoteNpcs.values()) this._tickEntityAnim(rec, delta)
+  }
+
+  private _tickEntityAnim<TEntry extends { x: number; y: number }>(
+    rec: AnimatedEntityRecord<TEntry>,
+    delta: number,
+  ): void {
+    if (!rec.isMoving) {
+      if (rec.animFrame !== 0 || rec.animTimer !== 0) {
+        rec.animFrame = 0
+        rec.animTimer = 0
+        rec.sprite.setFrame(getFrame(rec.direction, 0))
+      }
+      return
+    }
+    rec.animTimer += delta
+    while (rec.animTimer >= FRAME_DURATION_MS) {
+      rec.animTimer -= FRAME_DURATION_MS
+      rec.animFrame = (rec.animFrame + 1) % ANIM_FRAMES
+    }
+    rec.sprite.setFrame(getFrame(rec.direction, rec.animFrame))
   }
 
   /**
@@ -265,12 +297,18 @@ export class GameScene extends Phaser.Scene {
     this._remotePlayers.clear()
     remotePlayerTiles.clear()
 
-    for (const sprite of this._remoteEnemies.values()) sprite.destroy()
+    for (const { sprite } of this._remoteEnemies.values()) {
+      this.tweens.killTweensOf(sprite)
+      sprite.destroy()
+    }
     this._remoteEnemies.clear()
     this._enemyData.clear()
     remoteEnemyTiles.clear()
 
-    for (const sprite of this._remoteNpcs.values()) sprite.destroy()
+    for (const { sprite } of this._remoteNpcs.values()) {
+      this.tweens.killTweensOf(sprite)
+      sprite.destroy()
+    }
     this._remoteNpcs.clear()
 
     // Tell the AI executor about the room change
@@ -355,24 +393,52 @@ export class GameScene extends Phaser.Scene {
           remoteEnemyTiles.add(`${entry.x}_${entry.y}`)
 
           if (this._remoteEnemies.has(id)) {
-            this._remoteEnemies.get(id)!.setPosition(px, py)
+            const rec = this._remoteEnemies.get(id)!
+            const old = rec.entry
+            rec.entry = entry
+            if (entry.x !== old.x || entry.y !== old.y) {
+              this.tweens.killTweensOf(rec.sprite)
+              rec.direction = directionFromVelocity(entry.x - old.x, entry.y - old.y, rec.direction)
+              rec.isMoving = true
+              this.tweens.add({
+                targets: rec.sprite,
+                x: px, y: py,
+                duration: 180,
+                ease: 'Linear',
+                onComplete: () => {
+                  if (!rec.sprite.active) return
+                  rec.isMoving = false
+                  rec.animFrame = 0
+                  rec.animTimer = 0
+                  rec.sprite.setFrame(getFrame(rec.direction, 0))
+                },
+              })
+            }
           } else {
             let textureKey = 'Enemies/wolf' // fallback
             try {
               const def = EnemyRegistry.get(entry.templateId)
               textureKey = `Enemies/${def.spriteFrame.replace('.png', '')}`
             } catch { /* unknown template — use fallback */ }
-            const sprite = this.add.image(px, py, textureKey)
-              .setFrame(0)
+            const sprite = this.add.sprite(px, py, textureKey)
+              .setFrame(getFrame('down', 0))
               .setDepth(9)
-            this._remoteEnemies.set(id, sprite)
+            this._remoteEnemies.set(id, {
+              sprite,
+              entry,
+              direction: 'down',
+              animFrame: 0,
+              animTimer: 0,
+              isMoving: false,
+            })
           }
         }
       }
 
-      for (const [id, sprite] of this._remoteEnemies.entries()) {
+      for (const [id, rec] of this._remoteEnemies.entries()) {
         if (!incoming.has(id)) {
-          sprite.destroy()
+          this.tweens.killTweensOf(rec.sprite)
+          rec.sprite.destroy()
           this._remoteEnemies.delete(id)
           this._enemyData.delete(id)
           // remoteEnemyTiles already rebuilt from snapshot above
@@ -393,20 +459,48 @@ export class GameScene extends Phaser.Scene {
           const py = entry.y * TILE_SIZE + TILE_SIZE / 2
 
           if (this._remoteNpcs.has(id)) {
-            this._remoteNpcs.get(id)!.setPosition(px, py)
+            const rec = this._remoteNpcs.get(id)!
+            const old = rec.entry
+            rec.entry = entry
+            if (entry.x !== old.x || entry.y !== old.y) {
+              this.tweens.killTweensOf(rec.sprite)
+              rec.direction = directionFromVelocity(entry.x - old.x, entry.y - old.y, rec.direction)
+              rec.isMoving = true
+              this.tweens.add({
+                targets: rec.sprite,
+                x: px, y: py,
+                duration: 180,
+                ease: 'Linear',
+                onComplete: () => {
+                  if (!rec.sprite.active) return
+                  rec.isMoving = false
+                  rec.animFrame = 0
+                  rec.animTimer = 0
+                  rec.sprite.setFrame(getFrame(rec.direction, 0))
+                },
+              })
+            }
           } else {
             const textureKey = `NPCs/${entry.templateId}`
-            const sprite = this.add.image(px, py, textureKey)
-              .setFrame(0)
+            const sprite = this.add.sprite(px, py, textureKey)
+              .setFrame(getFrame('down', 0))
               .setDepth(9)
-            this._remoteNpcs.set(id, sprite)
+            this._remoteNpcs.set(id, {
+              sprite,
+              entry,
+              direction: 'down',
+              animFrame: 0,
+              animTimer: 0,
+              isMoving: false,
+            })
           }
         }
       }
 
-      for (const [id, sprite] of this._remoteNpcs.entries()) {
+      for (const [id, rec] of this._remoteNpcs.entries()) {
         if (!incoming.has(id)) {
-          sprite.destroy()
+          this.tweens.killTweensOf(rec.sprite)
+          rec.sprite.destroy()
           this._remoteNpcs.delete(id)
         }
       }
@@ -453,10 +547,10 @@ export class GameScene extends Phaser.Scene {
     if (cached) cached.hp = newHp
 
     // Flash the enemy sprite red for 150 ms
-    const sprite = this._remoteEnemies.get(targetId)
-    if (sprite) {
-      sprite.setTint(0xff4444)
-      this.time.delayedCall(150, () => { if (sprite.active) sprite.clearTint() })
+    const enemyRec = this._remoteEnemies.get(targetId)
+    if (enemyRec) {
+      enemyRec.sprite.setTint(0xff4444)
+      this.time.delayedCall(150, () => { if (enemyRec.sprite.active) enemyRec.sprite.clearTint() })
     }
 
     // Floating damage number
