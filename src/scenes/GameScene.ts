@@ -27,6 +27,7 @@ import type { NearbyPlayer } from '../world/ScriptExecutor.ts'
 
 /** Tile bounds of the 1000×1000 overworld in pixels. */
 const WORLD_PIXEL_SIZE = 1000 * TILE_SIZE
+const ENTITY_MOVE_DURATION_MS = 180
 
 /** Shape of each entry under /presence/{room}/players/{id}. */
 interface PresenceEntry {
@@ -398,12 +399,12 @@ export class GameScene extends Phaser.Scene {
             rec.entry = entry
             if (entry.x !== old.x || entry.y !== old.y) {
               this.tweens.killTweensOf(rec.sprite)
-              rec.direction = directionFromVelocity(entry.x - old.x, entry.y - old.y, rec.direction)
+              rec.direction = directionFromVelocity(px - rec.sprite.x, py - rec.sprite.y, rec.direction)
               rec.isMoving = true
               this.tweens.add({
                 targets: rec.sprite,
                 x: px, y: py,
-                duration: 180,
+                duration: ENTITY_MOVE_DURATION_MS,
                 ease: 'Linear',
                 onComplete: () => {
                   if (!rec.sprite.active) return
@@ -464,12 +465,12 @@ export class GameScene extends Phaser.Scene {
             rec.entry = entry
             if (entry.x !== old.x || entry.y !== old.y) {
               this.tweens.killTweensOf(rec.sprite)
-              rec.direction = directionFromVelocity(entry.x - old.x, entry.y - old.y, rec.direction)
+              rec.direction = directionFromVelocity(px - rec.sprite.x, py - rec.sprite.y, rec.direction)
               rec.isMoving = true
               this.tweens.add({
                 targets: rec.sprite,
                 x: px, y: py,
-                duration: 180,
+                duration: ENTITY_MOVE_DURATION_MS,
                 ease: 'Linear',
                 onComplete: () => {
                   if (!rec.sprite.active) return
