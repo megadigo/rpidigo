@@ -25,6 +25,7 @@ import { xpForLevel } from '../world/utils.ts'
 import { EnemyRegistry } from '../registry/registries.ts'
 import { ScriptExecutor } from '../world/ScriptExecutor.ts'
 import type { NearbyPlayer } from '../world/ScriptExecutor.ts'
+import type { DialogSceneData } from './DialogScene.ts'
 
 /** Tile bounds of the 1000×1000 overworld in pixels. */
 const WORLD_PIXEL_SIZE = 1000 * TILE_SIZE
@@ -155,11 +156,12 @@ export class GameScene extends Phaser.Scene {
       },
     )
 
-    // Attack: PlayerController emits this when E is pressed adjacent to an enemy
+    // Attack / interact: PlayerController emits this when E is pressed.
+    // NPC interaction is checked first; falls back to enemy attack.
     this.events.on(
       'playerAttack',
       (data: { tx: number; ty: number; direction: Direction }) => {
-        void this._handlePlayerAttack(data.tx, data.ty, data.direction)
+        void this._handleInteract(data.tx, data.ty, data.direction)
       },
     )
 
@@ -712,6 +714,56 @@ export class GameScene extends Phaser.Scene {
         }
       }
     })
+  }
+
+  /**
+   * Top-level handler for the E key (attack / interact).
+   * Checks the facing tile for an NPC first; if found, opens DialogScene.
+   * Falls back to the enemy attack handler if no NPC is present.
+   */
+  private async _handleInteract(tx: number, ty: number, direction: Direction): Promise<void> {
+    const facingOffset: Record<Direction, [number, number]> = {
+      down:  [0, 1],
+      up:    [0, -1],
+      left:  [-1, 0],
+      right: [1, 0],
+    }
+    const [fdx, fdy] = facingOffset[direction]
+
+    // Check facing tile first, then remaining adjacent tiles for an NPC.
+    // NPCs take priority over enemies and cannot be attacked.
+    const adjacentOffsets: [number, number][] = [
+      [fdx, fdy], [0, 1], [0, -1], [-1, 0], [1, 0],
+    ]
+    for (const [ox, oy] of adjacentOffsets) {
+      const cx = tx + ox
+      const cy = ty + oy
+      for (const [id, rec] of this._remoteNpcs.entries()) {
+        if (rec.entry.x === cx && rec.entry.y === cy) {
+          this._openDialog(id, rec.entry.templateId, cx, cy)
+          return
+        }
+      }
+    }
+
+    // No adjacent NPC — proceed with enemy attack (facing tile only)
+    await this._handlePlayerAttack(tx, ty, direction)
+  }
+
+  /**
+   * Freeze the player and launch DialogScene for the given NPC.
+   * Re-subscribes an unfreeze listener each time so it fires exactly once.
+   */
+  private _openDialog(npcId: string, templateId: string, npcX: number, npcY: number): void {
+    void npcId  // reserved for future per-NPC state (e.g. quest tracking)
+    this.playerController.freeze()
+    const data: DialogSceneData = { templateId, npcX, npcY }
+    this.scene.launch('DialogScene', data)
+    // Unfreeze exactly once when DialogScene shuts down
+    this.scene.get('DialogScene').events.once(
+      Phaser.Scenes.Events.SHUTDOWN,
+      () => this.playerController.unfreeze(),
+    )
   }
 
   /**
