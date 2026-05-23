@@ -17,6 +17,10 @@
 #   speak(text)           — emit a proximity chat message
 #   set_memory(key, val)  — persist a value (str/int/float/bool/None only)
 
+# description: 
+# A simple enemy that idly wanders around until it detects a player,
+# at which point it chases and attacks them.
+
 if state == 'idle':
     found = None
     for p in nearby_players:
