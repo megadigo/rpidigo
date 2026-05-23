@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(Get-ChildItem -Path \"d:\\\\GitHub\\\\rpidigo\" -Exclude \"node_modules\" | Where-Object { $_.Name -ne \"node_modules\" } | Select-Object Name, Extension, PSIsContainer)",
+      "PowerShell(Get-ChildItem -Path \"d:\\\\GitHub\\\\rpidigo\" | Where-Object { $_.Name -ne \"node_modules\" } | ForEach-Object { if \\($_.PSIsContainer\\) { \"DIR  $\\($_.Name\\)\" } else { \"FILE $\\($_.Name\\)\" } })",
+      "PowerShell(Get-ChildItem -Path \"d:\\\\GitHub\\\\rpidigo\\\\public\\\\assets\\\\sprites\" -Recurse -Directory | ForEach-Object { $_.FullName.Replace\\(\"d:\\\\GitHub\\\\rpidigo\\\\public\\\\assets\\\\sprites\\\\\", \"\"\\) } | Select-Object -First 30)",
+      "PowerShell(Get-ChildItem -Path \"d:\\\\GitHub\\\\rpidigo\\\\public\\\\assets\\\\sprites\" -Recurse -File | Where-Object { $_.Extension -eq \".png\" } | Select-Object -First 40 | ForEach-Object { $_.FullName.Replace\\(\"d:\\\\GitHub\\\\rpidigo\\\\public\\\\assets\\\\sprites\\\\\", \"\"\\) })",
+      "PowerShell(Get-ChildItem -Path \"d:\\\\GitHub\\\\rpidigo\\\\public\\\\assets\\\\sprites\" -Recurse -File | Where-Object { $_.Extension -eq \".png\" } | Select-Object -Skip 40 | ForEach-Object { $_.FullName.Replace\\(\"d:\\\\GitHub\\\\rpidigo\\\\public\\\\assets\\\\sprites\\\\\", \"\"\\) })"
+    ]
+  }
+}
