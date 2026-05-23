@@ -42,20 +42,20 @@ export class LoadingScene extends Phaser.Scene {
   preload(): void {
     // Tile spritesheets — derived from TILE_DEFS in TilemapRenderer (frame 0 convention)
     for (const key of getTileSheets()) {
-      this.load.spritesheet(key, `/assets/sprites/${key}.png`, { frameWidth: 16, frameHeight: 16 })
+      this.load.spritesheet(key, `assets/sprites/${key}.png`, { frameWidth: 16, frameHeight: 16 })
     }
     // Champion spritesheets
     for (const [id, file] of Object.entries(CHAMPION_FILES)) {
-      this.load.spritesheet(id, `/assets/sprites/Champions/${file}.png`, { frameWidth: 16, frameHeight: 16 })
+      this.load.spritesheet(id, `assets/sprites/Champions/${file}.png`, { frameWidth: 16, frameHeight: 16 })
     }
     // Enemy spritesheets — key: 'Enemies/{name}' (used by entity renderer in Step 6)
     const enemySheets = [...new Set(enemies.map(e => `Enemies/${e.spriteFrame.replace('.png', '')}`))]
     for (const key of enemySheets) {
-      this.load.spritesheet(key, `/assets/sprites/${key}.png`, { frameWidth: 16, frameHeight: 16 })
+      this.load.spritesheet(key, `assets/sprites/${key}.png`, { frameWidth: 16, frameHeight: 16 })
     }
     // NPC spritesheets — key: 'NPCs/{name}'
     for (const name of NPC_SPRITES) {
-      this.load.spritesheet(`NPCs/${name}`, `/assets/sprites/NPCs/${name}.png`, { frameWidth: 16, frameHeight: 16 })
+      this.load.spritesheet(`NPCs/${name}`, `assets/sprites/NPCs/${name}.png`, { frameWidth: 16, frameHeight: 16 })
     }
   }
 

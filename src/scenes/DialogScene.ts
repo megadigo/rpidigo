@@ -377,7 +377,7 @@ export class DialogScene extends Phaser.Scene {
       ctx.imageSmoothingEnabled = false
       ctx.drawImage(img, 0, 0, 16, 16, 0, 0, 32, 32)
     }
-    img.src = `/assets/sprites/NPCs/${this._sceneData.templateId}.png`
+    img.src = `assets/sprites/NPCs/${this._sceneData.templateId}.png`
 
     // Shop button wires up to Step 14; for now just close
     this._overlay.querySelector('#dlg-shop')?.addEventListener('click', () => this._close())
