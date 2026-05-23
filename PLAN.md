@@ -1,9 +1,11 @@
 # RPIdigo — Implementation Plan (from Spec)
 
-> **Global sprite convention**: All sprite sheets are 16×16-pixel grids. **Only frame 0 (top-left 16×16 px) is used** everywhere until animation is added.
-> - In Phaser: `this.load.spritesheet(key, path, { frameWidth: 16, frameHeight: 16 })` + `setFrame(0)`.
+> **Global sprite convention**: All sprite sheets are 16×16-pixel grids.
+> - In Phaser: `this.load.spritesheet(key, path, { frameWidth: 16, frameHeight: 16 })`.
+> - Tiles use frame 0.
+> - Players, enemies, and NPCs use directional walk animation (5 frames per direction: down/up/right/left) and face movement direction.
 > - In DOM UI (login screen): `ctx.drawImage(img, 0, 0, 16, 16, 0, 0, 32, 32)` on a `<canvas>`.
-> This applies to every tile, champion, enemy, and NPC sprite.
+> Login portraits use frame 0.
 
 ## Step 1 — Firebase Setup & Title Screen
 *Goal: app starts, title screen is visible, Firebase connects without errors.*
@@ -40,7 +42,7 @@
 
 1. `LoadingScene.preload()` loads all tile spritesheets and all 8 champion spritesheets with `frameWidth: 16, frameHeight: 16`.
 2. `TilemapRenderer` uses a pool of `Phaser.GameObjects.Image` objects; each tile type maps to its spritesheet key, displayed at frame 0.
-3. `PlayerController` renders the player as a `Phaser.GameObjects.Image` with `player.championId` as the texture key and `setFrame(0)`.
+3. `PlayerController` renders the player as a `Phaser.GameObjects.Sprite` with directional walk/attack animation (5 frames per direction) and movement-facing direction.
 4. Confirm `LoadingScene` seeds the world, pre-loads spawn-area chunks (radius 2), then launches `GameScene`.
 5. Confirm `PlayerController` moves the player with WASD/arrow keys, collision works, and entering a new chunk triggers lazy generation.
 6. **Checkpoint**: After login the player sees a sprite-rendered world; walking around reveals new tiles; the champion sprite moves correctly; the Firebase console shows chunk data being written under `/map/`.
@@ -71,7 +73,7 @@
 *Goal: enemies and NPCs that belong to a chunk appear as sprites when the chunk loads.*
 
 1. Subscribe to `/presence/{room}/enemies` and `/presence/{room}/npcs` with Firebase `onValue`.
-2. Render each entity as an `Image` at frame 0 of its spritesheet key (look up by `templateId` in the registry). Update positions on value change; remove on deletion.
+2. Render each entity as a directional `Sprite` using the same 5-frame-per-direction walk logic as the player; update facing from movement delta, animate while moving, and keep idle frame 0 of the current direction.
 3. No AI or interaction yet — display only.
 4. **Checkpoint**: Walk into a chunk that contains enemies or NPCs; their sprites appear on screen.
 
@@ -183,4 +185,3 @@
 2. Compact HUD: chat collapses to a ticker, mini-map shrinks to 64×64.
 3. Tapping an adjacent tile or entity triggers interaction.
 4. **Checkpoint**: Load the game on a phone (or in a narrow browser window); the virtual joystick appears and the player can move and interact without a keyboard.
-
