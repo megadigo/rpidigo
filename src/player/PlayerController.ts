@@ -208,14 +208,15 @@ export class PlayerController {
   }
 
   /**
-   * Returns true when the player's pixel centre is within 40% of TILE_SIZE
-   * from the centre of tile (tx, ty) — i.e. the player is solidly on top of it.
+   * Returns true when the player's pixel centre is within 20% of TILE_SIZE
+   * from the centre of tile (tx, ty) — i.e. the player sprite is fully centred
+   * on the transition tile before a room transition is allowed to fire.
    */
   private _isOnTile(tx: number, ty: number): boolean {
     const cx = tx * TILE_SIZE + TILE_SIZE / 2
     const cy = ty * TILE_SIZE + TILE_SIZE / 2
-    return Math.abs(this.px - cx) < TILE_SIZE * 0.4
-        && Math.abs(this.py - cy) < TILE_SIZE * 0.4
+    return Math.abs(this.px - cx) < TILE_SIZE * 0.2
+        && Math.abs(this.py - cy) < TILE_SIZE * 0.2
   }
 
   /**
@@ -359,22 +360,11 @@ export class PlayerController {
     }
 
     // Overworld — check adjacent tiles for impassable entry tiles (buildings).
-    // Two conditions must both be met:
-    //   1. Directional: player is in the near half of their tile toward the building wall.
-    //   2. Alignment: player is centred with the building tile on the parallel axis
-    //      (i.e. aligned with the door/building sprite before triggering entry).
+    // The player sprite must be fully centred on their current tile before
+    // an adjacent-building entry is allowed to fire.
+    if (!this._isOnTile(tx, ty)) return
     const adjacentOffsets = [{ dx: 0, dy: -1 }, { dx: 0, dy: 1 }, { dx: -1, dy: 0 }, { dx: 1, dy: 0 }]
-    const tileMidX = tx * TILE_SIZE + TILE_SIZE / 2
-    const tileMidY = ty * TILE_SIZE + TILE_SIZE / 2
     for (const { dx, dy } of adjacentOffsets) {
-      // 1. Directional — must be in the near half of the tile
-      if (dx ===  1 && this.px < tileMidX) continue
-      if (dx === -1 && this.px > tileMidX) continue
-      if (dy ===  1 && this.py < tileMidY) continue
-      if (dy === -1 && this.py > tileMidY) continue
-      // 2. Alignment — must be centred with the building tile on the parallel axis
-      if (dy !== 0 && Math.abs(this.px - tileMidX) >= TILE_SIZE * 0.4) continue
-      if (dx !== 0 && Math.abs(this.py - tileMidY) >= TILE_SIZE * 0.4) continue
       const atx = tx + dx
       const aty = ty + dy
       const tile = getTile(atx, aty)

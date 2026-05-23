@@ -40,7 +40,7 @@ import { EnemyRegistry } from '../registry/registries.ts'
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 /** Max wall-clock ms to spend running scripts per frame. */
-const BUDGET_MS = 4
+const BUDGET_MS = 6
 
 /** Chebyshev tile radius that defines "vicinity" around the local player. */
 const VICINITY_RADIUS = 20
@@ -53,9 +53,9 @@ const CLAIM_TTL_MS = 10_000
 
 /** Per-frame entity tick intervals keyed by EnemyDefinition.speed. */
 const SPEED_TICK_MS: Record<string, number> = {
-  slow:   2_000,
-  normal: 1_000,
-  fast:     500,
+  slow:   1_000,
+  normal:   500,
+  fast:     250,
 }
 
 // ─── Pyodide singleton ────────────────────────────────────────────────────────
