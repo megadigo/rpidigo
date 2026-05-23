@@ -91,7 +91,7 @@ const SPAWN_TABLES: Record<string, Array<{ id: string; weight: number }>> = {
 }
 
 const SPAWN_CHANCE: Record<string, number> = {
-  plains: 0.02, forest: 0.04, river: 0.03, desert: 0.03,
+  plains: 0.004, forest: 0.008, river: 0.005, desert: 0.005,
 }
 
 function rollEnemy(

@@ -19,6 +19,7 @@
  */
 import type { TileData, NpcInstance } from './types.ts'
 import { mulberry32, seededRandInt, tileKey } from './utils.ts'
+import npcWander from '../scripts/npcs/wander.py?raw'
 
 export interface VillageLayout {
   tiles: Map<string, TileData>   // key `${x}_${y}`
@@ -208,7 +209,7 @@ function makeNpc(
     state: 'idle',
     executingPlayerId: null,
     lastLogicAt: 0,
-    script: '# idle patrol script\npass',
+    script: npcWander,
     memory: {},
   }
 }

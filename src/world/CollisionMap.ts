@@ -30,6 +30,21 @@ export function isPassable(x: number, y: number): boolean {
   return true
 }
 
+/**
+ * Passability check for the local player's movement.
+ * Enemies are NOT treated as obstacles — they can occupy the same tile as the
+ * player (to attack) without walling them in.
+ */
+export function isPassableForPlayer(x: number, y: number): boolean {
+  if (x < 0 || y < 0 || x >= 1000 || y >= 1000) return false
+  const tile = getTile(x, y)
+  if (!tile) return false
+  if (isTileImpassable(tile.g)) return false
+  if (tile.m?.some(m => isTileImpassable(m))) return false
+  if (remotePlayerTiles.has(`${x}_${y}`)) return false
+  return true
+}
+
 /** Returns the slowest speed multiplier across all layers (1.0 = normal). */
 export function getSpeedMod(x: number, y: number): number {
   const tile = getTile(x, y)

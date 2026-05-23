@@ -80,6 +80,12 @@ export class GameScene extends Phaser.Scene {
   private _remoteEnemies = new Map<string, AnimatedEntityRecord<EnemyPresenceEntry>>()
   /** Cached enemy presence data (hp, position, templateId) keyed by instance ID. */
   private _enemyData = new Map<string, EnemyPresenceEntry>()
+  /**
+   * Authoritative local HP for each enemy while combat is in progress.
+   * Set on first hit; never overwritten by Firebase snapshots.
+   * Deleted when the enemy dies or leaves the presence snapshot.
+   */
+  private _localEnemyHp = new Map<string, number>()
   /** NPC sprites keyed by NPC instance ID. */
   private _remoteNpcs = new Map<string, AnimatedEntityRecord<NpcPresenceEntry>>()
 
@@ -92,6 +98,15 @@ export class GameScene extends Phaser.Scene {
 
   /** Entity AI runner (Step 9). */
   private readonly _scriptExecutor = new ScriptExecutor()
+
+  /** True while the death/respawn sequence is in progress. */
+  private _isDead = false
+  /** The DOM death overlay element, if currently shown. */
+  private _deathOverlay: HTMLDivElement | null = null
+  /** performance.now() timestamp of the last time enemy damage landed. Used for the invincibility window. */
+  private _lastDamageAt = 0
+  /** Minimum milliseconds between consecutive enemy hits (invincibility window). */
+  private static readonly _INVINCIBILITY_MS = 600
 
   constructor() {
     super({ key: 'GameScene' })
@@ -149,6 +164,8 @@ export class GameScene extends Phaser.Scene {
       if (this._enemyUnsub)    { this._enemyUnsub();    this._enemyUnsub    = null }
       if (this._npcUnsub)      { this._npcUnsub();      this._npcUnsub      = null }
       this._scriptExecutor.destroy()
+      this._deathOverlay?.remove()
+      this._deathOverlay = null
     })
   }
 
@@ -158,7 +175,12 @@ export class GameScene extends Phaser.Scene {
     // Run entity AI scripts (time-sliced: at most BUDGET_MS wall-clock per frame)
     const tx = Math.floor(this.playerController.px / TILE_SIZE)
     const ty = Math.floor(this.playerController.py / TILE_SIZE)
-    this._scriptExecutor.tick(tx, ty, this._buildNearbyPlayers())
+    this._scriptExecutor.tick(tx, ty, this._buildNearbyPlayers(), (targetPlayerId, damage) => {
+      // Only apply damage to the local player
+      if (targetPlayerId === getLocalPlayer().id) {
+        this._applyEnemyDamage(damage)
+      }
+    })
 
     const cam = this.cameras.main
     const v = cam.worldView
@@ -210,6 +232,128 @@ export class GameScene extends Phaser.Scene {
       result.push({ id, name: entry.name, x: entry.x, y: entry.y, level: entry.level })
     }
     return result
+  }
+
+  /**
+   * Apply damage from an enemy attack to the local player.
+   * Subtracts defense, flashes sprite, writes HP to Firebase, triggers death if HP <= 0.
+   */
+  private _applyEnemyDamage(rawDamage: number): void {
+    if (this._isDead) return
+    const now = performance.now()
+    if (now - this._lastDamageAt < GameScene._INVINCIBILITY_MS) return
+    this._lastDamageAt = now
+    const player = getLocalPlayer()
+    const net = Math.max(1, rawDamage - player.totalDefense)
+    const newHp = Math.max(0, player.hp - net)
+    player.hp = newHp
+    setLocalPlayer(player)
+
+    // Flash the player sprite
+    this.playerController.flashDamageTint()
+
+    // Floating damage number above the player
+    const dmgText = this.add.text(
+      this.playerController.px,
+      this.playerController.py - TILE_SIZE,
+      `-${net}`,
+      { fontFamily: 'monospace', fontSize: '7px', color: '#ff8888', stroke: '#000000', strokeThickness: 2 },
+    ).setOrigin(0.5, 1).setDepth(50)
+    this.tweens.add({
+      targets: dmgText,
+      y:       dmgText.y - TILE_SIZE * 1.5,
+      alpha:   0,
+      duration: 1400,
+      ease: 'Cubic.easeOut',
+      onComplete: () => dmgText.destroy(),
+    })
+
+    void update(ref(db), { [`players/${player.id}/hp`]: newHp })
+
+    if (newHp <= 0) this._triggerDeath()
+  }
+
+  /**
+   * Trigger the death sequence: freeze input, show overlay, auto-respawn after 3 s.
+   */
+  private _triggerDeath(): void {
+    if (this._isDead) return
+    this._isDead = true
+    this.playerController.freeze()
+
+    const player = getLocalPlayer()
+    player.hp = 0
+    setLocalPlayer(player)
+    void update(ref(db), { [`players/${player.id}/hp`]: 0 })
+
+    const overlay = document.createElement('div')
+    overlay.id = 'death-overlay'
+    overlay.style.cssText = [
+      'position:fixed', 'inset:0', 'background:rgba(0,0,0,0.75)',
+      'display:flex', 'flex-direction:column', 'align-items:center', 'justify-content:center',
+      'z-index:1000', 'color:#ff4444', 'font-family:monospace', 'user-select:none',
+    ].join(';')
+    overlay.innerHTML = [
+      '<div style="font-size:36px;letter-spacing:6px;text-shadow:0 0 20px #f00">YOU DIED</div>',
+      '<div style="font-size:12px;color:#aaa;margin-top:14px">Respawning at your house in 3 seconds...</div>',
+    ].join('')
+    document.body.appendChild(overlay)
+    this._deathOverlay = overlay
+
+    this.time.delayedCall(3000, () => this._respawn())
+  }
+
+  /**
+   * Respawn: restore HP, teleport to player house, exit any active room, re-enable input.
+   */
+  private _respawn(): void {
+    this._deathOverlay?.remove()
+    this._deathOverlay = null
+    this._isDead = false
+
+    const player = getLocalPlayer()
+    const oldRoom = player.room
+    const hx = player.house?.x ?? player.x
+    const hy = player.house?.y ?? player.y
+
+    player.hp   = player.maxHp
+    player.room = '0'
+    player.x    = hx
+    player.y    = hy
+    setLocalPlayer(player)
+
+    // Exit room if the player died inside one
+    if (oldRoom !== '0') {
+      exitRoom()
+      this.tilemapRenderer.reset()
+      this.cameras.main.setBounds(0, 0, WORLD_PIXEL_SIZE, WORLD_PIXEL_SIZE)
+      this.playerController.startCameraFollow()
+    }
+
+    this.playerController.teleport(hx, hy)
+    this._subscribePresence('0')
+
+    const respawnUpdate: Record<string, unknown> = {
+      [`players/${player.id}/hp`]:   player.maxHp,
+      [`players/${player.id}/x`]:    hx,
+      [`players/${player.id}/y`]:    hy,
+      [`players/${player.id}/room`]: '0',
+      [`presence/0/players/${player.id}/x`]:           hx,
+      [`presence/0/players/${player.id}/y`]:           hy,
+      [`presence/0/players/${player.id}/name`]:        player.name,
+      [`presence/0/players/${player.id}/level`]:       player.level,
+      [`presence/0/players/${player.id}/spriteFrame`]: `${player.championId}.png`,
+      [`presence/0/players/${player.id}/state`]:       'idle',
+      [`presence/0/players/${player.id}/direction`]:   'down',
+    }
+    // Only null the old-room presence entry when it's a different room;
+    // setting a parent to null AND its children in the same update() is invalid.
+    if (oldRoom !== '0') {
+      respawnUpdate[`presence/${oldRoom}/players/${player.id}`] = null
+    }
+    void update(ref(db), respawnUpdate)
+
+    this.playerController.unfreeze()
   }
 
   /**
@@ -304,6 +448,7 @@ export class GameScene extends Phaser.Scene {
     }
     this._remoteEnemies.clear()
     this._enemyData.clear()
+    this._localEnemyHp.clear()
     remoteEnemyTiles.clear()
 
     for (const { sprite } of this._remoteNpcs.values()) {
@@ -442,6 +587,7 @@ export class GameScene extends Phaser.Scene {
           rec.sprite.destroy()
           this._remoteEnemies.delete(id)
           this._enemyData.delete(id)
+          this._localEnemyHp.delete(id)
           // remoteEnemyTiles already rebuilt from snapshot above
         }
       }
@@ -541,11 +687,12 @@ export class GameScene extends Phaser.Scene {
 
     const player = getLocalPlayer()
     const damage  = Math.max(1, player.power)
-    const newHp   = targetEntry.hp - damage
-
-    // Optimistically update cached HP so rapid key presses don't double-count
-    const cached = this._enemyData.get(targetId)
-    if (cached) cached.hp = newHp
+    // Use local HP as authoritative source — never reset by Firebase snapshots
+    const currentHp = this._localEnemyHp.has(targetId)
+      ? this._localEnemyHp.get(targetId)!
+      : targetEntry.hp
+    const newHp = currentHp - damage
+    this._localEnemyHp.set(targetId, newHp)
 
     // Flash the enemy sprite red for 150 ms
     const enemyRec = this._remoteEnemies.get(targetId)
@@ -554,11 +701,11 @@ export class GameScene extends Phaser.Scene {
       this.time.delayedCall(150, () => { if (enemyRec.sprite.active) enemyRec.sprite.clearTint() })
     }
 
-    // Floating damage number
+    // Floating remaining-HP number
     const dmgText = this.add.text(
       targetEntry.x * TILE_SIZE + TILE_SIZE / 2,
       targetEntry.y * TILE_SIZE,
-      `-${damage}`,
+      `${Math.max(0, newHp)}`,
       { fontFamily: 'monospace', fontSize: '7px', color: '#ff3333', stroke: '#000000', strokeThickness: 2 },
     ).setOrigin(0.5, 1).setDepth(50)
     this.tweens.add({
@@ -580,8 +727,8 @@ export class GameScene extends Phaser.Scene {
       const xpGain = template ? Math.max(1, Math.floor(template.baseHp / 5)) : 1
 
       // Roll loot table
-      const newInventory = [...player.inventory]
-      let newGold = player.gold
+      const newInventory = [...(player.inventory ?? [])]
+      let newGold = player.gold ?? 0
       if (template) {
         for (const { itemId, min, max, chance } of template.lootTable) {
           if (Math.random() < chance) {
@@ -603,6 +750,10 @@ export class GameScene extends Phaser.Scene {
       player.inventory = newInventory
       setLocalPlayer(player)
 
+      // Remove from ScriptExecutor cache immediately so the next tick
+      // doesn't re-create the entity in Firebase before the listener fires
+      this._scriptExecutor.removeEnemy(targetId)
+
       // Atomic Firebase write
       await update(ref(db), {
         [`presence/${room}/enemies/${targetId}`]:  null,
@@ -615,6 +766,7 @@ export class GameScene extends Phaser.Scene {
       // ── Damage only ────────────────────────────────────────────────────
       await update(ref(db), {
         [`presence/${room}/enemies/${targetId}/hp`]: newHp,
+        [`entities/enemies/${targetId}/hp`]:        newHp,
       })
     }
   }

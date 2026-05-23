@@ -32,7 +32,7 @@
  */
 import { ref, onValue, update, query, orderByChild, equalTo } from 'firebase/database'
 import { db } from '../firebase.ts'
-import { isPassable } from './CollisionMap.ts'
+import { isPassable, getSpeedMod } from './CollisionMap.ts'
 import { getLocalPlayer } from '../player/Auth.ts'
 import type { EnemyInstance, NpcInstance } from './types.ts'
 import { EnemyRegistry } from '../registry/registries.ts'
@@ -177,7 +177,12 @@ export class ScriptExecutor {
    * @param playerY    Current player tile Y
    * @param nearbyPlayers  All players (local + remote) visible to scripts
    */
-  tick(playerX: number, playerY: number, nearbyPlayers: NearbyPlayer[]): void {
+  tick(
+    playerX: number,
+    playerY: number,
+    nearbyPlayers: NearbyPlayer[],
+    onAttack?: (targetPlayerId: string, damage: number) => void,
+  ): void {
     if (!_pyodide || !this._room) return
 
     const now       = Date.now()
@@ -198,6 +203,9 @@ export class ScriptExecutor {
       if (Math.max(Math.abs(e.x - playerX), Math.abs(e.y - playerY)) > VICINITY_RADIUS) continue
 
       const tickMs    = this._enemyTickMs(e.templateId)
+      // Terrain speed mod: mud/water/tall-grass slows enemies just like the player
+      const speedMod       = Math.max(0.1, getSpeedMod(e.x, e.y))
+      const effectiveTickMs = tickMs / speedMod
       const ownedByUs = e.executingPlayerId === playerId
       const free      = e.executingPlayerId === null
       const stale     = !free && !ownedByUs && (now - e.lastLogicAt > CLAIM_TTL_MS)
@@ -205,8 +213,8 @@ export class ScriptExecutor {
       // Claim any entity that is free or whose previous owner went offline
       if (free || stale) this._claim('enemies', id, e, playerId)
 
-      if ((ownedByUs || free || stale) && now - e.lastLogicAt >= tickMs) {
-        overdue.push({ kind: 'enemy', id, entity: e, tickMs })
+      if ((ownedByUs || free || stale) && now - e.lastLogicAt >= effectiveTickMs) {
+        overdue.push({ kind: 'enemy', id, entity: e, tickMs: effectiveTickMs })
       }
     }
 
@@ -231,7 +239,7 @@ export class ScriptExecutor {
     // ── Execute within budget ─────────────────────────────────────────────
     for (const { kind, id, entity } of overdue) {
       if (performance.now() >= budgetEnd) break
-      this._runScript(kind, id, entity, now, nearbyPlayers)
+      this._runScript(kind, id, entity, now, nearbyPlayers, onAttack)
     }
   }
 
@@ -242,6 +250,14 @@ export class ScriptExecutor {
     this._releaseAll()
     if (this._enemyUnsub) { this._enemyUnsub(); this._enemyUnsub = null }
     if (this._npcUnsub)   { this._npcUnsub();   this._npcUnsub   = null }
+  }
+
+  /**
+   * Immediately remove an enemy from the local cache so the next tick
+   * does not re-create it in Firebase after a kill.
+   */
+  removeEnemy(id: string): void {
+    this._enemies.delete(id)
   }
 
   // ── Private helpers ────────────────────────────────────────────────────────
@@ -288,6 +304,7 @@ export class ScriptExecutor {
     entity:        EnemyInstance | NpcInstance,
     now:           number,
     nearbyPlayers: NearbyPlayer[],
+    onAttack?:     (targetPlayerId: string, damage: number) => void,
   ): void {
     const py = _pyodide!
 
@@ -300,6 +317,15 @@ export class ScriptExecutor {
       memory?:   Record<string, unknown>
     } = {}
 
+    // Resolve power before the try block so it's in scope at the onAttack call site
+    let power = (entity as EnemyInstance).power ?? 10
+    if (kind === 'enemy') {
+      try {
+        const def = EnemyRegistry.get((entity as EnemyInstance).templateId)
+        power = def.basePower
+      } catch { /* use defaults */ }
+    }
+
     try {
       // ── Inject read-only context ─────────────────────────────────────────
       py.globals.set('state',          entity.state)
@@ -307,20 +333,18 @@ export class ScriptExecutor {
       py.globals.set('max_hp',         entity.maxHp)
       py.globals.set('x',              entity.x)
       py.globals.set('y',              entity.y)
-      py.globals.set('spawn_x',        'spawnX' in entity ? (entity as EnemyInstance).spawnX : entity.x)
-      py.globals.set('spawn_y',        'spawnY' in entity ? (entity as EnemyInstance).spawnY : entity.y)
+      py.globals.set('spawn_x',        (entity as EnemyInstance).spawnX ?? (entity as NpcInstance).homeX ?? entity.x)
+      py.globals.set('spawn_y',        (entity as EnemyInstance).spawnY ?? (entity as NpcInstance).homeY ?? entity.y)
       // toPy converts the JS object to a proper Python dict / list
       py.globals.set('memory',         py.toPy(entity.memory ?? {}))
       py.globals.set('nearby_players', py.toPy(nearbyPlayers))
 
       // ── Inject per-entity attributes ────────────────────────────────────
       let aggroRange = 5
-      let power = (entity as EnemyInstance).power ?? 10
       if (kind === 'enemy') {
         try {
           const def = EnemyRegistry.get((entity as EnemyInstance).templateId)
           aggroRange = def.aggroRange
-          power = def.basePower
         } catch { /* use defaults */ }
       }
       py.globals.set('aggro_range', aggroRange)
@@ -400,10 +424,6 @@ export class ScriptExecutor {
       [`presence/${this._room}/${col}/${id}/state`]: newState,
     }
 
-    if (kind === 'enemy') {
-      fbUpdate[`presence/${this._room}/${col}/${id}/hp`] = entity.hp
-    }
-
     if (hasSpeech) {
       // Emit as a system chat message so HudScene renders it
       fbUpdate[`chat/${this._room}/_ai_${id}_${now}`] = {
@@ -417,5 +437,14 @@ export class ScriptExecutor {
     }
 
     void update(ref(db), fbUpdate)
+
+    // ── Apply attack action ──────────────────────────────────────────────
+    if (hasAttack && onAttack && actions.attack) {
+      try {
+        onAttack(actions.attack, power)
+      } catch (err) {
+        console.error('[ScriptExecutor] attack callback threw:', err)
+      }
+    }
   }
 }

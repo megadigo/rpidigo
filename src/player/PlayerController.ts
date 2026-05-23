@@ -13,7 +13,7 @@ import Phaser from 'phaser'
 import { db } from '../firebase.ts'
 import { ref, update } from 'firebase/database'
 import { getLocalPlayer, setLocalPlayer } from './Auth.ts'
-import { isPassable, getSpeedMod } from '../world/CollisionMap.ts'
+import { isPassable, isPassableForPlayer, getSpeedMod } from '../world/CollisionMap.ts'
 import { ensureRadius, tileToChunk, getActiveRoom } from '../world/ChunkManager.ts'
 import { TILE_SIZE, getTileEntryType, isTileRoomExit } from '../renderer/TilemapRenderer.ts'
 import type { Direction } from '../renderer/SpriteAnim.ts'
@@ -55,6 +55,9 @@ export class PlayerController {
   /** Saved overworld tile position before entering a room. */
   private _returnX = 0
   private _returnY = 0
+
+  /** When true, all movement and attack input is suppressed (e.g. during death). */
+  private _frozen = false
 
   /** World-pixel position (not tile). */
   px = 0
@@ -108,7 +111,7 @@ export class PlayerController {
   }
 
   update(delta: number): void {
-    if (!this.cursors) return
+    if (!this.cursors || this._frozen) return
 
     // Freeze movement while the chat input (or any text input) has keyboard focus
     if (document.activeElement instanceof HTMLInputElement) return
@@ -139,8 +142,8 @@ export class PlayerController {
       const ntx = Math.floor(nx / TILE_SIZE)
       const nty = Math.floor(ny / TILE_SIZE)
 
-      if (isPassable(ntx, ty))  this.px = nx
-      if (isPassable(tx, nty))  this.py = ny
+      if (isPassableForPlayer(ntx, ty))  this.px = nx
+      if (isPassableForPlayer(tx, nty))  this.py = ny
 
       this.sprite.setPosition(this.px, this.py)
 
@@ -440,6 +443,24 @@ export class PlayerController {
   /** Re-attach the main camera to follow the player sprite. */
   startCameraFollow(): void {
     this.scene.cameras.main.startFollow(this.sprite, true, 1, 1)
+  }
+
+  /** Suppress all player input (during death animation, cutscenes). */
+  freeze(): void {
+    this._frozen = true
+  }
+
+  /** Resume normal player input. */
+  unfreeze(): void {
+    this._frozen = false
+  }
+
+  /** Flash the player sprite red for 300 ms to indicate incoming damage. */
+  flashDamageTint(): void {
+    this.sprite.setTint(0xff4444)
+    this.scene.time.delayedCall(300, () => {
+      if (this.sprite.active) this.sprite.clearTint()
+    })
   }
 
   private _syncPosition(): void {

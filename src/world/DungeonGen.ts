@@ -156,7 +156,7 @@ function generateFloor(
     }
 
     // Enemies
-    const spawnChance = floorIndex === 1 ? 0.15 : 0.20
+    const spawnChance = floorIndex === 1 ? 0.06 : 0.10
     if (isBossFloor && r === rooms[rooms.length - 1]) {
       const ex = r.x + Math.floor(r.w / 2)
       const ey = r.y + Math.floor(r.h / 2)
