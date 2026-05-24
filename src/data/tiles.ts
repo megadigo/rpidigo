@@ -36,7 +36,7 @@ export const tiles: TileDefinition[] = [
   {
     id: 'bush', passable: true, speedMod: 0.8, destructible: true,
     gatherAction: 'cut', gatherCharges: 2,
-    dropTable: [{ itemId: 'fiber', min: 1, max: 2, chance: 1 }],
+    dropTable: [],
     regenSeconds: 60,
     spriteFrame: 'Nature/Trees.png',
   },
@@ -63,7 +63,7 @@ export const tiles: TileDefinition[] = [
   {
     id: 'reeds', passable: true, speedMod: 0.8, destructible: true,
     gatherAction: 'cut', gatherCharges: 2,
-    dropTable: [{ itemId: 'fiber', min: 1, max: 2, chance: 1 }],
+    dropTable: [],
     regenSeconds: 60,
     spriteFrame: 'Ground/GrassTall.png',
   },
@@ -82,7 +82,7 @@ export const tiles: TileDefinition[] = [
   {
     id: 'cactus', passable: false, speedMod: 0, destructible: true,
     gatherAction: 'cut', gatherCharges: 2,
-    dropTable: [{ itemId: 'fiber', min: 1, max: 2, chance: 1 }],
+    dropTable: [],
     regenSeconds: 120,
     spriteFrame: 'Nature/Cactus.png',
   },
@@ -107,7 +107,7 @@ export const tiles: TileDefinition[] = [
   {
     id: 'wheat_field', passable: true, speedMod: 0.8, destructible: true,
     gatherAction: 'cut', gatherCharges: 2,
-    dropTable: [{ itemId: 'fiber', min: 1, max: 2, chance: 1 }],
+    dropTable: [],
     regenSeconds: 180,
     spriteFrame: 'Nature/Wheatfield.png',
   },

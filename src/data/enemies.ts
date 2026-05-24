@@ -55,14 +55,14 @@ export const enemies: EnemyDefinition[] = [
     // Fragile — hides from players, attacks only if they corner it
     id: 'giant_spider_weak', baseType: 'giant_spider', variant: 'weak', displayName: 'Giant Spider',
     baseHp: 35, basePower: 5, baseMp: 0, aggroRange: 5, speed: 'normal',
-    levelRange: [2, 6], lootTable: [{ itemId: 'fiber', min: 2, max: 5, chance: 1 }],
+    levelRange: [2, 6], lootTable: [],
     behaviorScript: patrolFlee, spriteFrame: 'giant_spider.png',
   },
   {
     // Venomous and lethal — attacks on sight, very fast
     id: 'giant_spider_venomous', baseType: 'giant_spider', variant: 'venomous', displayName: 'Venomous Spider',
     baseHp: 50, basePower: 7, baseMp: 0, aggroRange: 6, speed: 'fast',
-    levelRange: [5, 9], lootTable: [{ itemId: 'fiber', min: 3, max: 6, chance: 1 }],
+    levelRange: [5, 9], lootTable: [],
     behaviorScript: patrolAggressive, spriteFrame: 'giant_spider.png',
     special: ['poison'],
   },
@@ -77,7 +77,7 @@ export const enemies: EnemyDefinition[] = [
     // Ancient guardian — extremely slow, never leaves its grove, attacks only adjacently
     id: 'treant_strong', baseType: 'treant', variant: 'strong', displayName: 'Treant',
     baseHp: 120, basePower: 12, baseMp: 0, aggroRange: 3, speed: 'slow',
-    levelRange: [7, 12], lootTable: [{ itemId: 'wood', min: 4, max: 8, chance: 1 }, { itemId: 'fiber', min: 2, max: 4, chance: 0.8 }],
+    levelRange: [7, 12], lootTable: [{ itemId: 'wood', min: 4, max: 8, chance: 1 }],
     behaviorScript: patrolOnly, spriteFrame: 'treant.png',
     special: ['ignores_walls'],
   },
@@ -148,7 +148,7 @@ export const enemies: EnemyDefinition[] = [
     // Undead — slow to notice but relentlessly follows last known player position
     id: 'mummy_weak', baseType: 'mummy', variant: 'weak', displayName: 'Mummy',
     baseHp: 55, basePower: 7, baseMp: 0, aggroRange: 5, speed: 'slow',
-    levelRange: [3, 7], lootTable: [{ itemId: 'fiber', min: 2, max: 4, chance: 0.9 }, { itemId: 'gold_coin', min: 3, max: 10, chance: 0.7 }],
+    levelRange: [3, 7], lootTable: [{ itemId: 'gold_coin', min: 3, max: 10, chance: 0.7 }],
     behaviorScript: patrolPersistent, spriteFrame: 'mummy.png',
   },
   {
@@ -197,14 +197,14 @@ export const enemies: EnemyDefinition[] = [
     // Dumb blob — oozes slowly, attacks only when touched
     id: 'slime_weak', baseType: 'slime', variant: 'weak', displayName: 'Slime',
     baseHp: 25, basePower: 3, baseMp: 0, aggroRange: 4, speed: 'slow',
-    levelRange: [1, 4], lootTable: [{ itemId: 'fiber', min: 1, max: 3, chance: 0.8 }],
+    levelRange: [1, 4], lootTable: [],
     behaviorScript: patrolOnly, spriteFrame: 'slime_weak.png',
   },
   {
     // Corrosive — slowly but steadily pursues anyone nearby
     id: 'slime_corrosive', baseType: 'slime', variant: 'corrosive', displayName: 'Corrosive Slime',
     baseHp: 40, basePower: 6, baseMp: 0, aggroRange: 4, speed: 'slow',
-    levelRange: [3, 7], lootTable: [{ itemId: 'fiber', min: 2, max: 4, chance: 1 }],
+    levelRange: [3, 7], lootTable: [],
     behaviorScript: patrolChase, spriteFrame: 'slime_corrosive.png',
     special: ['poison'],
   },
@@ -212,7 +212,7 @@ export const enemies: EnemyDefinition[] = [
     // Classic zombie — short detection range, relentlessly shambles after prey
     id: 'zombie_weak', baseType: 'zombie', variant: 'weak', displayName: 'Zombie',
     baseHp: 45, basePower: 5, baseMp: 0, aggroRange: 5, speed: 'slow',
-    levelRange: [2, 6], lootTable: [{ itemId: 'fiber', min: 1, max: 2, chance: 0.6 }, { itemId: 'gold_coin', min: 1, max: 5, chance: 0.5 }],
+    levelRange: [2, 6], lootTable: [{ itemId: 'gold_coin', min: 1, max: 5, chance: 0.5 }],
     behaviorScript: patrolPersistent, spriteFrame: 'zombie.png',
   },
   {

@@ -10,7 +10,6 @@ export const shopStock: ShopStockEntry[] = [
   // ── Materials ─────────────────────────────────────────────────────────────
   { itemId: 'wood',          baseBuyPrice: 5,   sellMultiplier: 0.5, maxQuantity: -1  },
   { itemId: 'stone',         baseBuyPrice: 5,   sellMultiplier: 0.5, maxQuantity: -1  },
-  { itemId: 'fiber',         baseBuyPrice: 4,   sellMultiplier: 0.5, maxQuantity: -1  },
   { itemId: 'iron_ore',      baseBuyPrice: 12,  sellMultiplier: 0.5, maxQuantity: -1  },
   { itemId: 'iron_bar',      baseBuyPrice: 30,  sellMultiplier: 0.5, maxQuantity: -1  },
   { itemId: 'leather',       baseBuyPrice: 8,   sellMultiplier: 0.5, maxQuantity: -1  },

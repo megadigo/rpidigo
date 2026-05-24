@@ -4,7 +4,6 @@ export const items: ItemDefinition[] = [
   // ── Materials ─────────────────────────────────────────────────────────────
   { id: 'wood',         name: 'Wood',        stackable: true,  maxStack: 99, spriteFrame: 'wood.png',        category: 'material' },
   { id: 'stone',        name: 'Stone',       stackable: true,  maxStack: 99, spriteFrame: 'stone.png',       category: 'material' },
-  { id: 'fiber',        name: 'Fiber',       stackable: true,  maxStack: 99, spriteFrame: 'fiber.png',       category: 'material' },
   { id: 'iron_ore',     name: 'Iron Ore',    stackable: true,  maxStack: 99, spriteFrame: 'iron_ore.png',    category: 'material' },
   { id: 'iron_bar',     name: 'Iron Bar',    stackable: true,  maxStack: 99, spriteFrame: 'iron_bar.png',    category: 'material' },
   { id: 'gold_coin',    name: 'Gold Coin',   stackable: true,  maxStack: 9999, spriteFrame: 'gold_coin.png', category: 'material' },
