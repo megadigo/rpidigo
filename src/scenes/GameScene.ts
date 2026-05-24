@@ -966,8 +966,9 @@ export class GameScene extends Phaser.Scene {
       }
     }
 
-    // Update local cache immediately (renderer + collision pick it up next frame)
+    // Update local cache and invalidate the rendered tile so it redraws next frame
     setTile(cx, cy, newTileData)
+    this.tilemapRenderer.invalidateTile(cx, cy)
 
     // Persist to Firebase
     await update(ref(db), {
