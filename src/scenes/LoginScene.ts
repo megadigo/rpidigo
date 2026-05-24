@@ -8,6 +8,12 @@ import { login, register } from '../player/Auth.ts'
 
 const CHAMPIONS = ['arthax', 'borg', 'gangblanc', 'grum', 'kanji', 'katan', 'okomo', 'zhinja'] as const
 
+/** Maps champion id → spritesheet filename in Player/ (matches LoadingScene). */
+const CHAMPION_FILE: Record<(typeof CHAMPIONS)[number], string> = {
+  arthax: 'Arthax', borg: 'Börg', gangblanc: 'Gangblanc', grum: 'Grum',
+  kanji:  'Kanji',  katan: 'Katan', okomo: 'Okomo',        zhinja: 'Zhinja',
+}
+
 export class LoginScene extends Phaser.Scene {
   private overlay!: HTMLDivElement
   private selectedChampion: (typeof CHAMPIONS)[number] = CHAMPIONS[0]
@@ -27,7 +33,7 @@ export class LoginScene extends Phaser.Scene {
 
     const championOptions = CHAMPIONS.map(
       c => `<button class="champion-btn${c === this.selectedChampion ? ' selected' : ''}" data-id="${c}">
-        <canvas class="champion-avatar" width="32" height="32" data-src="assets/sprites/Player/player_${c}.png"></canvas>
+        <canvas class="champion-avatar" width="32" height="32" data-src="assets/sprites/Player/${CHAMPION_FILE[c]}.png"></canvas>
         <span>${c}</span>
       </button>`,
     ).join('')

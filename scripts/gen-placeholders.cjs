@@ -9,7 +9,7 @@
  *   World/Ground/    — terrain tiles (16×16)
  *   World/Nature/    — natural world objects (16×16)
  *   World/Buildings/ — structures visible in the overworld (16×16)
- *   Player/          — champion spritesheets (80×128) + login previews
+ *   Player/          — champion spritesheets (80×128); used for gameplay and login previews
  *   Enemies/         — enemy spritesheets (80×128)
  *   NPCs/            — NPC spritesheets (80×128)
  *   Items/           — consumables, materials, keys (16×16)
@@ -212,15 +212,6 @@ const PLAYER_SHEETS = [
   ['Player/Katan.png',     '#E65100'],
   ['Player/Okomo.png',     '#1B5E20'],
   ['Player/Zhinja.png',    '#4527A0'],
-  // Login preview avatars (same sheets, same files)
-  ['Player/player_arthax.png',    '#1565C0'],
-  ['Player/player_borg.png',      '#B71C1C'],
-  ['Player/player_gangblanc.png', '#212121'],
-  ['Player/player_grum.png',      '#4E342E'],
-  ['Player/player_kanji.png',     '#880E4F'],
-  ['Player/player_katan.png',     '#E65100'],
-  ['Player/player_okomo.png',     '#1B5E20'],
-  ['Player/player_zhinja.png',    '#4527A0'],
 ]
 for (const [p, c] of PLAYER_SHEETS) write(p, sheet(c))
 
