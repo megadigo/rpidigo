@@ -27,6 +27,7 @@ import { EnemyRegistry, TileRegistry } from '../registry/registries.ts'
 import { ScriptExecutor } from '../world/ScriptExecutor.ts'
 import type { NearbyPlayer } from '../world/ScriptExecutor.ts'
 import type { DialogSceneData } from './DialogScene.ts'
+import type { CraftSceneData } from './CraftScene.ts'
 
 /** Tile bounds of the 1000×1000 overworld in pixels. */
 const WORLD_PIXEL_SIZE = 1000 * TILE_SIZE
@@ -758,8 +759,15 @@ export class GameScene extends Phaser.Scene {
       }
     }
 
-    // No adjacent NPC — check facing tile for gathering (Step 11)
+    // Crafting station check — facing tile only (Step 11)
     const [fdx2, fdy2] = facingOffset[direction]
+    const craftStation = this._getCraftStation(tx + fdx2, ty + fdy2)
+    if (craftStation) {
+      this._openCraft(craftStation)
+      return
+    }
+
+    // Gathering check — facing tile only (Step 11)
     if (await this._handleGather(tx + fdx2, ty + fdy2)) return
 
     // No gatherable tile either — proceed with enemy attack (facing tile only)
@@ -777,6 +785,43 @@ export class GameScene extends Phaser.Scene {
     this.scene.launch('DialogScene', data)
     // Unfreeze exactly once when DialogScene shuts down
     this.scene.get('DialogScene').events.once(
+      Phaser.Scenes.Events.SHUTDOWN,
+      () => this.playerController.unfreeze(),
+    )
+  }
+
+  // ── Crafting (Step 11) ────────────────────────────────────────────────────
+
+  /** Maps tile IDs to their crafting station type. */
+  private static readonly _CRAFT_TILES: Record<string, CraftSceneData['station']> = {
+    workbench:    'workbench',
+    workshop:     'workshop',
+    dungeon_altar: 'dungeon_altar',
+  }
+
+  /**
+   * Return the crafting station type if the tile at (cx, cy) is a station,
+   * otherwise null.
+   */
+  private _getCraftStation(cx: number, cy: number): CraftSceneData['station'] | null {
+    const tile = getTile(cx, cy)
+    if (!tile) return null
+    for (const layerId of [tile.g, ...(tile.m ?? [])]) {
+      const station = GameScene._CRAFT_TILES[layerId]
+      if (station) return station
+    }
+    return null
+  }
+
+  /**
+   * Freeze the player and launch CraftScene for the given station.
+   */
+  private _openCraft(station: CraftSceneData['station']): void {
+    if (this.scene.isActive('CraftScene')) return
+    this.playerController.freeze()
+    const data: CraftSceneData = { station }
+    this.scene.launch('CraftScene', data)
+    this.scene.get('CraftScene').events.once(
       Phaser.Scenes.Events.SHUTDOWN,
       () => this.playerController.unfreeze(),
     )

@@ -8,6 +8,7 @@ import { GameScene } from './scenes/GameScene'
 import { HudScene } from './scenes/HudScene'
 import { DialogScene } from './scenes/DialogScene'
 import { InventoryScene } from './scenes/InventoryScene'
+import { CraftScene } from './scenes/CraftScene'
 
 async function main(): Promise<void> {
   await bootstrapRegistries()
@@ -22,7 +23,7 @@ async function main(): Promise<void> {
       mode: Phaser.Scale.FIT,
       autoCenter: Phaser.Scale.CENTER_BOTH,
     },
-    scene: [IntroScene, LoginScene, LoadingScene, GameScene, HudScene, DialogScene, InventoryScene],
+    scene: [IntroScene, LoginScene, LoadingScene, GameScene, HudScene, DialogScene, InventoryScene, CraftScene],
   })
 }
 

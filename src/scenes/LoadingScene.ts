@@ -124,6 +124,10 @@ export class LoadingScene extends Phaser.Scene {
         })
       }
 
+      // One-time starter kit: every player gets an axe, pickaxe, and scythe
+      // if they don't already own any of them (covers accounts made before crafting).
+      await this._ensureStarterKit()
+
       await this.setProgress(1, 'Ready!')
       await new Promise(r => setTimeout(r, 300))
       this.scene.start('GameScene')
@@ -131,5 +135,27 @@ export class LoadingScene extends Phaser.Scene {
       this.label.setText(`Error: ${String(err)}`)
       console.error('[LoadingScene]', err)
     }
+  }
+
+  /**
+   * Give every player a starter axe, pickaxe, and scythe if they own none.
+   * This runs once on first load and is a no-op on subsequent logins.
+   */
+  private async _ensureStarterKit(): Promise<void> {
+    const player = getLocalPlayer()
+    const inv = player.inventory ?? []
+    const TOOLS = ['axe', 'pickaxe', 'scythe']
+    const hasAny = inv.some(s => TOOLS.includes(s.itemId))
+    if (hasAny) return   // already has at least one tool
+
+    const newInv = [
+      ...inv,
+      { itemId: 'axe',     quantity: 1, metadata: {} },
+      { itemId: 'pickaxe', quantity: 1, metadata: {} },
+      { itemId: 'scythe',  quantity: 1, metadata: {} },
+    ]
+    player.inventory = newInv
+    setLocalPlayer(player)
+    await update(ref(db), { [`players/${player.id}/inventory`]: newInv })
   }
 }
