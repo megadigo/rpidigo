@@ -163,7 +163,6 @@ const GROUND_TILES = [
   ['World/Ground/GrassTall.png',         '#388E3C'],
   ['World/Ground/GrassFlowerYellow.png', '#CDDC39'],
   ['World/Ground/GrassFlowerRed.png',    '#E53935'],
-  ['World/Ground/GrassDead.png',         '#8D6E63'],
   ['World/Ground/PathDirt.png',          '#A1887F'],
   ['World/Ground/WaterShallow.png',      '#81D4FA'],
   ['World/Ground/WaterDeep.png',         '#0277BD'],
@@ -198,7 +197,6 @@ const NATURE_TILES = [
   ['World/Nature/Cactus.png',      '#689F38'],
   ['World/Nature/Tumbleweed.png',  '#A5D6A7'],
   ['World/Nature/Wheatfield.png',  '#F9A825'],
-  ['World/Nature/Cliff.png',       '#616161'],
 ]
 for (const [p, c] of NATURE_TILES) write(p, icon16(c))
 
@@ -235,7 +233,6 @@ const ENEMIES = [
   ['Enemies/bandit_strong.png',     '#7B241C'],
   ['Enemies/giant_spider.png',      '#4A148C'],
   ['Enemies/goblin_scout_weak.png', '#2E7D32'],
-  ['Enemies/goblin_scout_strong.png','#1B5E20'],
   ['Enemies/treant.png',            '#1B5E20'],
   ['Enemies/river_troll.png',       '#1565C0'],
   ['Enemies/crocodile.png',         '#558B2F'],
@@ -343,7 +340,6 @@ for (const [p, c] of TOOLS) write(p, icon16(c))
 
 console.log('\n=== Dungeon — buildings, props, floor (16×16) ===')
 const DUNGEON = [
-  ['Dungeon/DungeonEntrance.png', '#37474F'],
   ['Dungeon/DungeonFloor.png',    '#455A64'],
   ['Dungeon/DungeonWall.png',     '#263238'],
   ['Dungeon/DungeonPillar.png',   '#37474F'],
@@ -367,9 +363,6 @@ const HOUSE = [
   ['House/Bed.png',        '#E53935'],   // furniture
   ['House/Sofa.png',       '#7986CB'],   // furniture
   ['House/Chest.png',      '#A1887F'],   // loot chest
-  ['House/Portal.png',     '#7C4DFF'],   // magic portal exit
-  // QuestBoard is copied from World/Buildings/ — same visual, editable separately
-  ['House/QuestBoard.png', '#FFB300'],
 ]
 for (const [p, c] of HOUSE) write(p, icon16(c))
 
