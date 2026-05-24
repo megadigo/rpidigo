@@ -90,19 +90,19 @@ export const tiles: TileDefinition[] = [
   { id: 'oasis_water', passable: false, speedMod: 0,   destructible: false, spriteFrame: 'World/Ground/WaterOasis.png' },
   { id: 'quicksand',   passable: true,  speedMod: 0.3, destructible: false, spriteFrame: 'World/Ground/Quicksand.png' },
 
-  // ── Village — single-sprite buildings ─────────────────────────────────────
+  // ── Village — world-visible buildings ────────────────────────────────────
   { id: 'cobblestone',  passable: true,  speedMod: 1.1, destructible: false, spriteFrame: 'World/Ground/Cobblestone.png' },
-  { id: 'house_hut',    passable: false, speedMod: 0,   destructible: false, spriteFrame: 'House/Huts.png' },
-  { id: 'house_cabin',  passable: false, speedMod: 0,   destructible: false, spriteFrame: 'House/Houses.png' },
-  { id: 'barracks',     passable: false, speedMod: 0,   destructible: false, spriteFrame: 'House/Barracks.png' },
-  { id: 'chapel',       passable: false, speedMod: 0,   destructible: false, spriteFrame: 'House/Chapels.png' },
-  { id: 'tavern',       passable: false, speedMod: 0,   destructible: false, spriteFrame: 'House/Taverns.png' },
-  { id: 'well',         passable: false, speedMod: 0,   destructible: false, spriteFrame: 'House/Well.png' },
-  { id: 'market_stall', passable: true,  speedMod: 1.0, destructible: false, spriteFrame: 'House/Market.png' },
-  { id: 'workshop',     passable: false, speedMod: 0,   destructible: false, spriteFrame: 'House/Workshops.png' },
-  { id: 'quest_board',  passable: true,  speedMod: 1.0, destructible: false, spriteFrame: 'House/QuestBoard.png' },
-  { id: 'street_sign',  passable: true,  speedMod: 1.0, destructible: false, spriteFrame: 'House/StreetSign.png' },
-  { id: 'tombstone',    passable: false, speedMod: 0,   destructible: false, spriteFrame: 'House/Tombstone.png' },
+  { id: 'house_hut',    passable: false, speedMod: 0,   destructible: false, spriteFrame: 'World/Buildings/Huts.png' },
+  { id: 'house_cabin',  passable: false, speedMod: 0,   destructible: false, spriteFrame: 'World/Buildings/Houses.png' },
+  { id: 'barracks',     passable: false, speedMod: 0,   destructible: false, spriteFrame: 'World/Buildings/Barracks.png' },
+  { id: 'chapel',       passable: false, speedMod: 0,   destructible: false, spriteFrame: 'World/Buildings/Chapels.png' },
+  { id: 'tavern',       passable: false, speedMod: 0,   destructible: false, spriteFrame: 'World/Buildings/Taverns.png' },
+  { id: 'well',         passable: false, speedMod: 0,   destructible: false, spriteFrame: 'World/Buildings/Well.png' },
+  { id: 'market_stall', passable: true,  speedMod: 1.0, destructible: false, spriteFrame: 'World/Buildings/Market.png' },
+  { id: 'workshop',     passable: false, speedMod: 0,   destructible: false, spriteFrame: 'World/Buildings/Workshops.png' },
+  { id: 'quest_board',  passable: true,  speedMod: 1.0, destructible: false, spriteFrame: 'World/Buildings/QuestBoard.png' },
+  { id: 'street_sign',  passable: true,  speedMod: 1.0, destructible: false, spriteFrame: 'World/Buildings/StreetSign.png' },
+  { id: 'tombstone',    passable: false, speedMod: 0,   destructible: false, spriteFrame: 'World/Buildings/Tombstone.png' },
   { id: 'garden_plot',  passable: true,  speedMod: 1.0, destructible: false, spriteFrame: 'World/Ground/GardenPlot.png' },
   {
     id: 'wheat_field', passable: true, speedMod: 0.8, destructible: true,
@@ -113,7 +113,7 @@ export const tiles: TileDefinition[] = [
   },
 
   // ── Dungeon ───────────────────────────────────────────────────────────────
-  { id: 'dungeon_entrance',    passable: true,  speedMod: 1.0, destructible: false, spriteFrame: 'Dungeon/DungeonEntrance.png' },
+  { id: 'dungeon_entrance',    passable: true,  speedMod: 1.0, destructible: false, spriteFrame: 'World/Buildings/DungeonEntrance.png' },
   { id: 'dungeon_floor',       passable: true,  speedMod: 1.0, destructible: false, spriteFrame: 'Dungeon/DungeonFloor.png' },
   { id: 'dungeon_wall',        passable: false, speedMod: 0,   destructible: false, spriteFrame: 'Dungeon/DungeonWall.png' },
   { id: 'dungeon_stairs_down', passable: true,  speedMod: 1.0, destructible: false, spriteFrame: 'Dungeon/StairDown.png' },

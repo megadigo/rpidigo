@@ -59,6 +59,7 @@ All sprites live under `public/assets/sprites/`. The directories are:
 |---|---|
 | `World/Ground/` | Terrain tiles — grass, water, sand, paths, etc. (16×16) |
 | `World/Nature/` | Natural world objects — trees, rocks, bushes, etc. (16×16) |
+| `World/Buildings/` | Structures visible in the overworld — buildings, dungeon entrance, props (16×16) |
 | `Player/` | Champion spritesheets (80×128) + login preview images |
 | `Enemies/` | Enemy spritesheets (80×128) |
 | `NPCs/` | NPC spritesheets (80×128) |
@@ -66,9 +67,9 @@ All sprites live under `public/assets/sprites/`. The directories are:
 | `Weapons/` | Weapon icons (16×16) |
 | `Armors/` | Armor icons (16×16) |
 | `Tools/` | Tool icons (16×16) |
-| `Dungeon/` | Dungeon buildings, floor, walls, stairs, props (16×16) |
-| `House/` | Village buildings, house interior tiles, furniture (16×16) |
-| `Cellars/` | Cellar floor, walls, stairs, props (16×16) |
+| `Dungeon/` | Dungeon **interior**: floor, walls, stairs, props (16×16) |
+| `House/` | House **interior**: floor, door, furniture (16×16) |
+| `Cellars/` | Cellar **interior**: floor, walls, stairs, props (16×16) |
 
 ### Tiles by zone
 
@@ -122,22 +123,22 @@ All sprite paths are relative to `public/assets/sprites/`.
 | `oasis_water` | `World/Ground/WaterOasis.png` |
 | `quicksand` | `World/Ground/Quicksand.png` |
 
-**Village** — houses are single-sprite tiles; entering one (walk up to it) automatically loads a 12×12 interior room.
+**Village** — building sprites are in `World/Buildings/`; entering a building loads its interior room.
 
 | Tile | Sprite | Notes |
 |---|---|---|
 | `cobblestone` | `World/Ground/Cobblestone.png` | Path / square |
-| `house_hut` | `House/Huts.png` | Small house — auto-enters on touch |
-| `house_cabin` | `House/Houses.png` | Medium house — auto-enters on touch |
-| `barracks` | `House/Barracks.png` | Guard barracks — auto-enters on touch |
-| `chapel` | `House/Chapels.png` | Chapel / temple — auto-enters on touch |
-| `tavern` | `House/Taverns.png` | Tavern — auto-enters on touch |
-| `well` | `House/Well.png` | Central landmark |
-| `market_stall` | `House/Market.png` | Merchant NPC spot |
-| `workshop` | `House/Workshops.png` | Blacksmith / crafting — auto-enters on touch |
-| `quest_board` | `House/QuestBoard.png` | Notice board |
-| `street_sign` | `House/StreetSign.png` | Path-end marker |
-| `tombstone` | `House/Tombstone.png` | Cemetery decoration |
+| `house_hut` | `World/Buildings/Huts.png` | Small house — auto-enters on touch |
+| `house_cabin` | `World/Buildings/Houses.png` | Medium house — auto-enters on touch |
+| `barracks` | `World/Buildings/Barracks.png` | Guard barracks — auto-enters on touch |
+| `chapel` | `World/Buildings/Chapels.png` | Chapel / temple — auto-enters on touch |
+| `tavern` | `World/Buildings/Taverns.png` | Tavern — auto-enters on touch |
+| `well` | `World/Buildings/Well.png` | Central landmark |
+| `market_stall` | `World/Buildings/Market.png` | Merchant NPC spot |
+| `workshop` | `World/Buildings/Workshops.png` | Blacksmith / crafting — auto-enters on touch |
+| `quest_board` | `World/Buildings/QuestBoard.png` | Notice board *(also in `House/` for barracks interior)* |
+| `street_sign` | `World/Buildings/StreetSign.png` | Path-end marker |
+| `tombstone` | `World/Buildings/Tombstone.png` | Cemetery decoration |
 | `garden_plot` | `World/Ground/GardenPlot.png` | Wheat field base |
 | `wheat_field` | `World/Nature/Wheatfield.png` | Planted crop |
 
@@ -146,21 +147,26 @@ All sprite paths are relative to `public/assets/sprites/`.
 | Tile | Sprite | Notes |
 |---|---|---|
 | `house_floor` | `House/HouseFloor.png` | Interior floor |
-| `dungeon_wall` | `Dungeon/DungeonWall.png` | Impassable border |
+| `dungeon_wall` | `Dungeon/DungeonWall.png` | Impassable border (shared with dungeon) |
 | `workbench` | `House/WorkBench.png` | Crafting station (workshop) |
 | `table` | `House/Table.png` | Furniture (tavern, workshop, residential) |
 | `bed` | `House/Bed.png` | Furniture (residential) |
 | `sofa` | `House/Sofa.png` | Furniture (tavern, chapel, residential) |
 | `chest` | `House/Chest.png` | Storage / loot chest |
-| `quest_board` | `House/QuestBoard.png` | Barracks notice board |
-| `dungeon_altar` | `Dungeon/DungeonAltar.png` | Chapel altar |
+| `quest_board` | `World/Buildings/QuestBoard.png` | Barracks notice board *(copy in `House/` for custom art)* |
+| `dungeon_altar` | `Dungeon/DungeonAltar.png` | Chapel altar *(shared with dungeon)* |
 | `house_exit` | `House/Door.png` | Returns player to overworld |
 
-**Dungeon**
+**Dungeon entrance** — visible in the overworld.
 
 | Tile | Sprite |
 |---|---|
-| `dungeon_entrance` | `Dungeon/DungeonEntrance.png` |
+| `dungeon_entrance` | `World/Buildings/DungeonEntrance.png` |
+
+**Dungeon interior** — underground rooms.
+
+| Tile | Sprite |
+|---|---|
 | `dungeon_floor` | `Dungeon/DungeonFloor.png` |
 | `dungeon_wall` | `Dungeon/DungeonWall.png` |
 | `dungeon_stairs_down` | `Dungeon/StairDown.png` |

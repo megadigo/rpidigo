@@ -6,18 +6,19 @@
  * Run once:  node scripts/gen-placeholders.cjs
  *
  * Sprite directory layout (public/assets/sprites/):
- *   World/Ground/  — terrain tiles (16×16)
- *   World/Nature/  — natural world objects (16×16)
- *   Player/        — champion spritesheets (80×128) + login previews (80×128)
- *   Enemies/       — enemy spritesheets (80×128)
- *   NPCs/          — NPC spritesheets (80×128)
- *   Items/         — consumables, materials, keys (16×16)
- *   Weapons/       — weapon icons (16×16)
- *   Armors/        — armor icons (16×16)
- *   Tools/         — tool icons (16×16)
- *   Dungeon/       — dungeon buildings, floor, walls, props (16×16)
- *   House/         — village buildings, house interior, furniture (16×16)
- *   Cellars/       — cellar environments (16×16)
+ *   World/Ground/    — terrain tiles (16×16)
+ *   World/Nature/    — natural world objects (16×16)
+ *   World/Buildings/ — structures visible in the overworld (16×16)
+ *   Player/          — champion spritesheets (80×128) + login previews
+ *   Enemies/         — enemy spritesheets (80×128)
+ *   NPCs/            — NPC spritesheets (80×128)
+ *   Items/           — consumables, materials, keys (16×16)
+ *   Weapons/         — weapon icons (16×16)
+ *   Armors/          — armor icons (16×16)
+ *   Tools/           — tool icons (16×16)
+ *   Dungeon/         — dungeon INTERIOR: floor, walls, stairs, props (16×16)
+ *   House/           — house INTERIOR: floor, door, furniture (16×16)
+ *   Cellars/         — cellar INTERIOR: floor, walls, props (16×16)
  *
  * Spritesheet format (80×128):
  *   5 columns × 8 rows of 16×16 frames
@@ -131,6 +132,27 @@ function write(relPath, buf) {
   fs.writeFileSync(full, buf)
   console.log(`  wrote ${relPath}`)
 }
+
+// ── World/Buildings — overworld structures (16×16) ───────────────────────────
+
+console.log('\n=== World/Buildings — overworld structures (16×16) ===')
+const WORLD_BUILDINGS = [
+  // Village buildings (exterior, seen in the world map)
+  ['World/Buildings/Huts.png',             '#8D6E63'],
+  ['World/Buildings/Houses.png',           '#A1887F'],
+  ['World/Buildings/Barracks.png',         '#546E7A'],
+  ['World/Buildings/Chapels.png',          '#F5F5F5'],
+  ['World/Buildings/Taverns.png',          '#BF360C'],
+  ['World/Buildings/Workshops.png',        '#4E342E'],
+  ['World/Buildings/Market.png',           '#F57F17'],
+  ['World/Buildings/Well.png',             '#78909C'],
+  ['World/Buildings/QuestBoard.png',       '#FFB300'],
+  ['World/Buildings/StreetSign.png',       '#8D6E63'],
+  ['World/Buildings/Tombstone.png',        '#757575'],
+  // Dungeon entrance (visible in the overworld)
+  ['World/Buildings/DungeonEntrance.png',  '#37474F'],
+]
+for (const [p, c] of WORLD_BUILDINGS) write(p, icon16(c))
 
 // ── World/Ground — terrain tiles (16×16) ─────────────────────────────────────
 
@@ -334,29 +356,20 @@ const DUNGEON = [
 ]
 for (const [p, c] of DUNGEON) write(p, icon16(c))
 
-// ── House — village buildings, interior, furniture (16×16) ───────────────────
+// ── House — INTERIOR only: floor, door, furniture (16×16) ────────────────────
 
-console.log('\n=== House — buildings, interior, furniture (16×16) ===')
+console.log('\n=== House — interior: floor, door, furniture (16×16) ===')
 const HOUSE = [
-  ['House/Huts.png',       '#8D6E63'],
-  ['House/Houses.png',     '#A1887F'],
-  ['House/Barracks.png',   '#546E7A'],
-  ['House/Chapels.png',    '#F5F5F5'],
-  ['House/Taverns.png',    '#BF360C'],
-  ['House/Workshops.png',  '#4E342E'],
-  ['House/Market.png',     '#F57F17'],
-  ['House/Door.png',       '#6D4C41'],
-  ['House/HouseFloor.png', '#BCAAA4'],
-  ['House/WorkBench.png',  '#795548'],
-  ['House/Table.png',      '#A1887F'],
-  ['House/Bed.png',        '#E53935'],
-  ['House/Sofa.png',       '#7986CB'],
-  ['House/Well.png',       '#78909C'],
+  ['House/HouseFloor.png', '#BCAAA4'],   // interior floor tile
+  ['House/Door.png',       '#6D4C41'],   // house exit door
+  ['House/WorkBench.png',  '#795548'],   // crafting station
+  ['House/Table.png',      '#A1887F'],   // furniture
+  ['House/Bed.png',        '#E53935'],   // furniture
+  ['House/Sofa.png',       '#7986CB'],   // furniture
+  ['House/Chest.png',      '#A1887F'],   // loot chest
+  ['House/Portal.png',     '#7C4DFF'],   // magic portal exit
+  // QuestBoard is copied from World/Buildings/ — same visual, editable separately
   ['House/QuestBoard.png', '#FFB300'],
-  ['House/StreetSign.png', '#8D6E63'],
-  ['House/Tombstone.png',  '#757575'],
-  ['House/Chest.png',      '#A1887F'],
-  ['House/Portal.png',     '#7C4DFF'],
 ]
 for (const [p, c] of HOUSE) write(p, icon16(c))
 

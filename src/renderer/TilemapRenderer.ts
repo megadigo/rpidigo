@@ -53,18 +53,19 @@ const LAYER_DEPTH: Record<TileLayer, number> = {
  * Sprites removed from old system:
  *   Bridge, Door, Wall, Roof, Forge, Lantern — replaced by actual available sprites.
  * Sprite directories (public/assets/sprites/):
- *   World/Ground/  — terrain tiles (grass, water, sand, etc.)
- *   World/Nature/  — natural objects (trees, rocks, bushes)
- *   Player/        — champion spritesheets + login previews
- *   Enemies/       — enemy spritesheets
- *   NPCs/          — NPC spritesheets
- *   Items/         — consumables, materials, keys
- *   Weapons/       — weapon icons
- *   Armors/        — armor icons
- *   Tools/         — tool icons
- *   Dungeon/       — dungeon buildings, floor, walls, props
- *   House/         — village buildings, house interior, furniture
- *   Cellars/       — cellar environments (under houses)
+ *   World/Ground/    — terrain tiles (grass, water, sand, etc.)
+ *   World/Nature/    — natural objects (trees, rocks, bushes)
+ *   World/Buildings/ — structures visible in the overworld (buildings, dungeon entrance)
+ *   Player/          — champion spritesheets + login previews
+ *   Enemies/         — enemy spritesheets
+ *   NPCs/            — NPC spritesheets
+ *   Items/           — consumables, materials, keys
+ *   Weapons/         — weapon icons
+ *   Armors/          — armor icons
+ *   Tools/           — tool icons
+ *   Dungeon/         — dungeon INTERIOR: floor, walls, stairs, props
+ *   House/           — house INTERIOR: floor, door, furniture
+ *   Cellars/         — cellar INTERIOR: floor, walls, props
  */
 export const TILE_DEFS: Record<string, TileDef> = {
   // ── Plains ────────────────────────────────────────────────────────────────
@@ -99,23 +100,23 @@ export const TILE_DEFS: Record<string, TileDef> = {
   dry_grass:           { sprite: 'World/Nature/Tumbleweed',         layer: 'MIDDLE' },
   oasis_water:         { sprite: 'World/Ground/WaterOasis',         layer: 'GROUND', speedMod: 0.2 },
   quicksand:           { sprite: 'World/Ground/Quicksand',          layer: 'GROUND', speedMod: 0.4 },
-  // ── Village ───────────────────────────────────────────────────────────────
-  cobblestone:         { sprite: 'World/Ground/Cobblestone',        layer: 'GROUND' },
-  house_hut:           { sprite: 'House/Huts',                      layer: 'MIDDLE', impassable: true, entry: 'house' },
-  house_cabin:         { sprite: 'House/Houses',                    layer: 'MIDDLE', impassable: true, entry: 'house' },
-  barracks:            { sprite: 'House/Barracks',                  layer: 'MIDDLE', impassable: true, entry: 'house' },
-  chapel:              { sprite: 'House/Chapels',                   layer: 'MIDDLE', impassable: true, entry: 'house' },
-  tavern:              { sprite: 'House/Taverns',                   layer: 'MIDDLE', impassable: true, entry: 'house' },
-  well:                { sprite: 'House/Well',                      layer: 'MIDDLE', impassable: true },
-  market_stall:        { sprite: 'House/Market',                    layer: 'MIDDLE', impassable: true },
-  workshop:            { sprite: 'House/Workshops',                 layer: 'MIDDLE', impassable: true, entry: 'house' },
-  quest_board:         { sprite: 'House/QuestBoard',                layer: 'MIDDLE' },
-  street_sign:         { sprite: 'House/StreetSign',                layer: 'MIDDLE' },
-  tombstone:           { sprite: 'House/Tombstone',                 layer: 'MIDDLE', impassable: true },
-  garden_plot:         { sprite: 'World/Ground/GardenPlot',         layer: 'GROUND' },
-  wheat_field:         { sprite: 'World/Nature/Wheatfield',         layer: 'MIDDLE', speedMod: 0.8 },
-  // ── Dungeon ───────────────────────────────────────────────────────────────
-  dungeon_entrance:    { sprite: 'Dungeon/DungeonEntrance',         layer: 'GROUND', entry: 'dungeon' },
+  // ── Village (world buildings) ─────────────────────────────────────────────
+  cobblestone:         { sprite: 'World/Ground/Cobblestone',             layer: 'GROUND' },
+  house_hut:           { sprite: 'World/Buildings/Huts',                 layer: 'MIDDLE', impassable: true, entry: 'house' },
+  house_cabin:         { sprite: 'World/Buildings/Houses',               layer: 'MIDDLE', impassable: true, entry: 'house' },
+  barracks:            { sprite: 'World/Buildings/Barracks',             layer: 'MIDDLE', impassable: true, entry: 'house' },
+  chapel:              { sprite: 'World/Buildings/Chapels',              layer: 'MIDDLE', impassable: true, entry: 'house' },
+  tavern:              { sprite: 'World/Buildings/Taverns',              layer: 'MIDDLE', impassable: true, entry: 'house' },
+  well:                { sprite: 'World/Buildings/Well',                 layer: 'MIDDLE', impassable: true },
+  market_stall:        { sprite: 'World/Buildings/Market',               layer: 'MIDDLE', impassable: true },
+  workshop:            { sprite: 'World/Buildings/Workshops',            layer: 'MIDDLE', impassable: true, entry: 'house' },
+  quest_board:         { sprite: 'World/Buildings/QuestBoard',           layer: 'MIDDLE' },
+  street_sign:         { sprite: 'World/Buildings/StreetSign',           layer: 'MIDDLE' },
+  tombstone:           { sprite: 'World/Buildings/Tombstone',            layer: 'MIDDLE', impassable: true },
+  garden_plot:         { sprite: 'World/Ground/GardenPlot',              layer: 'GROUND' },
+  wheat_field:         { sprite: 'World/Nature/Wheatfield',              layer: 'MIDDLE', speedMod: 0.8 },
+  // ── Dungeon entrance (world-visible) ──────────────────────────────────────
+  dungeon_entrance:    { sprite: 'World/Buildings/DungeonEntrance',      layer: 'GROUND', entry: 'dungeon' },
   dungeon_floor:       { sprite: 'Dungeon/DungeonFloor',            layer: 'GROUND' },
   dungeon_wall:        { sprite: 'Dungeon/DungeonWall',             layer: 'MIDDLE', impassable: true },
   dungeon_stairs_down: { sprite: 'Dungeon/StairDown',               layer: 'GROUND' },
