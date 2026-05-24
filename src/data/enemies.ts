@@ -21,14 +21,14 @@ export const enemies: EnemyDefinition[] = [
     // Timid lone wolf — backs away from humans, attacks only if cornered
     id: 'wolf_weak', baseType: 'wolf', variant: 'weak', displayName: 'Wolf',
     baseHp: 30, basePower: 4, baseMp: 0, aggroRange: 5, speed: 'normal',
-    levelRange: [1, 3], lootTable: [{ itemId: 'fiber', min: 1, max: 2, chance: 0.7 }],
+    levelRange: [1, 3], lootTable: [{ itemId: 'leather', min: 1, max: 2, chance: 0.7 }],
     behaviorScript: patrolOnly, spriteFrame: 'wolf.png',
   },
   {
     // Apex predator — attacks on sight, never gives up the chase
     id: 'wolf_strong', baseType: 'wolf', variant: 'strong', displayName: 'Dire Wolf',
     baseHp: 55, basePower: 8, baseMp: 0, aggroRange: 6, speed: 'fast',
-    levelRange: [3, 7], lootTable: [{ itemId: 'fiber', min: 2, max: 4, chance: 0.8 }],
+    levelRange: [3, 7], lootTable: [{ itemId: 'leather', min: 1, max: 3, chance: 0.9 }],
     behaviorScript: patrolAggressive, spriteFrame: 'wolf.png',
   },
   {
@@ -101,7 +101,7 @@ export const enemies: EnemyDefinition[] = [
     // Ambush predator — waits, then stalks prey with standard chase
     id: 'crocodile_weak', baseType: 'crocodile', variant: 'weak', displayName: 'Crocodile',
     baseHp: 50, basePower: 7, baseMp: 0, aggroRange: 5, speed: 'normal',
-    levelRange: [2, 6], lootTable: [{ itemId: 'fiber', min: 1, max: 3, chance: 0.7 }],
+    levelRange: [2, 6], lootTable: [{ itemId: 'leather', min: 1, max: 2, chance: 0.8 }],
     behaviorScript: patrolChase, spriteFrame: 'crocodile.png',
   },
   {
@@ -125,7 +125,7 @@ export const enemies: EnemyDefinition[] = [
     // Defensive — stays in its burrow area, attacks only if stepped on
     id: 'scorpion_weak', baseType: 'scorpion', variant: 'weak', displayName: 'Scorpion',
     baseHp: 30, basePower: 5, baseMp: 0, aggroRange: 4, speed: 'normal',
-    levelRange: [2, 5], lootTable: [{ itemId: 'fiber', min: 1, max: 2, chance: 0.6 }],
+    levelRange: [2, 5], lootTable: [{ itemId: 'leather', min: 1, max: 1, chance: 0.6 }],
     behaviorScript: patrolOnly, spriteFrame: 'scorpion.png',
     special: ['poison'],
   },
@@ -133,7 +133,7 @@ export const enemies: EnemyDefinition[] = [
     // Large hunter — actively stalks prey across the sand
     id: 'scorpion_giant', baseType: 'scorpion', variant: 'giant', displayName: 'Giant Scorpion',
     baseHp: 85, basePower: 11, baseMp: 0, aggroRange: 5, speed: 'normal',
-    levelRange: [5, 9], lootTable: [{ itemId: 'iron_ore', min: 1, max: 2, chance: 0.4 }, { itemId: 'fiber', min: 2, max: 4, chance: 1 }],
+    levelRange: [5, 9], lootTable: [{ itemId: 'iron_ore', min: 1, max: 2, chance: 0.4 }, { itemId: 'leather', min: 1, max: 3, chance: 1 }],
     behaviorScript: patrolChase, spriteFrame: 'scorpion.png',
     special: ['poison'],
   },
