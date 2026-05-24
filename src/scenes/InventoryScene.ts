@@ -374,50 +374,11 @@ export class InventoryScene extends Phaser.Scene {
   // ── Helpers ───────────────────────────────────────────────────────────────────
 
   /**
-   * Maps item IDs to Phaser texture-cache keys (tile spritesheets loaded in
-   * LoadingScene) so gathered resources show recognisable icons.
-   * Key = texture key as registered with this.load.spritesheet(); frame = index.
-   */
-  private static readonly _ICON_MAP: Record<string, { key: string; frame: number }> = {
-    // Gathered materials → tile sprite they come from
-    wood:          { key: 'Nature/Trees',     frame: 0 },
-    stone:         { key: 'Nature/RockSmall', frame: 0 },
-    iron_ore:      { key: 'Nature/RocksBig',  frame: 0 },
-    fiber:         { key: 'Ground/GrassTall', frame: 0 },
-    mushroom_item: { key: 'Ground/GrassTall', frame: 2 },
-    iron_bar:      { key: 'Nature/RocksBig',  frame: 1 },
-    leather:       { key: 'Ground/Mud',       frame: 0 },
-    gold_coin:     { key: 'Ground/Sand',      frame: 2 },
-    // Tools → recognisable tile sprites
-    axe:     { key: 'Nature/Trees',    frame: 1 },
-    pickaxe: { key: 'Nature/RocksBig', frame: 2 },
-    scythe:  { key: 'Ground/GrassTall', frame: 1 },
-    // Keys / misc
-    dungeon_key: { key: 'Buildings/Dungeon', frame: 1 },
-    // Consumables
-    health_potion:   { key: 'Ground/Grass',        frame: 0 },
-    mana_potion:     { key: 'Ground/WaterShallow',  frame: 0 },
-    antidote:        { key: 'Ground/Grass',         frame: 1 },
-    cooked_mushroom: { key: 'Ground/GrassTall',     frame: 1 },
-  }
-
-  /** Category → fallback colour for items not in _ICON_MAP. */
-  private static readonly _CATEGORY_COLOR: Record<string, string> = {
-    material:   '#8b6914',
-    consumable: '#c0392b',
-    weapon:     '#e67e22',
-    tool:       '#7f8c8d',
-    key:        '#f1c40f',
-    armor:      '#2980b9',
-  }
-
-  /**
    * Draw a 24×24 pixel-art icon onto a canvas element.
    *
-   * Priority:
-   *   1. Look up `itemId` in _ICON_MAP → sample from the already-loaded
-   *      Phaser tile spritesheet (no additional network request).
-   *   2. Fall back to a coloured placeholder with the item's first letter.
+   * Uses the dedicated Items/ sprite loaded in LoadingScene.
+   * The Phaser texture key is `Items/{spriteFrame-without-.png}`.
+   * Falls back to a coloured placeholder if the texture isn't loaded yet.
    */
   private _drawIcon(canvas: HTMLCanvasElement | null, itemId: string): void {
     if (!canvas) return
@@ -425,22 +386,27 @@ export class InventoryScene extends Phaser.Scene {
     if (!ctx) return
     ctx.imageSmoothingEnabled = false
 
-    // ── Option 1: tile sprite via Phaser texture cache ───────────────────
-    const iconInfo = InventoryScene._ICON_MAP[itemId]
-    if (iconInfo) {
+    // ── Resolve the Items/ texture key for this item ──────────────────────
+    let texKey: string | null = null
+    try {
+      if (WeaponRegistry.has(itemId))     texKey = `Items/${WeaponRegistry.get(itemId).spriteFrame.replace('.png', '')}`
+      else if (ArmorRegistry.has(itemId)) texKey = `Items/${ArmorRegistry.get(itemId).spriteFrame.replace('.png', '')}`
+      else if (ItemRegistry.has(itemId))  texKey = `Items/${ItemRegistry.get(itemId).spriteFrame.replace('.png', '')}`
+    } catch { /* ignore */ }
+
+    if (texKey) {
       try {
-        const tex = this.textures.get(iconInfo.key)
-        const src = tex.getSourceImage() as HTMLImageElement | HTMLCanvasElement
-        const naturalW = (src as HTMLImageElement).naturalWidth ?? src.width
-        const cols = Math.max(1, Math.floor(naturalW / 16))
-        const fx   = (iconInfo.frame % cols) * 16
-        const fy   = Math.floor(iconInfo.frame / cols) * 16
-        ctx.drawImage(src, fx, fy, 16, 16, 0, 0, 24, 24)
+        const src = this.textures.get(texKey).getSourceImage() as HTMLImageElement | HTMLCanvasElement
+        ctx.drawImage(src, 0, 0, 16, 16, 0, 0, 24, 24)
         return
-      } catch { /* texture not yet loaded or missing — fall through */ }
+      } catch { /* texture missing — fall through to placeholder */ }
     }
 
-    // ── Option 2: coloured placeholder with first letter ─────────────────
+    // ── Coloured placeholder with first letter ────────────────────────────
+    const CATEGORY_COLOR: Record<string, string> = {
+      material: '#8b6914', consumable: '#c0392b', weapon: '#e67e22',
+      tool: '#7f8c8d', key: '#f1c40f', armor: '#2980b9',
+    }
     let category = 'material'
     try {
       if (WeaponRegistry.has(itemId))     category = 'weapon'
@@ -448,18 +414,15 @@ export class InventoryScene extends Phaser.Scene {
       else if (ItemRegistry.has(itemId))  category = ItemRegistry.get(itemId).category
     } catch { /* ignore */ }
 
-    const color  = InventoryScene._CATEGORY_COLOR[category] ?? '#555555'
-    const letter = (itemId[0] ?? '?').toUpperCase()
-
-    ctx.fillStyle = color
+    ctx.fillStyle = CATEGORY_COLOR[category] ?? '#555555'
     ctx.fillRect(1, 1, 22, 22)
     ctx.strokeStyle = 'rgba(255,255,255,0.25)'
     ctx.strokeRect(1.5, 1.5, 21, 21)
-    ctx.fillStyle   = '#ffffff'
-    ctx.font        = 'bold 12px monospace'
-    ctx.textAlign   = 'center'
+    ctx.fillStyle    = '#ffffff'
+    ctx.font         = 'bold 12px monospace'
+    ctx.textAlign    = 'center'
     ctx.textBaseline = 'middle'
-    ctx.fillText(letter, 12, 13)
+    ctx.fillText((itemId[0] ?? '?').toUpperCase(), 12, 13)
   }
 
   private _itemName(id: string): string {

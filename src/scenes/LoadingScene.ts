@@ -11,6 +11,9 @@ import { ref, update } from 'firebase/database'
 import { db } from '../firebase.ts'
 import { getTileSheets } from '../renderer/TilemapRenderer.ts'
 import { enemies } from '../data/enemies.ts'
+import { items } from '../data/items.ts'
+import { weapons } from '../data/weapons.ts'
+import { armors } from '../data/armors.ts'
 import { loadPyodideRuntime } from '../world/ScriptExecutor.ts'
 
 /** Champion id → file mapping (matches SPEC.md). */
@@ -44,18 +47,28 @@ export class LoadingScene extends Phaser.Scene {
     for (const key of getTileSheets()) {
       this.load.spritesheet(key, `assets/sprites/${key}.png`, { frameWidth: 16, frameHeight: 16 })
     }
-    // Champion spritesheets
+    // Champion spritesheets (80×128 — 5 frames × 8 rows: walk + attack)
     for (const [id, file] of Object.entries(CHAMPION_FILES)) {
       this.load.spritesheet(id, `assets/sprites/Champions/${file}.png`, { frameWidth: 16, frameHeight: 16 })
     }
-    // Enemy spritesheets — key: 'Enemies/{name}' (used by entity renderer in Step 6)
+    // Enemy spritesheets (80×128 — 5 frames × 8 rows: walk + attack)
     const enemySheets = [...new Set(enemies.map(e => `Enemies/${e.spriteFrame.replace('.png', '')}`))]
     for (const key of enemySheets) {
       this.load.spritesheet(key, `assets/sprites/${key}.png`, { frameWidth: 16, frameHeight: 16 })
     }
-    // NPC spritesheets — key: 'NPCs/{name}'
+    // NPC spritesheets (80×128 — 5 frames × 8 rows: walk + attack)
     for (const name of NPC_SPRITES) {
       this.load.spritesheet(`NPCs/${name}`, `assets/sprites/NPCs/${name}.png`, { frameWidth: 16, frameHeight: 16 })
+    }
+    // Item sprites (16×16 single-frame icons) — used by InventoryScene, ShopScene, etc.
+    const itemKeys = [
+      ...items.map(i => i.spriteFrame),
+      ...weapons.map(w => w.spriteFrame),
+      ...armors.map(a => a.spriteFrame),
+    ]
+    for (const frame of itemKeys) {
+      const key = `Items/${frame.replace('.png', '')}`
+      this.load.image(key, `assets/sprites/Items/${frame}`)
     }
   }
 
