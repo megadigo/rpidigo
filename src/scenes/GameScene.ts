@@ -4,10 +4,11 @@
  * Listens for 'enterRoom' and 'exitRoom' events from PlayerController to handle
  * transitions between the overworld and house/dungeon interior rooms.
  *
- * Step 5: subscribes to /presence/{room}/players and renders remote player
- * sprites with name labels, tweening positions on each Firebase update.
- * Step 6: subscribes to /presence/{room}/enemies and /presence/{room}/npcs and
- * renders directional 5-frame entity walk animations.
+ * Step 5:  subscribes to /presence/{room}/players and renders remote player
+ *          sprites with name labels, tweening positions on each Firebase update.
+ * Step 6:  subscribes to /presence/{room}/enemies and /presence/{room}/npcs and
+ *          renders directional 5-frame entity walk animations.
+ * Step 11: I key opens InventoryScene (equipment + bag) as an additive overlay.
  */
 import Phaser from 'phaser'
 import { ref, onValue, update } from 'firebase/database'
@@ -140,6 +141,17 @@ export class GameScene extends Phaser.Scene {
 
     const savedZoom = parseInt(localStorage.getItem('rpidigo.zoom') ?? '1', 10)
     this.cameras.main.setZoom(Phaser.Math.Clamp(savedZoom, 1, 3))
+
+    // I key — open inventory (Step 11)
+    const iKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.I)
+    if (iKey) {
+      iKey.on('down', () => {
+        if (this._isDead) return
+        if (this.scene.isActive('DialogScene'))   return
+        if (this.scene.isActive('InventoryScene')) return
+        this._openInventory()
+      })
+    }
 
     // Room transition events emitted by PlayerController
     this.events.on(
@@ -761,6 +773,18 @@ export class GameScene extends Phaser.Scene {
     this.scene.launch('DialogScene', data)
     // Unfreeze exactly once when DialogScene shuts down
     this.scene.get('DialogScene').events.once(
+      Phaser.Scenes.Events.SHUTDOWN,
+      () => this.playerController.unfreeze(),
+    )
+  }
+
+  /**
+   * Freeze the player and open the inventory/equipment overlay (Step 11).
+   */
+  private _openInventory(): void {
+    this.playerController.freeze()
+    this.scene.launch('InventoryScene')
+    this.scene.get('InventoryScene').events.once(
       Phaser.Scenes.Events.SHUTDOWN,
       () => this.playerController.unfreeze(),
     )
