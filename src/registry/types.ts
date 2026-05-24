@@ -14,6 +14,7 @@ export interface TileDefinition {
   dropTable?: DropEntry[]
   becomesOnGather?: string    // tile id after gathering
   regenSeconds?: number
+  gatherCharges?: number      // how many E-presses to deplete (default 1)
   spriteFrame: string         // frame name in tileset sprite sheet
   ambientSound?: string
 }

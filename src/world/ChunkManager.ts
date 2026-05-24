@@ -10,6 +10,7 @@ import type { RoadNetwork } from './RoadNetwork.ts'
 import type { generateHouseRoom } from './HouseGen.ts'
 import type { generateCellarRoom } from './CellarGen.ts'
 import { tileKey, chunkKey } from './utils.ts'
+import { TileRegistry } from '../registry/registries.ts'
 
 /** In-memory tile cache — key `tileKey(x,y)` for overworld. */
 const tileCache = new Map<string, TileData>()
@@ -59,6 +60,53 @@ export function setTile(x: number, y: number, data: TileData): void {
   }
 }
 
+/**
+ * If a tile's regen timer has expired and an originalId is recorded,
+ * restore the tile to its pre-depletion state and return the restored copy.
+ * Otherwise returns the tile unchanged.
+ *
+ * Also queues an async Firebase write so the restored state persists.
+ */
+function _regenIfExpired(tile: TileData, key: string, room: string): TileData {
+  const { regenAt, originalId, originalLayer } = tile.metadata ?? {}
+  if (!regenAt || !originalId || Date.now() < regenAt) return tile
+
+  // Get the tile def so we know what `becomesOnGather` was
+  let becomes: string | undefined
+  try { becomes = TileRegistry.get(originalId).becomesOnGather } catch { /* unknown */ }
+
+  const newMeta = { ...(tile.metadata ?? {}) }
+  delete newMeta.regenAt
+  delete newMeta.originalId
+  delete newMeta.originalLayer
+  delete newMeta.charges
+
+  let restored: TileData
+  if ((originalLayer ?? 'MIDDLE') === 'MIDDLE') {
+    // Remove the "becomes" tile from m[], then push back the original
+    const newM = (tile.m ?? []).filter(id => id !== becomes)
+    newM.push(originalId)
+    restored = {
+      g: tile.g,
+      m: newM,
+      ...(tile.t            ? { t: tile.t }          : {}),
+      ...(Object.keys(newMeta).length ? { metadata: newMeta } : {}),
+    }
+  } else {
+    restored = {
+      g: originalId,
+      ...(tile.m            ? { m: tile.m }           : {}),
+      ...(tile.t            ? { t: tile.t }            : {}),
+      ...(Object.keys(newMeta).length ? { metadata: newMeta } : {}),
+    }
+  }
+
+  // Persist asynchronously so the restored state survives next load
+  void update(ref(db), { [`map/${room}/${key}`]: restored })
+
+  return restored
+}
+
 /** Returns the currently active room ID, or null when in the overworld. */
 export function getActiveRoom(): string | null { return _activeRoom }
 
@@ -75,7 +123,7 @@ export async function enterRoom(roomId: string): Promise<void> {
     return
   }
   const all = snap.val() as Record<string, TileData>
-  for (const [k, t] of Object.entries(all)) _roomTileCache.set(k, t)
+  for (const [k, t] of Object.entries(all)) _roomTileCache.set(k, _regenIfExpired(t, k, roomId))
 }
 
 /** Return to the overworld — clears the room cache. */
@@ -156,7 +204,7 @@ async function _loadChunkFromFirebase(cx: number, cy: number): Promise<void> {
   for (let lx = 0; lx < CHUNK_SIZE; lx++) {
     for (let ly = 0; ly < CHUNK_SIZE; ly++) {
       const k = tileKey(originX + lx, originY + ly)
-      if (all[k]) tileCache.set(k, all[k])
+      if (all[k]) tileCache.set(k, _regenIfExpired(all[k], k, '0'))
     }
   }
 }

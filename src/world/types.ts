@@ -18,6 +18,12 @@ export interface TileData {
     gold?: number
     opened?: boolean
     regenAt?: number
+    /** Remaining gather charges on a resource node. */
+    charges?: number
+    /** Original tile ID to restore when regenAt expires. */
+    originalId?: string
+    /** Layer the original tile was on (to know how to restore it). */
+    originalLayer?: 'MIDDLE' | 'GROUND'
   }
 }
 

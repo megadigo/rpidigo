@@ -13,7 +13,7 @@
 import Phaser from 'phaser'
 import { ref, onValue, update } from 'firebase/database'
 import { db } from '../firebase.ts'
-import { TilemapRenderer, TILE_SIZE, isTileRoomExit, TILE_DEFS } from '../renderer/TilemapRenderer.ts'
+import { TilemapRenderer, TILE_SIZE, isTileRoomExit } from '../renderer/TilemapRenderer.ts'
 import type { Direction } from '../renderer/SpriteAnim.ts'
 import { ANIM_FRAMES, FRAME_DURATION_MS, directionFromVelocity, getFrame } from '../renderer/SpriteAnim.ts'
 import { PlayerController } from '../player/PlayerController.ts'
@@ -896,7 +896,12 @@ export class GameScene extends Phaser.Scene {
       }
     }
 
-    // Roll drops
+    // ── Multi-charge logic ──────────────────────────────────────────────────
+    const maxCharges     = tileDef.gatherCharges ?? 1
+    const currentCharges = tileData.metadata?.charges ?? maxCharges
+    const newCharges     = currentCharges - 1
+
+    // Roll drops for this hit
     const newInv  = [...(player.inventory ?? [])]
     let   newGold = player.gold ?? 0
 
@@ -919,29 +924,45 @@ export class GameScene extends Phaser.Scene {
     player.gold      = newGold
     setLocalPlayer(player)
 
-    // Build updated tile data
-    const regenAt = tileDef.regenSeconds
-      ? Date.now() + tileDef.regenSeconds * 1000
-      : undefined
-    const becomes  = tileDef.becomesOnGather ?? null
-    const becomesLayer = becomes ? (TILE_DEFS[becomes]?.layer ?? 'GROUND') : 'GROUND'
+    const room = getActiveRoom() ?? '0'
 
     let newTileData: import('../world/types.ts').TileData
-    if (gatherLayer === 'MIDDLE') {
-      const newM = (tileData.m ?? []).filter(id => id !== gatherTileId)
-      if (becomes && becomesLayer === 'MIDDLE') newM.push(becomes)
+
+    if (newCharges > 0) {
+      // ── Partial gather: tile stays, only decrement charges ──────────────
       newTileData = {
-        g: tileData.g,
-        ...(newM.length ? { m: newM } : {}),
-        ...(tileData.t  ? { t: tileData.t } : {}),
-        ...(regenAt ? { metadata: { ...tileData.metadata, regenAt } } : {}),
+        ...tileData,
+        metadata: { ...(tileData.metadata ?? {}), charges: newCharges },
       }
     } else {
-      newTileData = {
-        g: becomes ?? tileData.g,
-        ...(tileData.m ? { m: tileData.m } : {}),
-        ...(tileData.t ? { t: tileData.t } : {}),
-        ...(regenAt ? { metadata: { ...tileData.metadata, regenAt } } : {}),
+      // ── Final charge: deplete tile, record originalId for regen ─────────
+      const regenAt    = tileDef.regenSeconds
+        ? Date.now() + tileDef.regenSeconds * 1000
+        : undefined
+      const becomes    = tileDef.becomesOnGather ?? null
+      const meta = {
+        ...(tileData.metadata ?? {}),
+        ...(regenAt ? { regenAt, originalId: gatherTileId, originalLayer: gatherLayer } : {}),
+      }
+      // Remove charge tracking now that the tile is depleted
+      delete meta.charges
+
+      if (gatherLayer === 'MIDDLE') {
+        const newM = (tileData.m ?? []).filter(id => id !== gatherTileId)
+        if (becomes) newM.push(becomes)
+        newTileData = {
+          g: tileData.g,
+          ...(newM.length ? { m: newM } : {}),
+          ...(tileData.t  ? { t: tileData.t } : {}),
+          ...(regenAt     ? { metadata: meta }  : {}),
+        }
+      } else {
+        newTileData = {
+          g: becomes ?? tileData.g,
+          ...(tileData.m ? { m: tileData.m } : {}),
+          ...(tileData.t ? { t: tileData.t } : {}),
+          ...(regenAt    ? { metadata: meta }  : {}),
+        }
       }
     }
 
@@ -949,7 +970,6 @@ export class GameScene extends Phaser.Scene {
     setTile(cx, cy, newTileData)
 
     // Persist to Firebase
-    const room = getActiveRoom() ?? '0'
     await update(ref(db), {
       [`map/${room}/${tileKey(cx, cy)}`]:  newTileData,
       [`players/${player.id}/inventory`]:  newInv,
