@@ -112,6 +112,9 @@ export class InventoryScene extends Phaser.Scene {
 
   private _renderEquipPanel(): void {
     const player = getLocalPlayer()
+    // Normalise fields absent on legacy accounts
+    player.equippedArmor ??= { helmet: null, chestplate: null, leggings: null, boots: null, gloves: null }
+    player.inventory     ??= []
     const box = this._overlay?.querySelector('#equip-slots')
     if (!box) return
 
@@ -274,6 +277,7 @@ export class InventoryScene extends Phaser.Scene {
 
   private _equipArmor(invIdx: number): void {
     const player  = getLocalPlayer()
+    player.equippedArmor ??= { helmet: null, chestplate: null, leggings: null, boots: null, gloves: null }
     const newId   = player.inventory[invIdx].itemId
     const def     = ArmorRegistry.get(newId)
     const slot    = def.armorSlot
@@ -310,6 +314,7 @@ export class InventoryScene extends Phaser.Scene {
 
   private _unequipArmor(slot: ArmorSlot): void {
     const player = getLocalPlayer()
+    player.equippedArmor ??= { helmet: null, chestplate: null, leggings: null, boots: null, gloves: null }
     const id     = player.equippedArmor[slot]
     if (!id) return
 
