@@ -125,13 +125,9 @@ function write(relPath, buf) {
   console.log(`  wrote ${relPath}`)
 }
 
-/** Same as write() but always overwrites — used for entity sheets that need
- *  to be the right dimensions even if a single-frame placeholder existed. */
+/** Same as write() — always skips if the file already exists. */
 function overwrite(relPath, buf) {
-  const full = path.join(SPRITES, relPath)
-  fs.mkdirSync(path.dirname(full), { recursive: true })
-  fs.writeFileSync(full, buf)
-  console.log(`  wrote ${relPath}  (entity sheet 80×128)`)
+  write(relPath, buf)
 }
 
 // ── Generate ─────────────────────────────────────────────────────────────────
