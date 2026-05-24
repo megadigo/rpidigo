@@ -11,15 +11,23 @@
 *Goal: app starts, title screen is visible, Firebase connects without errors.*
 
 1. Copy `.env.example` to `.env` and fill in real Firebase Realtime Database credentials (API key, auth domain, databaseURL, project ID, etc.).
-2. **Copy sprites into the public directory** so Vite includes them in the production build and amen.pt can serve them:
+2. **Sprite directories** — all sprites live under `public/assets/sprites/` in the following layout. Run `node scripts/gen-placeholders.cjs` to regenerate any missing placeholder PNGs:
    ```
-   cp -r graphics/MiniWorldSprites/MiniWorldSprites/Ground      public/assets/sprites/Ground
-   cp -r graphics/MiniWorldSprites/MiniWorldSprites/Nature      public/assets/sprites/Nature
-   cp -r graphics/MiniWorldSprites/MiniWorldSprites/Buildings   public/assets/sprites/Buildings
-   cp -r graphics/MiniWorldSprites/MiniWorldSprites/Miscellaneous public/assets/sprites/Miscellaneous
-   cp -r graphics/MiniWorldSprites/MiniWorldSprites/Characters  public/assets/sprites/Characters
+   public/assets/sprites/
+   ├── World/Ground/   terrain tiles (grass, water, sand, etc.)
+   ├── World/Nature/   natural objects (trees, rocks, bushes)
+   ├── Player/         champion spritesheets (80×128) + login previews
+   ├── Enemies/        enemy spritesheets (80×128)
+   ├── NPCs/           NPC spritesheets (80×128)
+   ├── Items/          consumables, materials, keys (16×16 icons)
+   ├── Weapons/        weapon icons (16×16)
+   ├── Armors/         armor icons (16×16)
+   ├── Tools/          tool icons (16×16)
+   ├── Dungeon/        dungeon buildings, floor, stairs, props (16×16)
+   ├── House/          village buildings, house interior, furniture (16×16)
+   └── Cellars/        cellar floor, walls, stairs, props (16×16)
    ```
-   All in-game tile, building, champion, and miscellaneous sprites must live under `public/assets/sprites/` so that `dist/assets/sprites/` is populated after `npm run build`. The entity sprites (`entities/enemies/`, `entities/npcs/`, `entities/players/`) are already in `public/assets/sprites/` and do not need to be copied. These sprites have already been committed to the repository and this step only applies when setting up a fresh clone.
+   All sprites are committed to the repository. This step only applies when regenerating missing placeholders on a fresh clone.
 3. Publish `database.rules.json` via `firebase deploy --only database`. Rules cover `/config`, `/map`, `/players`, `/entities`, `/presence`, `/chat`, `/shops`.
 4. `firebase.ts` and `registry/bootstrap.ts` are already correct — no changes needed.
 5. **Checkpoint**: `npm run dev` opens the browser; the "rpidigo" title screen appears; clicking **Play** navigates to the login screen; browser console shows no Firebase errors.

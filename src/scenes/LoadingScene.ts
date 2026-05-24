@@ -49,7 +49,7 @@ export class LoadingScene extends Phaser.Scene {
     }
     // Champion spritesheets (80×128 — 5 frames × 8 rows: walk + attack)
     for (const [id, file] of Object.entries(CHAMPION_FILES)) {
-      this.load.spritesheet(id, `assets/sprites/Champions/${file}.png`, { frameWidth: 16, frameHeight: 16 })
+      this.load.spritesheet(id, `assets/sprites/Player/${file}.png`, { frameWidth: 16, frameHeight: 16 })
     }
     // Enemy spritesheets (80×128 — 5 frames × 8 rows: walk + attack)
     const enemySheets = [...new Set(enemies.map(e => `Enemies/${e.spriteFrame.replace('.png', '')}`))]
@@ -60,15 +60,19 @@ export class LoadingScene extends Phaser.Scene {
     for (const name of NPC_SPRITES) {
       this.load.spritesheet(`NPCs/${name}`, `assets/sprites/NPCs/${name}.png`, { frameWidth: 16, frameHeight: 16 })
     }
-    // Item sprites (16×16 single-frame icons) — used by InventoryScene, ShopScene, etc.
-    const itemKeys = [
-      ...items.map(i => i.spriteFrame),
-      ...weapons.map(w => w.spriteFrame),
-      ...armors.map(a => a.spriteFrame),
-    ]
-    for (const frame of itemKeys) {
-      const key = `Items/${frame.replace('.png', '')}`
-      this.load.image(key, `assets/sprites/Items/${frame}`)
+    // Item icons (16×16) — routed by category to their new directories
+    for (const item of items) {
+      const dir = item.category === 'tool' ? 'Tools' : 'Items'
+      const key = `${dir}/${item.spriteFrame.replace('.png', '')}`
+      this.load.image(key, `assets/sprites/${dir}/${item.spriteFrame}`)
+    }
+    for (const w of weapons) {
+      const key = `Weapons/${w.spriteFrame.replace('.png', '')}`
+      this.load.image(key, `assets/sprites/Weapons/${w.spriteFrame}`)
+    }
+    for (const a of armors) {
+      const key = `Armors/${a.spriteFrame.replace('.png', '')}`
+      this.load.image(key, `assets/sprites/Armors/${a.spriteFrame}`)
     }
   }
 

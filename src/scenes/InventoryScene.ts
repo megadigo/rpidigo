@@ -376,8 +376,8 @@ export class InventoryScene extends Phaser.Scene {
   /**
    * Draw a 24×24 pixel-art icon onto a canvas element.
    *
-   * Uses the dedicated Items/ sprite loaded in LoadingScene.
-   * The Phaser texture key is `Items/{spriteFrame-without-.png}`.
+   * Texture keys by category (loaded in LoadingScene):
+   *   Weapons/{name}, Armors/{name}, Tools/{name}, Items/{name}
    * Falls back to a coloured placeholder if the texture isn't loaded yet.
    */
   private _drawIcon(canvas: HTMLCanvasElement | null, itemId: string): void {
@@ -386,12 +386,18 @@ export class InventoryScene extends Phaser.Scene {
     if (!ctx) return
     ctx.imageSmoothingEnabled = false
 
-    // ── Resolve the Items/ texture key for this item ──────────────────────
+    // ── Resolve texture key from registry ────────────────────────────────
     let texKey: string | null = null
     try {
-      if (WeaponRegistry.has(itemId))     texKey = `Items/${WeaponRegistry.get(itemId).spriteFrame.replace('.png', '')}`
-      else if (ArmorRegistry.has(itemId)) texKey = `Items/${ArmorRegistry.get(itemId).spriteFrame.replace('.png', '')}`
-      else if (ItemRegistry.has(itemId))  texKey = `Items/${ItemRegistry.get(itemId).spriteFrame.replace('.png', '')}`
+      if (WeaponRegistry.has(itemId)) {
+        texKey = `Weapons/${WeaponRegistry.get(itemId).spriteFrame.replace('.png', '')}`
+      } else if (ArmorRegistry.has(itemId)) {
+        texKey = `Armors/${ArmorRegistry.get(itemId).spriteFrame.replace('.png', '')}`
+      } else if (ItemRegistry.has(itemId)) {
+        const item = ItemRegistry.get(itemId)
+        const dir  = item.category === 'tool' ? 'Tools' : 'Items'
+        texKey = `${dir}/${item.spriteFrame.replace('.png', '')}`
+      }
     } catch { /* ignore */ }
 
     if (texKey) {

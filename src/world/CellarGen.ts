@@ -39,8 +39,8 @@ export function generateCellarRoom(tx: number, ty: number, seed: number): Cellar
     for (let y = 0; y < S; y++) {
       const isBorder = x === 0 || y === 0 || x === S - 1 || y === S - 1
       tiles.set(tileKey(x, y), isBorder
-        ? { g: 'dungeon_floor', m: ['dungeon_wall'] }
-        : { g: 'dungeon_floor' })
+        ? { g: 'cellar_floor', m: ['cellar_wall'] }
+        : { g: 'cellar_floor' })
     }
   }
 
@@ -54,7 +54,7 @@ export function generateCellarRoom(tx: number, ty: number, seed: number): Cellar
     const h = seededRandInt(rand, 2, 4)
     for (let x = cx; x < Math.min(S - 1, cx + w); x++) {
       for (let y = cy; y < Math.min(S - 1, cy + h); y++) {
-        tiles.set(tileKey(x, y), { g: 'dungeon_floor', m: ['dungeon_wall'] })
+        tiles.set(tileKey(x, y), { g: 'cellar_floor', m: ['cellar_wall'] })
       }
     }
   }
@@ -62,9 +62,9 @@ export function generateCellarRoom(tx: number, ty: number, seed: number): Cellar
   // Entry back to house near the north-west corner.
   const upX = 2
   const upY = 2
-  tiles.set(tileKey(upX, upY), { g: 'dungeon_stairs_up' })
-  tiles.set(tileKey(upX + 1, upY), { g: 'dungeon_floor' })
-  tiles.set(tileKey(upX, upY + 1), { g: 'dungeon_floor' })
+  tiles.set(tileKey(upX, upY), { g: 'cellar_stairs_up' })
+  tiles.set(tileKey(upX + 1, upY), { g: 'cellar_floor' })
+  tiles.set(tileKey(upX, upY + 1), { g: 'cellar_floor' })
 
   // Optional loot/trap details.
   if (rand() < CHEST_SPAWN_PROBABILITY) {
@@ -72,8 +72,8 @@ export function generateCellarRoom(tx: number, ty: number, seed: number): Cellar
     const chestY = seededRandInt(rand, 2, S - 3)
     if (chestX !== upX || chestY !== upY) {
       tiles.set(tileKey(chestX, chestY), {
-        g: 'dungeon_floor',
-        m: ['dungeon_chest'],
+        g: 'cellar_floor',
+        m: ['cellar_chest'],
         metadata: { gold: seededRandInt(rand, 8, 35) },
       })
     }
@@ -81,8 +81,8 @@ export function generateCellarRoom(tx: number, ty: number, seed: number): Cellar
   if (rand() < TRAP_SPAWN_PROBABILITY) {
     const trapX = seededRandInt(rand, 2, S - 3)
     const trapY = seededRandInt(rand, 2, S - 3)
-    if ((trapX !== upX || trapY !== upY) && tiles.get(tileKey(trapX, trapY))?.m?.[0] !== 'dungeon_chest') {
-      tiles.set(tileKey(trapX, trapY), { g: 'dungeon_trap' })
+    if ((trapX !== upX || trapY !== upY) && tiles.get(tileKey(trapX, trapY))?.m?.[0] !== 'cellar_chest') {
+      tiles.set(tileKey(trapX, trapY), { g: 'cellar_trap' })
     }
   }
 

@@ -37,7 +37,7 @@ interface TileDef {
   roomExit?:   true          // stepping on this returns player to overworld
 }
 
-const FALLBACK_SPRITE = 'Ground/Grass'
+const FALLBACK_SPRITE = 'World/Ground/Grass'
 
 /** Depth assigned to each layer in the Phaser scene. Player is at depth 10. */
 const LAYER_DEPTH: Record<TileLayer, number> = {
@@ -52,76 +52,94 @@ const LAYER_DEPTH: Record<TileLayer, number> = {
  *
  * Sprites removed from old system:
  *   Bridge, Door, Wall, Roof, Forge, Lantern — replaced by actual available sprites.
- * Cliff-Water / Cliff — no longer used; dungeon tiles use Buildings/Dungeon.
+ * Sprite directories (public/assets/sprites/):
+ *   World/Ground/  — terrain tiles (grass, water, sand, etc.)
+ *   World/Nature/  — natural objects (trees, rocks, bushes)
+ *   Player/        — champion spritesheets + login previews
+ *   Enemies/       — enemy spritesheets
+ *   NPCs/          — NPC spritesheets
+ *   Items/         — consumables, materials, keys
+ *   Weapons/       — weapon icons
+ *   Armors/        — armor icons
+ *   Tools/         — tool icons
+ *   Dungeon/       — dungeon buildings, floor, walls, props
+ *   House/         — village buildings, house interior, furniture
+ *   Cellars/       — cellar environments (under houses)
  */
 export const TILE_DEFS: Record<string, TileDef> = {
   // ── Plains ────────────────────────────────────────────────────────────────
-  grass:               { sprite: 'Ground/Grass',              layer: 'GROUND' },
-  grass_tall:          { sprite: 'Ground/GrassTall',          layer: 'GROUND', speedMod: 0.6 },
-  flower_yellow:       { sprite: 'Ground/GrassFlowerYellow',  layer: 'GROUND' },
-  flower_red:          { sprite: 'Ground/GrassFlowerRed',     layer: 'GROUND' },
-  dirt_path:           { sprite: 'Ground/PathDirt',           layer: 'GROUND', speedMod: 1.1},
-  rock_small:          { sprite: 'Nature/RockSmall',          layer: 'MIDDLE', impassable: true },
-  rock_large:          { sprite: 'Nature/RocksBig',           layer: 'MIDDLE', impassable: true },
+  grass:               { sprite: 'World/Ground/Grass',              layer: 'GROUND' },
+  grass_tall:          { sprite: 'World/Ground/GrassTall',          layer: 'GROUND', speedMod: 0.6 },
+  flower_yellow:       { sprite: 'World/Ground/GrassFlowerYellow',  layer: 'GROUND' },
+  flower_red:          { sprite: 'World/Ground/GrassFlowerRed',     layer: 'GROUND' },
+  dirt_path:           { sprite: 'World/Ground/PathDirt',           layer: 'GROUND', speedMod: 1.1 },
+  rock_small:          { sprite: 'World/Nature/RockSmall',          layer: 'MIDDLE', impassable: true },
+  rock_large:          { sprite: 'World/Nature/RocksBig',           layer: 'MIDDLE', impassable: true },
   // ── Forest ────────────────────────────────────────────────────────────────
-  grass_dark:          { sprite: 'Ground/GrassDark',          layer: 'GROUND' },
-  tree_oak:            { sprite: 'Nature/Trees',              layer: 'MIDDLE', impassable: true },
-  tree_pine:           { sprite: 'Nature/PineTrees',          layer: 'MIDDLE', impassable: true },
-  coconut_tree:        { sprite: 'Nature/CoconutTrees',       layer: 'MIDDLE', impassable: true },
-  bush:                { sprite: 'Nature/Bush',               layer: 'MIDDLE', impassable: true },
-  mushroom:            { sprite: 'Ground/Mushroom',           layer: 'GROUND' },
-  log:                 { sprite: 'Nature/Log',                layer: 'MIDDLE' },
-  moss_rock:           { sprite: 'Nature/RockMoss',           layer: 'MIDDLE', impassable: true },
-  stump:               { sprite: 'Nature/Stump',              layer: 'MIDDLE' },
+  grass_dark:          { sprite: 'World/Ground/GrassDark',          layer: 'GROUND' },
+  tree_oak:            { sprite: 'World/Nature/Trees',              layer: 'MIDDLE', impassable: true },
+  tree_pine:           { sprite: 'World/Nature/PineTrees',          layer: 'MIDDLE', impassable: true },
+  coconut_tree:        { sprite: 'World/Nature/CoconutTrees',       layer: 'MIDDLE', impassable: true },
+  bush:                { sprite: 'World/Nature/Bush',               layer: 'MIDDLE', impassable: true },
+  mushroom:            { sprite: 'World/Ground/Mushroom',           layer: 'GROUND' },
+  log:                 { sprite: 'World/Nature/Log',                layer: 'MIDDLE' },
+  moss_rock:           { sprite: 'World/Nature/RockMoss',           layer: 'MIDDLE', impassable: true },
+  stump:               { sprite: 'World/Nature/Stump',              layer: 'MIDDLE' },
   // ── River ─────────────────────────────────────────────────────────────────
-  water_shallow:       { sprite: 'Ground/WaterShallow',       layer: 'GROUND', speedMod: 0.1  },
-  water_deep:          { sprite: 'Ground/WaterDeep',          layer: 'GROUND', speedMod: 0.2  },
-  sand_bank:           { sprite: 'Ground/SandBank',           layer: 'GROUND' },
-  reeds:               { sprite: 'Ground/Reeds',              layer: 'GROUND', speedMod: 0.7 },
-  mud:                 { sprite: 'Ground/Mud',                layer: 'GROUND', speedMod: 0.5 },
+  water_shallow:       { sprite: 'World/Ground/WaterShallow',       layer: 'GROUND', speedMod: 0.1 },
+  water_deep:          { sprite: 'World/Ground/WaterDeep',          layer: 'GROUND', speedMod: 0.2 },
+  sand_bank:           { sprite: 'World/Ground/SandBank',           layer: 'GROUND' },
+  reeds:               { sprite: 'World/Ground/Reeds',              layer: 'GROUND', speedMod: 0.7 },
+  mud:                 { sprite: 'World/Ground/Mud',                layer: 'GROUND', speedMod: 0.5 },
   // ── Desert ────────────────────────────────────────────────────────────────
-  sand:                { sprite: 'Ground/Sand',               layer: 'GROUND' },
-  sand_dune:           { sprite: 'Ground/SandDune',           layer: 'GROUND', speedMod: 0.7 },
-  dry_rock:            { sprite: 'Nature/DryRock',            layer: 'MIDDLE', impassable: true },
-  cactus:              { sprite: 'Nature/Cactus',             layer: 'MIDDLE', impassable: true },
-  dry_grass:           { sprite: 'Nature/Tumbleweed',         layer: 'MIDDLE' },
-  oasis_water:         { sprite: 'Ground/WaterOasis',         layer: 'GROUND', speedMod: 0.2 },
-  quicksand:           { sprite: 'Ground/Quicksand',          layer: 'GROUND', speedMod: 0.4 },
+  sand:                { sprite: 'World/Ground/Sand',               layer: 'GROUND' },
+  sand_dune:           { sprite: 'World/Ground/SandDune',           layer: 'GROUND', speedMod: 0.7 },
+  dry_rock:            { sprite: 'World/Nature/DryRock',            layer: 'MIDDLE', impassable: true },
+  cactus:              { sprite: 'World/Nature/Cactus',             layer: 'MIDDLE', impassable: true },
+  dry_grass:           { sprite: 'World/Nature/Tumbleweed',         layer: 'MIDDLE' },
+  oasis_water:         { sprite: 'World/Ground/WaterOasis',         layer: 'GROUND', speedMod: 0.2 },
+  quicksand:           { sprite: 'World/Ground/Quicksand',          layer: 'GROUND', speedMod: 0.4 },
   // ── Village ───────────────────────────────────────────────────────────────
-  cobblestone:         { sprite: 'Ground/Cobblestone',        layer: 'GROUND' },
-  house_hut:           { sprite: 'Buildings/Huts',            layer: 'MIDDLE', impassable: true, entry: 'house' },
-  house_cabin:         { sprite: 'Buildings/Houses',          layer: 'MIDDLE', impassable: true, entry: 'house' },
-  barracks:            { sprite: 'Buildings/Barracks',        layer: 'MIDDLE', impassable: true, entry: 'house' },
-  chapel:              { sprite: 'Buildings/Chapels',         layer: 'MIDDLE', impassable: true, entry: 'house' },
-  tavern:              { sprite: 'Buildings/Taverns',         layer: 'MIDDLE', impassable: true, entry: 'house' },
-  well:                { sprite: 'Miscellaneous/Well',        layer: 'MIDDLE', impassable: true },
-  market_stall:        { sprite: 'Buildings/Market',          layer: 'MIDDLE', impassable: true },
-  workshop:            { sprite: 'Buildings/Workshops',       layer: 'MIDDLE', impassable: true, entry: 'house' },
-  quest_board:         { sprite: 'Miscellaneous/QuestBoard',  layer: 'MIDDLE' },
-  street_sign:         { sprite: 'Miscellaneous/StreetSign',  layer: 'MIDDLE' },
-  tombstone:           { sprite: 'Miscellaneous/Tombstones',  layer: 'MIDDLE', impassable: true },
-  garden_plot:         { sprite: 'Ground/GardenPlot',         layer: 'GROUND' },
-  wheat_field:         { sprite: 'Nature/Wheatfield',         layer: 'MIDDLE', speedMod: 0.8 },
-  // ── Dungeon — all use Buildings/Dungeon; no Cliff/Door/Torch/Forge ───────
-  dungeon_entrance:    { sprite: 'Buildings/DungeonEntrance', layer: 'GROUND', entry: 'dungeon' },
-  dungeon_floor:       { sprite: 'Ground/DungeonFloor',       layer: 'GROUND' },
-  dungeon_wall:        { sprite: 'Buildings/DungeonWall',     layer: 'MIDDLE', impassable: true },
-  dungeon_stairs_down: { sprite: 'Ground/StairDown',          layer: 'GROUND' },
-  dungeon_stairs_up:   { sprite: 'Ground/StairUp',            layer: 'MIDDLE', roomExit: true },
-  dungeon_pillar:      { sprite: 'Buildings/DungeonPillar',   layer: 'MIDDLE' },
-  dungeon_trap:        { sprite: 'Miscellaneous/DungeonTrap', layer: 'GROUND' },
-  dungeon_chest:       { sprite: 'Miscellaneous/Chests',      layer: 'MIDDLE' },
-  dungeon_altar:       { sprite: 'Miscellaneous/DungeonAltar',layer: 'MIDDLE', impassable: true },
-  dungeon_tombstones:  { sprite: 'Miscellaneous/Tombstones',  layer: 'MIDDLE', impassable: true },
-  // ── Special / Interior ────────────────────────────────────────────────────
-  house_floor:         { sprite: 'Ground/HouseFloor',         layer: 'GROUND' },
-  house_exit:         { sprite:  'Buildings/Door',         layer: 'MIDDLE', roomExit: true },
-  workbench:           { sprite: 'Miscellaneous/WorkBench',   layer: 'MIDDLE', impassable: true },
-  table:               { sprite: 'Miscellaneous/Table',       layer: 'MIDDLE', impassable: true },
-  bed:                 { sprite: 'Miscellaneous/Bed',         layer: 'MIDDLE', impassable: true },
-  sofa:                { sprite: 'Miscellaneous/Sofa',        layer: 'MIDDLE', impassable: true },
-  chest:               { sprite: 'Miscellaneous/Chests',      layer: 'MIDDLE' },
-  void:                { sprite: 'Ground/Void',               layer: 'MIDDLE', impassable: true },
+  cobblestone:         { sprite: 'World/Ground/Cobblestone',        layer: 'GROUND' },
+  house_hut:           { sprite: 'House/Huts',                      layer: 'MIDDLE', impassable: true, entry: 'house' },
+  house_cabin:         { sprite: 'House/Houses',                    layer: 'MIDDLE', impassable: true, entry: 'house' },
+  barracks:            { sprite: 'House/Barracks',                  layer: 'MIDDLE', impassable: true, entry: 'house' },
+  chapel:              { sprite: 'House/Chapels',                   layer: 'MIDDLE', impassable: true, entry: 'house' },
+  tavern:              { sprite: 'House/Taverns',                   layer: 'MIDDLE', impassable: true, entry: 'house' },
+  well:                { sprite: 'House/Well',                      layer: 'MIDDLE', impassable: true },
+  market_stall:        { sprite: 'House/Market',                    layer: 'MIDDLE', impassable: true },
+  workshop:            { sprite: 'House/Workshops',                 layer: 'MIDDLE', impassable: true, entry: 'house' },
+  quest_board:         { sprite: 'House/QuestBoard',                layer: 'MIDDLE' },
+  street_sign:         { sprite: 'House/StreetSign',                layer: 'MIDDLE' },
+  tombstone:           { sprite: 'House/Tombstone',                 layer: 'MIDDLE', impassable: true },
+  garden_plot:         { sprite: 'World/Ground/GardenPlot',         layer: 'GROUND' },
+  wheat_field:         { sprite: 'World/Nature/Wheatfield',         layer: 'MIDDLE', speedMod: 0.8 },
+  // ── Dungeon ───────────────────────────────────────────────────────────────
+  dungeon_entrance:    { sprite: 'Dungeon/DungeonEntrance',         layer: 'GROUND', entry: 'dungeon' },
+  dungeon_floor:       { sprite: 'Dungeon/DungeonFloor',            layer: 'GROUND' },
+  dungeon_wall:        { sprite: 'Dungeon/DungeonWall',             layer: 'MIDDLE', impassable: true },
+  dungeon_stairs_down: { sprite: 'Dungeon/StairDown',               layer: 'GROUND' },
+  dungeon_stairs_up:   { sprite: 'Dungeon/StairUp',                 layer: 'MIDDLE', roomExit: true },
+  dungeon_pillar:      { sprite: 'Dungeon/DungeonPillar',           layer: 'MIDDLE' },
+  dungeon_trap:        { sprite: 'Dungeon/DungeonTrap',             layer: 'GROUND' },
+  dungeon_chest:       { sprite: 'Dungeon/Chest',                   layer: 'MIDDLE' },
+  dungeon_altar:       { sprite: 'Dungeon/DungeonAltar',            layer: 'MIDDLE', impassable: true },
+  dungeon_tombstones:  { sprite: 'Dungeon/Tombstone',               layer: 'MIDDLE', impassable: true },
+  // ── House / Interior ──────────────────────────────────────────────────────
+  house_floor:         { sprite: 'House/HouseFloor',                layer: 'GROUND' },
+  house_exit:          { sprite: 'House/Door',                      layer: 'MIDDLE', roomExit: true },
+  workbench:           { sprite: 'House/WorkBench',                 layer: 'MIDDLE', impassable: true },
+  table:               { sprite: 'House/Table',                     layer: 'MIDDLE', impassable: true },
+  bed:                 { sprite: 'House/Bed',                       layer: 'MIDDLE', impassable: true },
+  sofa:                { sprite: 'House/Sofa',                      layer: 'MIDDLE', impassable: true },
+  chest:               { sprite: 'House/Chest',                     layer: 'MIDDLE' },
+  void:                { sprite: 'World/Ground/Void',               layer: 'MIDDLE', impassable: true },
+  // ── Cellars (under village houses) ───────────────────────────────────────
+  cellar_floor:        { sprite: 'Cellars/CellarFloor',             layer: 'GROUND' },
+  cellar_wall:         { sprite: 'Cellars/CellarWall',              layer: 'MIDDLE', impassable: true },
+  cellar_chest:        { sprite: 'Cellars/CellarChest',             layer: 'MIDDLE' },
+  cellar_trap:         { sprite: 'Cellars/CellarTrap',              layer: 'GROUND' },
+  cellar_stairs_up:    { sprite: 'Cellars/CellarStairsUp',          layer: 'MIDDLE', roomExit: true },
 }
 
 // ── Public helpers (consumed by LoadingScene and CollisionMap) ─────────────

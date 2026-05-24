@@ -1,12 +1,28 @@
 /**
  * gen-placeholders.cjs
  * Generates placeholder PNG files for every sprite the game expects but
- * that is either missing entirely or currently shared with another tile.
+ * that is either missing or not yet replaced with real art.
  *
  * Run once:  node scripts/gen-placeholders.cjs
  *
- * 16×16  — item icons, single tile sprites
- * 80×128 — entity spritesheets (5 frames × 8 rows: walk↓↑→← + attack↓↑→←)
+ * Sprite directory layout (public/assets/sprites/):
+ *   World/Ground/  — terrain tiles (16×16)
+ *   World/Nature/  — natural world objects (16×16)
+ *   Player/        — champion spritesheets (80×128) + login previews (80×128)
+ *   Enemies/       — enemy spritesheets (80×128)
+ *   NPCs/          — NPC spritesheets (80×128)
+ *   Items/         — consumables, materials, keys (16×16)
+ *   Weapons/       — weapon icons (16×16)
+ *   Armors/        — armor icons (16×16)
+ *   Tools/         — tool icons (16×16)
+ *   Dungeon/       — dungeon buildings, floor, walls, props (16×16)
+ *   House/         — village buildings, house interior, furniture (16×16)
+ *   Cellars/       — cellar environments (16×16)
+ *
+ * Spritesheet format (80×128):
+ *   5 columns × 8 rows of 16×16 frames
+ *   Rows 0-3 = walk (down/up/right/left)
+ *   Rows 4-7 = attack (down/up/right/left)
  */
 
 'use strict'
@@ -34,10 +50,7 @@ function chunk(type, data) {
   return Buffer.concat([l, t, data, r])
 }
 
-/**
- * Create a W×H RGBA PNG.
- * `fill(x, y)` returns [r, g, b, a] for each pixel.
- */
+/** Create a W×H RGBA PNG. `fill(x, y)` returns [r, g, b, a] for each pixel. */
 function makePNG(w, h, fill) {
   const sig  = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])
   const ihdr = (() => {
@@ -48,16 +61,14 @@ function makePNG(w, h, fill) {
   })()
   const raw = Buffer.alloc(h * (1 + w * 4))
   for (let y = 0; y < h; y++) {
-    raw[y * (1 + w * 4)] = 0 // filter: None
+    raw[y * (1 + w * 4)] = 0
     for (let x = 0; x < w; x++) {
       const [r, g, b, a] = fill(x, y)
       const o = y * (1 + w * 4) + 1 + x * 4
       raw[o] = r; raw[o+1] = g; raw[o+2] = b; raw[o+3] = a
     }
   }
-  const idat = chunk('IDAT', zlib.deflateSync(raw))
-  const iend = chunk('IEND', Buffer.alloc(0))
-  return Buffer.concat([sig, ihdr, idat, iend])
+  return Buffer.concat([sig, ihdr, chunk('IDAT', zlib.deflateSync(raw)), chunk('IEND', Buffer.alloc(0))])
 }
 
 // ── Drawing helpers ──────────────────────────────────────────────────────────
@@ -90,22 +101,17 @@ function icon16(bgHex, borderHex = '#000000', dotHex = '#ffffff') {
  * 8 rows × 5 columns of 16×16 frames.
  * Rows 0-3 = walk (down/up/right/left) — lighter tint.
  * Rows 4-7 = attack (down/up/right/left) — darker tint.
- * Each frame gets a thin 1-px white inner grid line so you can see frame
- * boundaries when editing.
+ * Grid lines mark frame boundaries; col-0 rows get a centre dot.
  */
 function sheet(bgHex) {
   const [r, g, b] = hex(bgHex)
   const COLS = 5, ROWS = 8, F = 16
   return makePNG(COLS * F, ROWS * F, (x, y) => {
-    const col  = Math.floor(x / F)
-    const row  = Math.floor(y / F)
-    const lx   = x % F, ly = y % F
-    // grid lines
+    const col = Math.floor(x / F)
+    const lx  = x % F, ly = y % F
     const grid = lx === 0 || ly === 0
     if (grid) return [255, 255, 255, 80]
-    // attack rows slightly darker
-    const dark = row >= 4 ? 0.6 : 1.0
-    // first frame of each direction gets a small centre dot
+    const dark = Math.floor(y / F) >= 4 ? 0.6 : 1.0
     const dot  = col === 0 && lx >= 6 && lx <= 9 && ly >= 6 && ly <= 9
     if (dot) return [255, 255, 255, 200]
     return [Math.round(r * dark), Math.round(g * dark), Math.round(b * dark), 255]
@@ -114,100 +120,100 @@ function sheet(bgHex) {
 
 // ── Write helper ─────────────────────────────────────────────────────────────
 
+/** Write `relPath` (relative to SPRITES/) only if the file doesn't already exist. */
 function write(relPath, buf) {
   const full = path.join(SPRITES, relPath)
   fs.mkdirSync(path.dirname(full), { recursive: true })
   if (fs.existsSync(full)) {
-    console.log(`  skip  ${relPath}  (already exists)`)
+    console.log(`  skip  ${relPath}`)
     return
   }
   fs.writeFileSync(full, buf)
   console.log(`  wrote ${relPath}`)
 }
 
-/** Same as write() — always skips if the file already exists. */
-function overwrite(relPath, buf) {
-  write(relPath, buf)
-}
+// ── World/Ground — terrain tiles (16×16) ─────────────────────────────────────
 
-// ── Generate ─────────────────────────────────────────────────────────────────
-
-console.log('\n=== Items (16×16) ===')
-const ITEMS = [
-  // materials
-  ['Items/wood.png',          '#8B5E3C'],
-  ['Items/stone.png',         '#8E8E8E'],
-  ['Items/iron_ore.png',      '#A0522D'],
-  ['Items/iron_bar.png',      '#708090'],
-  ['Items/leather.png',       '#8B4513'],
-  ['Items/gold_coin.png',     '#FFD700'],
-  ['Items/mushroom.png',      '#C0392B'],
-  // consumables
-  ['Items/health_potion.png', '#E74C3C'],
-  ['Items/mana_potion.png',   '#3498DB'],
-  ['Items/antidote.png',      '#2ECC71'],
-  ['Items/cooked_mushroom.png','#E67E22'],
-  // tools
-  ['Items/axe.png',           '#7F8C8D'],
-  ['Items/pickaxe.png',       '#95A5A6'],
-  ['Items/scythe.png',        '#AAB7B8'],
-  // key
-  ['Items/dungeon_key.png',   '#F1C40F'],
-  // weapons
-  ['Items/wooden_sword.png',  '#D4AC6E'],
-  ['Items/iron_sword.png',    '#5D6D7E'],
-  ['Items/iron_axe.png',      '#5D6D7E'],
-  ['Items/shadow_blade.png',  '#6C3483'],
-  ['Items/wooden_bow.png',    '#BA8C63'],
-  ['Items/iron_bow.png',      '#5D6D7E'],
-  ['Items/oak_staff.png',     '#7D6608'],
-  ['Items/iron_staff.png',    '#1A5276'],
-  // armor — leather
-  ['Items/leather_helmet.png',     '#935116'],
-  ['Items/leather_chestplate.png', '#935116'],
-  ['Items/leather_leggings.png',   '#935116'],
-  ['Items/leather_boots.png',      '#935116'],
-  ['Items/leather_gloves.png',     '#935116'],
-  // armor — iron
-  ['Items/iron_helmet.png',     '#5D6D7E'],
-  ['Items/iron_chestplate.png', '#5D6D7E'],
-  ['Items/iron_leggings.png',   '#5D6D7E'],
-  ['Items/iron_boots.png',      '#5D6D7E'],
-  ['Items/iron_gloves.png',     '#5D6D7E'],
-  // armor — shadow
-  ['Items/shadow_helmet.png',     '#512E5F'],
-  ['Items/shadow_chestplate.png', '#512E5F'],
-  ['Items/shadow_leggings.png',   '#512E5F'],
-  ['Items/shadow_boots.png',      '#512E5F'],
-  ['Items/shadow_gloves.png',     '#512E5F'],
+console.log('\n=== World/Ground — terrain tiles (16×16) ===')
+const GROUND_TILES = [
+  ['World/Ground/Grass.png',             '#4CAF50'],
+  ['World/Ground/GrassDark.png',         '#2E7D32'],
+  ['World/Ground/GrassTall.png',         '#388E3C'],
+  ['World/Ground/GrassFlowerYellow.png', '#CDDC39'],
+  ['World/Ground/GrassFlowerRed.png',    '#E53935'],
+  ['World/Ground/GrassDead.png',         '#8D6E63'],
+  ['World/Ground/PathDirt.png',          '#A1887F'],
+  ['World/Ground/WaterShallow.png',      '#81D4FA'],
+  ['World/Ground/WaterDeep.png',         '#0277BD'],
+  ['World/Ground/WaterOasis.png',        '#0288D1'],
+  ['World/Ground/Sand.png',              '#FFD54F'],
+  ['World/Ground/SandDune.png',          '#FFB300'],
+  ['World/Ground/SandBank.png',          '#FDD835'],
+  ['World/Ground/Mud.png',               '#6D4C41'],
+  ['World/Ground/Cobblestone.png',       '#757575'],
+  ['World/Ground/GardenPlot.png',        '#5D4037'],
+  ['World/Ground/Mushroom.png',          '#BF360C'],
+  ['World/Ground/Reeds.png',             '#558B2F'],
+  ['World/Ground/Quicksand.png',         '#F9A825'],
+  ['World/Ground/Void.png',              '#212121'],
 ]
-for (const [p, c] of ITEMS) write(p, icon16(c))
+for (const [p, c] of GROUND_TILES) write(p, icon16(c))
 
-console.log('\n=== Tile sprites — new unique tiles (16×16) ===')
-const TILES = [
-  // Ground — previously shared
-  ['Ground/GrassDark.png',    '#2E7D32'],
-  ['Ground/Mushroom.png',     '#BF360C'],
-  ['Ground/Reeds.png',        '#558B2F'],
-  ['Ground/Cobblestone.png',  '#757575'],
-  ['Ground/GardenPlot.png',   '#5D4037'],
-  ['Ground/Quicksand.png',    '#F9A825'],
-  ['Ground/SandBank.png',     '#FDD835'],
-  ['Ground/Void.png',         '#212121'],
-  // Nature — previously shared
-  ['Nature/Bush.png',         '#388E3C'],
-  ['Nature/Log.png',          '#6D4C41'],
-  ['Nature/DryRock.png',      '#8D6E63'],
+// ── World/Nature — natural objects (16×16) ────────────────────────────────────
+
+console.log('\n=== World/Nature — natural objects (16×16) ===')
+const NATURE_TILES = [
+  ['World/Nature/Trees.png',       '#2E7D32'],
+  ['World/Nature/PineTrees.png',   '#1B5E20'],
+  ['World/Nature/CoconutTrees.png','#33691E'],
+  ['World/Nature/Bush.png',        '#388E3C'],
+  ['World/Nature/Log.png',         '#6D4C41'],
+  ['World/Nature/Stump.png',       '#795548'],
+  ['World/Nature/RockSmall.png',   '#9E9E9E'],
+  ['World/Nature/RocksBig.png',    '#757575'],
+  ['World/Nature/RockMoss.png',    '#558B2F'],
+  ['World/Nature/DryRock.png',     '#8D6E63'],
+  ['World/Nature/Cactus.png',      '#689F38'],
+  ['World/Nature/Tumbleweed.png',  '#A5D6A7'],
+  ['World/Nature/Wheatfield.png',  '#F9A825'],
+  ['World/Nature/Cliff.png',       '#616161'],
 ]
-for (const [p, c] of TILES) write(p, icon16(c, '#000000', '#ffffff'))
+for (const [p, c] of NATURE_TILES) write(p, icon16(c))
 
-console.log('\n=== Enemy spritesheets (80×128) ===')
+// ── Player — champion spritesheets (80×128) ───────────────────────────────────
+
+console.log('\n=== Player — champion spritesheets (80×128) ===')
+const PLAYER_SHEETS = [
+  ['Player/Arthax.png',    '#1565C0'],
+  ['Player/Börg.png',      '#B71C1C'],
+  ['Player/Gangblanc.png', '#212121'],
+  ['Player/Grum.png',      '#4E342E'],
+  ['Player/Kanji.png',     '#880E4F'],
+  ['Player/Katan.png',     '#E65100'],
+  ['Player/Okomo.png',     '#1B5E20'],
+  ['Player/Zhinja.png',    '#4527A0'],
+  // Login preview avatars (same sheets, same files)
+  ['Player/player_arthax.png',    '#1565C0'],
+  ['Player/player_borg.png',      '#B71C1C'],
+  ['Player/player_gangblanc.png', '#212121'],
+  ['Player/player_grum.png',      '#4E342E'],
+  ['Player/player_kanji.png',     '#880E4F'],
+  ['Player/player_katan.png',     '#E65100'],
+  ['Player/player_okomo.png',     '#1B5E20'],
+  ['Player/player_zhinja.png',    '#4527A0'],
+]
+for (const [p, c] of PLAYER_SHEETS) write(p, sheet(c))
+
+// ── Enemies — enemy spritesheets (80×128) ────────────────────────────────────
+
+console.log('\n=== Enemies — spritesheets (80×128) ===')
 const ENEMIES = [
   ['Enemies/wolf.png',              '#78909C'],
   ['Enemies/bandit_weak.png',       '#BF360C'],
   ['Enemies/bandit_strong.png',     '#7B241C'],
   ['Enemies/giant_spider.png',      '#4A148C'],
   ['Enemies/goblin_scout_weak.png', '#2E7D32'],
+  ['Enemies/goblin_scout_strong.png','#1B5E20'],
   ['Enemies/treant.png',            '#1B5E20'],
   ['Enemies/river_troll.png',       '#1565C0'],
   ['Enemies/crocodile.png',         '#558B2F'],
@@ -229,9 +235,11 @@ const ENEMIES = [
   ['Enemies/necromancer.png',       '#311B92'],
   ['Enemies/dungeon_boss_strong.png','#B71C1C'],
 ]
-for (const [p, c] of ENEMIES) overwrite(p, sheet(c))
+for (const [p, c] of ENEMIES) write(p, sheet(c))
 
-console.log('\n=== NPC spritesheets (80×128) ===')
+// ── NPCs — NPC spritesheets (80×128) ─────────────────────────────────────────
+
+console.log('\n=== NPCs — spritesheets (80×128) ===')
 const NPCS = [
   ['NPCs/guard_patrol.png',       '#1565C0'],
   ['NPCs/healer_standard.png',    '#AD1457'],
@@ -241,19 +249,127 @@ const NPCS = [
   ['NPCs/villager_hunter.png',    '#33691E'],
   ['NPCs/villager_wanderer.png',  '#4E342E'],
 ]
-for (const [p, c] of NPCS) overwrite(p, sheet(c))
+for (const [p, c] of NPCS) write(p, sheet(c))
 
-console.log('\n=== Champion spritesheets (80×128) ===')
-const CHAMPIONS = [
-  ['Champions/Arthax.png',    '#1565C0'],
-  ['Champions/Börg.png',      '#B71C1C'],
-  ['Champions/Gangblanc.png', '#212121'],
-  ['Champions/Grum.png',      '#4E342E'],
-  ['Champions/Kanji.png',     '#880E4F'],
-  ['Champions/Katan.png',     '#E65100'],
-  ['Champions/Okomo.png',     '#1B5E20'],
-  ['Champions/Zhinja.png',    '#4527A0'],
+// ── Items — consumables + materials + keys (16×16) ────────────────────────────
+
+console.log('\n=== Items — consumables, materials, keys (16×16) ===')
+const ITEMS = [
+  ['Items/wood.png',           '#8B5E3C'],
+  ['Items/stone.png',          '#8E8E8E'],
+  ['Items/iron_ore.png',       '#A0522D'],
+  ['Items/iron_bar.png',       '#708090'],
+  ['Items/leather.png',        '#8B4513'],
+  ['Items/gold_coin.png',      '#FFD700'],
+  ['Items/mushroom.png',       '#C0392B'],
+  ['Items/health_potion.png',  '#E74C3C'],
+  ['Items/mana_potion.png',    '#3498DB'],
+  ['Items/antidote.png',       '#2ECC71'],
+  ['Items/cooked_mushroom.png','#E67E22'],
+  ['Items/dungeon_key.png',    '#F1C40F'],
 ]
-for (const [p, c] of CHAMPIONS) overwrite(p, sheet(c))
+for (const [p, c] of ITEMS) write(p, icon16(c))
+
+// ── Weapons — weapon icons (16×16) ────────────────────────────────────────────
+
+console.log('\n=== Weapons — icons (16×16) ===')
+const WEAPONS = [
+  ['Weapons/wooden_sword.png', '#D4AC6E'],
+  ['Weapons/iron_sword.png',   '#5D6D7E'],
+  ['Weapons/iron_axe.png',     '#5D6D7E'],
+  ['Weapons/shadow_blade.png', '#6C3483'],
+  ['Weapons/wooden_bow.png',   '#BA8C63'],
+  ['Weapons/iron_bow.png',     '#5D6D7E'],
+  ['Weapons/oak_staff.png',    '#7D6608'],
+  ['Weapons/iron_staff.png',   '#1A5276'],
+]
+for (const [p, c] of WEAPONS) write(p, icon16(c))
+
+// ── Armors — armor icons (16×16) ──────────────────────────────────────────────
+
+console.log('\n=== Armors — icons (16×16) ===')
+const ARMORS = [
+  ['Armors/leather_helmet.png',     '#935116'],
+  ['Armors/leather_chestplate.png', '#935116'],
+  ['Armors/leather_leggings.png',   '#935116'],
+  ['Armors/leather_boots.png',      '#935116'],
+  ['Armors/leather_gloves.png',     '#935116'],
+  ['Armors/iron_helmet.png',        '#5D6D7E'],
+  ['Armors/iron_chestplate.png',    '#5D6D7E'],
+  ['Armors/iron_leggings.png',      '#5D6D7E'],
+  ['Armors/iron_boots.png',         '#5D6D7E'],
+  ['Armors/iron_gloves.png',        '#5D6D7E'],
+  ['Armors/shadow_helmet.png',      '#512E5F'],
+  ['Armors/shadow_chestplate.png',  '#512E5F'],
+  ['Armors/shadow_leggings.png',    '#512E5F'],
+  ['Armors/shadow_boots.png',       '#512E5F'],
+  ['Armors/shadow_gloves.png',      '#512E5F'],
+]
+for (const [p, c] of ARMORS) write(p, icon16(c))
+
+// ── Tools — tool icons (16×16) ────────────────────────────────────────────────
+
+console.log('\n=== Tools — icons (16×16) ===')
+const TOOLS = [
+  ['Tools/axe.png',     '#7F8C8D'],
+  ['Tools/pickaxe.png', '#95A5A6'],
+  ['Tools/scythe.png',  '#AAB7B8'],
+]
+for (const [p, c] of TOOLS) write(p, icon16(c))
+
+// ── Dungeon — buildings, props, floor, stairs (16×16) ────────────────────────
+
+console.log('\n=== Dungeon — buildings, props, floor (16×16) ===')
+const DUNGEON = [
+  ['Dungeon/DungeonEntrance.png', '#37474F'],
+  ['Dungeon/DungeonFloor.png',    '#455A64'],
+  ['Dungeon/DungeonWall.png',     '#263238'],
+  ['Dungeon/DungeonPillar.png',   '#37474F'],
+  ['Dungeon/StairDown.png',       '#546E7A'],
+  ['Dungeon/StairUp.png',         '#607D8B'],
+  ['Dungeon/DungeonTrap.png',     '#B71C1C'],
+  ['Dungeon/DungeonAltar.png',    '#4527A0'],
+  ['Dungeon/Chest.png',           '#8D6E63'],
+  ['Dungeon/Tombstone.png',       '#616161'],
+]
+for (const [p, c] of DUNGEON) write(p, icon16(c))
+
+// ── House — village buildings, interior, furniture (16×16) ───────────────────
+
+console.log('\n=== House — buildings, interior, furniture (16×16) ===')
+const HOUSE = [
+  ['House/Huts.png',       '#8D6E63'],
+  ['House/Houses.png',     '#A1887F'],
+  ['House/Barracks.png',   '#546E7A'],
+  ['House/Chapels.png',    '#F5F5F5'],
+  ['House/Taverns.png',    '#BF360C'],
+  ['House/Workshops.png',  '#4E342E'],
+  ['House/Market.png',     '#F57F17'],
+  ['House/Door.png',       '#6D4C41'],
+  ['House/HouseFloor.png', '#BCAAA4'],
+  ['House/WorkBench.png',  '#795548'],
+  ['House/Table.png',      '#A1887F'],
+  ['House/Bed.png',        '#E53935'],
+  ['House/Sofa.png',       '#7986CB'],
+  ['House/Well.png',       '#78909C'],
+  ['House/QuestBoard.png', '#FFB300'],
+  ['House/StreetSign.png', '#8D6E63'],
+  ['House/Tombstone.png',  '#757575'],
+  ['House/Chest.png',      '#A1887F'],
+  ['House/Portal.png',     '#7C4DFF'],
+]
+for (const [p, c] of HOUSE) write(p, icon16(c))
+
+// ── Cellars — cellar environments (16×16) ─────────────────────────────────────
+
+console.log('\n=== Cellars — floor, walls, props (16×16) ===')
+const CELLARS = [
+  ['Cellars/CellarFloor.png',     '#4A3F35'],
+  ['Cellars/CellarWall.png',      '#2D2520'],
+  ['Cellars/CellarChest.png',     '#6B4226'],
+  ['Cellars/CellarTrap.png',      '#5C3B1A'],
+  ['Cellars/CellarStairsUp.png',  '#7A6652'],
+]
+for (const [p, c] of CELLARS) write(p, icon16(c))
 
 console.log('\nDone.\n')

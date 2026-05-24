@@ -53,7 +53,7 @@ export interface ItemDefinition {
   stackable: boolean
   maxStack: number
   spriteFrame: string
-  category: 'material' | 'weapon' | 'consumable' | 'tool' | 'key'
+  category: 'material' | 'weapon' | 'armor' | 'consumable' | 'tool' | 'key'
 }
 
 export interface WeaponDefinition extends ItemDefinition {

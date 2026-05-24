@@ -252,7 +252,7 @@ export class PlayerController {
             const roomId = cellarRoomId(parsed.tx, parsed.ty)
             this._transitionCooldown = 800
             this._persistRoomOnly(roomId)
-            this.scene.events.emit('enterRoom', { roomId, spawnNear: 'dungeon_stairs_up' })
+            this.scene.events.emit('enterRoom', { roomId, spawnNear: 'cellar_stairs_up' })
             return
           }
         }
@@ -268,10 +268,9 @@ export class PlayerController {
         }
       }
 
-      if (tileTypes.includes('dungeon_stairs_up')) {
+      // cellar_stairs_up → return to the source house interior
+      if (tileTypes.includes('cellar_stairs_up')) {
         const activeRoom = getActiveRoom()!
-
-        // Cellar ascent returns to the source house interior.
         if (activeRoom.startsWith('cellar_')) {
           const parsed = parseCellarRoomId(activeRoom)
           if (parsed) {
@@ -282,6 +281,10 @@ export class PlayerController {
             return
           }
         }
+      }
+
+      if (tileTypes.includes('dungeon_stairs_up')) {
+        const activeRoom = getActiveRoom()!
 
         // Dungeon floor ascent: floor N>1 goes to N-1, floor 1 exits overworld.
         const d = parseDungeonRoomId(activeRoom)

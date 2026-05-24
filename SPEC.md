@@ -51,6 +51,25 @@ In login/portrait UI, always use frame 0. In-world animated entities use the ful
 - Road paths between all POIs are pre-computed from the seed. When a chunk containing a road segment is generated, single-tile `dirt_path` road tiles are stamped in, ensuring every explored POI is connected to every other explored POI by a walkable road.
 - No global connectivity repair pass is needed; connectivity is guaranteed by the deterministic road network stamped at chunk-generation time.
 
+### Sprite directory layout
+
+All sprites live under `public/assets/sprites/`. The directories are:
+
+| Directory | Contents |
+|---|---|
+| `World/Ground/` | Terrain tiles — grass, water, sand, paths, etc. (16×16) |
+| `World/Nature/` | Natural world objects — trees, rocks, bushes, etc. (16×16) |
+| `Player/` | Champion spritesheets (80×128) + login preview images |
+| `Enemies/` | Enemy spritesheets (80×128) |
+| `NPCs/` | NPC spritesheets (80×128) |
+| `Items/` | Consumable items, materials, keys (16×16 icons) |
+| `Weapons/` | Weapon icons (16×16) |
+| `Armors/` | Armor icons (16×16) |
+| `Tools/` | Tool icons (16×16) |
+| `Dungeon/` | Dungeon buildings, floor, walls, stairs, props (16×16) |
+| `House/` | Village buildings, house interior tiles, furniture (16×16) |
+| `Cellars/` | Cellar floor, walls, stairs, props (16×16) |
+
 ### Tiles by zone
 
 All sprite paths are relative to `public/assets/sprites/`.
@@ -59,104 +78,114 @@ All sprite paths are relative to `public/assets/sprites/`.
 
 | Tile | Sprite |
 |---|---|
-| `grass` | `Ground/Grass.png` |
-| `grass_tall` | `Ground/GrassTall.png` |
-| `flower_yellow` | `Ground/GrassFlowerYellow.png` |
-| `flower_red` | `Ground/GrassFlowerRed.png` |
-| `dirt_path` | `Ground/GrassDead.png` |
-| `rock_small` | `Nature/RockSmall.png` |
-| `rock_large` | `Nature/RocksBig.png` |
+| `grass` | `World/Ground/Grass.png` |
+| `grass_tall` | `World/Ground/GrassTall.png` |
+| `flower_yellow` | `World/Ground/GrassFlowerYellow.png` |
+| `flower_red` | `World/Ground/GrassFlowerRed.png` |
+| `dirt_path` | `World/Ground/PathDirt.png` |
+| `rock_small` | `World/Nature/RockSmall.png` |
+| `rock_large` | `World/Nature/RocksBig.png` |
 
 **Forest**
 
 | Tile | Sprite |
 |---|---|
-| `grass_dark` | `Ground/GrassTall.png` |
-| `tree_oak` | `Nature/Trees.png` |
-| `tree_pine` | `Nature/PineTrees.png` |
-| `coconut_tree` | `Nature/CoconutTrees.png` |
-| `bush` | `Nature/Trees.png` *(bush/shrub frame)* |
-| `mushroom` | `Ground/GrassTall.png` *(mushroom frame)* |
-| `log` | `Nature/Stump.png` *(log frame)* |
-| `moss_rock` | `Nature/RockMoss.png` |
-| `stump` | `Nature/Stump.png` |
+| `grass_dark` | `World/Ground/GrassDark.png` |
+| `tree_oak` | `World/Nature/Trees.png` |
+| `tree_pine` | `World/Nature/PineTrees.png` |
+| `coconut_tree` | `World/Nature/CoconutTrees.png` |
+| `bush` | `World/Nature/Bush.png` |
+| `mushroom` | `World/Ground/Mushroom.png` |
+| `log` | `World/Nature/Log.png` |
+| `moss_rock` | `World/Nature/RockMoss.png` |
+| `stump` | `World/Nature/Stump.png` |
 
 **River**
 
 | Tile | Sprite |
 |---|---|
-| `water_shallow` | `Ground/WaterShallow.png` |
-| `water_deep` | `Ground/WaterDeep.png` |
-| `sand_bank` | `Ground/Sand.png` |
-| `reeds` | `Ground/GrassTall.png` *(reeds frame)* |
-| `mud` | `Ground/Mud.png` |
+| `water_shallow` | `World/Ground/WaterShallow.png` |
+| `water_deep` | `World/Ground/WaterDeep.png` |
+| `sand_bank` | `World/Ground/SandBank.png` |
+| `reeds` | `World/Ground/Reeds.png` |
+| `mud` | `World/Ground/Mud.png` |
 
 **Desert**
 
 | Tile | Sprite |
 |---|---|
-| `sand` | `Ground/Sand.png` |
-| `sand_dune` | `Ground/SandDune.png` |
-| `dry_rock` | `Nature/RockSmall.png` |
-| `cactus` | `Nature/Cactus.png` |
-| `dry_grass` | `Nature/Tumbleweed.png` |
-| `oasis_water` | `Ground/WaterOasis.png` |
-| `quicksand` | `Ground/GrassDead.png` *(quicksand frame)* |
+| `sand` | `World/Ground/Sand.png` |
+| `sand_dune` | `World/Ground/SandDune.png` |
+| `dry_rock` | `World/Nature/DryRock.png` |
+| `cactus` | `World/Nature/Cactus.png` |
+| `dry_grass` | `World/Nature/Tumbleweed.png` |
+| `oasis_water` | `World/Ground/WaterOasis.png` |
+| `quicksand` | `World/Ground/Quicksand.png` |
 
 **Village** — houses are single-sprite tiles; entering one (walk up to it) automatically loads a 12×12 interior room.
 
 | Tile | Sprite | Notes |
 |---|---|---|
-| `cobblestone` | `Ground/GrassDead.png` | Path / square |
-| `house_hut` | `Buildings/Huts.png` | Small house — auto-enters on touch |
-| `house_cabin` | `Buildings/Houses.png` | Medium house — auto-enters on touch |
-| `barracks` | `Buildings/Barracks.png` | Guard barracks — auto-enters on touch |
-| `chapel` | `Buildings/Chapels.png` | Chapel / temple — auto-enters on touch |
-| `tavern` | `Buildings/Taverns.png` | Tavern — auto-enters on touch |
-| `well` | `Miscellaneous/Well.png` | Central landmark |
-| `market_stall` | `Buildings/Market.png` | Merchant NPC spot |
-| `workshop` | `Buildings/Workshops.png` | Blacksmith / crafting — auto-enters on touch |
-| `quest_board` | `Miscellaneous/QuestBoard.png` | Notice board |
-| `street_sign` | `Miscellaneous/StreetSign.png` | Path-end marker |
-| `tombstone` | `Miscellaneous/Tombstones.png` | Cemetery decoration |
-| `garden_plot` | `Ground/Grass.png` | Wheat field base |
-| `wheat_field` | `Nature/Wheatfield.png` | Planted crop |
+| `cobblestone` | `World/Ground/Cobblestone.png` | Path / square |
+| `house_hut` | `House/Huts.png` | Small house — auto-enters on touch |
+| `house_cabin` | `House/Houses.png` | Medium house — auto-enters on touch |
+| `barracks` | `House/Barracks.png` | Guard barracks — auto-enters on touch |
+| `chapel` | `House/Chapels.png` | Chapel / temple — auto-enters on touch |
+| `tavern` | `House/Taverns.png` | Tavern — auto-enters on touch |
+| `well` | `House/Well.png` | Central landmark |
+| `market_stall` | `House/Market.png` | Merchant NPC spot |
+| `workshop` | `House/Workshops.png` | Blacksmith / crafting — auto-enters on touch |
+| `quest_board` | `House/QuestBoard.png` | Notice board |
+| `street_sign` | `House/StreetSign.png` | Path-end marker |
+| `tombstone` | `House/Tombstone.png` | Cemetery decoration |
+| `garden_plot` | `World/Ground/GardenPlot.png` | Wheat field base |
+| `wheat_field` | `World/Nature/Wheatfield.png` | Planted crop |
 
-**House Interior** — 12×12 room accessed from any enterable village building.
+**House Interior** — room accessed from any enterable village building.
 
 | Tile | Sprite | Notes |
 |---|---|---|
-| `house_floor` | `Ground/HouseFloor.png` | Interior floor |
-| `dungeon_wall` | `Buildings/DungeonWall.png` | Impassable border |
-| `workbench` | `Miscellaneous/WorkBench.png` | Crafting station (workshop) |
-| `table` | `Miscellaneous/Table.png` | Furniture (tavern, workshop, residential) |
-| `bed` | `Miscellaneous/Bed.png` | Furniture (residential) |
-| `sofa` | `Miscellaneous/Sofa.png` | Furniture (tavern, chapel, residential) |
-| `chest` | `Miscellaneous/Chests.png` | Storage / loot chest |
-| `quest_board` | `Miscellaneous/QuestBoard.png` | Barracks notice board |
-| `dungeon_altar` | `Miscellaneous/DungeonAltar.png` | Chapel altar |
-| `house_exit` | `Miscellaneous/Portal.png` | Returns player to overworld |
+| `house_floor` | `House/HouseFloor.png` | Interior floor |
+| `dungeon_wall` | `Dungeon/DungeonWall.png` | Impassable border |
+| `workbench` | `House/WorkBench.png` | Crafting station (workshop) |
+| `table` | `House/Table.png` | Furniture (tavern, workshop, residential) |
+| `bed` | `House/Bed.png` | Furniture (residential) |
+| `sofa` | `House/Sofa.png` | Furniture (tavern, chapel, residential) |
+| `chest` | `House/Chest.png` | Storage / loot chest |
+| `quest_board` | `House/QuestBoard.png` | Barracks notice board |
+| `dungeon_altar` | `Dungeon/DungeonAltar.png` | Chapel altar |
+| `house_exit` | `House/Door.png` | Returns player to overworld |
 
 **Dungeon**
 
 | Tile | Sprite |
 |---|---|
-| `dungeon_entrance` | `Buildings/DungeonEntrance.png` |
-| `dungeon_floor` | `Ground/DungeonFloor.png` |
-| `dungeon_wall` | `Buildings/DungeonWall.png` |
-| `dungeon_stairs_down` | `Ground/StairDown.png` |
-| `dungeon_stairs_up` | `Ground/StairUp.png` *(step on to exit)* |
-| `dungeon_pillar` | `Buildings/DungeonPillar.png` |
-| `dungeon_trap` | `Miscellaneous/DungeonTrap.png` |
-| `dungeon_chest` | `Miscellaneous/Chests.png` |
-| `dungeon_altar` | `Miscellaneous/DungeonAltar.png` |
-| `dungeon_tombstones` | `Miscellaneous/Tombstones.png` |
+| `dungeon_entrance` | `Dungeon/DungeonEntrance.png` |
+| `dungeon_floor` | `Dungeon/DungeonFloor.png` |
+| `dungeon_wall` | `Dungeon/DungeonWall.png` |
+| `dungeon_stairs_down` | `Dungeon/StairDown.png` |
+| `dungeon_stairs_up` | `Dungeon/StairUp.png` *(step on to exit)* |
+| `dungeon_pillar` | `Dungeon/DungeonPillar.png` |
+| `dungeon_trap` | `Dungeon/DungeonTrap.png` |
+| `dungeon_chest` | `Dungeon/Chest.png` |
+| `dungeon_altar` | `Dungeon/DungeonAltar.png` |
+| `dungeon_tombstones` | `Dungeon/Tombstone.png` |
+
+**Cellar** — small underground room attached to some houses (accessed via `dungeon_stairs_down` inside the house).
+
+| Tile | Sprite |
+|---|---|
+| `cellar_floor` | `Cellars/CellarFloor.png` |
+| `cellar_wall` | `Cellars/CellarWall.png` |
+| `cellar_stairs_up` | `Cellars/CellarStairsUp.png` *(step on to return to house)* |
+| `cellar_chest` | `Cellars/CellarChest.png` |
+| `cellar_trap` | `Cellars/CellarTrap.png` |
 
 **Special**
 
 | Tile | Sprite |
 |---|---|
-| `void` | `Ground/GrassDead.png` *(impassable world-boundary barrier)* |
+| `void` | `World/Ground/Void.png` *(impassable world-boundary barrier)* |
 
 Some tiles reduce movement speed (`grass_tall`, `mud`, `quicksand`, `sand_dune`, `wheat_field`) rather than blocking it.
 
@@ -185,8 +214,9 @@ The room ID `house_${tx.padStart(4,'0')}_${ty.padStart(4,'0')}` is derived deter
 ### Entering and exiting
 - Walk up to a building tile (touch it) → camera automatically transitions to the interior room
 - Step onto `dungeon_stairs_down` inside a qualifying house → transitions to `cellar_${tx}_${ty}`
-- Step onto `dungeon_stairs_up` inside a cellar → returns to the source house interior
+- Step onto `cellar_stairs_up` inside a cellar → returns to the source house interior
 - Step onto the `house_exit` tile → automatically returns the player to the overworld at the original entry position
+- Step onto `dungeon_stairs_up` inside a dungeon floor > 1 → ascends to floor N−1; floor 1 exits to overworld
 - An 800 ms cooldown prevents immediate re-triggering after each transition
 
 ---
@@ -227,20 +257,18 @@ The room ID `house_${tx.padStart(4,'0')}_${ty.padStart(4,'0')}` is derived deter
 
 ### Sprites
 
-Players choose one of eight available champion sprites at character creation. All sprite files are under `public/assets/sprites/Characters/Champions/`. The login selection grid uses frame 0 (top-left 16×16 px). In-game, the player uses directional 5-frame walk rows and faces the active movement direction — see the global [Sprite rendering convention](#sprite-rendering-convention).
+Players choose one of eight available champion sprites at character creation. All champion sprite files are in `public/assets/sprites/Player/`. The login selection grid uses `player_{id}.png` (raw `<img>` load, frame 0). In-game, the player uses directional 5-frame walk rows from the same sheet and faces the active movement direction — see the global [Sprite rendering convention](#sprite-rendering-convention).
 
-The entity sprites used in the login selection UI are the pre-scaled portraits under `public/assets/sprites/entities/players/`. The Champions sheets under `Characters/Champions/` are used for in-game rendering.
-
-| Champion | File |
-|---|---|
-| Arthax | `Arthax.png` |
-| Börg | `Börg.png` |
-| Gangblanc | `Gangblanc.png` |
-| Grum | `Grum.png` |
-| Kanji | `Kanji.png` |
-| Katan | `Katan.png` |
-| Okomo | `Okomo.png` |
-| Zhinja | `Zhinja.png` |
+| Champion | Spritesheet | Login preview |
+|---|---|---|
+| Arthax | `Player/Arthax.png` | `Player/player_arthax.png` |
+| Börg | `Player/Börg.png` | `Player/player_borg.png` |
+| Gangblanc | `Player/Gangblanc.png` | `Player/player_gangblanc.png` |
+| Grum | `Player/Grum.png` | `Player/player_grum.png` |
+| Kanji | `Player/Kanji.png` | `Player/player_kanji.png` |
+| Katan | `Player/Katan.png` | `Player/player_katan.png` |
+| Okomo | `Player/Okomo.png` | `Player/player_okomo.png` |
+| Zhinja | `Player/Zhinja.png` | `Player/player_zhinja.png` |
 
 ---
 
