@@ -46,6 +46,19 @@ export function getTile(x: number, y: number): TileData | undefined {
   return tileCache.get(tileKey(x, y))
 }
 
+/**
+ * Mutate the local tile cache for position (x, y).
+ * Used by gathering logic so CollisionMap and TilemapRenderer reflect the
+ * change immediately, without waiting for a Firebase round-trip.
+ */
+export function setTile(x: number, y: number, data: TileData): void {
+  if (_activeRoom !== null) {
+    _roomTileCache.set(tileKey(x, y), data)
+  } else {
+    tileCache.set(tileKey(x, y), data)
+  }
+}
+
 /** Returns the currently active room ID, or null when in the overworld. */
 export function getActiveRoom(): string | null { return _activeRoom }
 

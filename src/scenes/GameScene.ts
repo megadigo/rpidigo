@@ -13,17 +13,17 @@
 import Phaser from 'phaser'
 import { ref, onValue, update } from 'firebase/database'
 import { db } from '../firebase.ts'
-import { TilemapRenderer, TILE_SIZE, isTileRoomExit } from '../renderer/TilemapRenderer.ts'
+import { TilemapRenderer, TILE_SIZE, isTileRoomExit, TILE_DEFS } from '../renderer/TilemapRenderer.ts'
 import type { Direction } from '../renderer/SpriteAnim.ts'
 import { ANIM_FRAMES, FRAME_DURATION_MS, directionFromVelocity, getFrame } from '../renderer/SpriteAnim.ts'
 import { PlayerController } from '../player/PlayerController.ts'
-import { enterRoom, exitRoom, findTileInRoom, getTile } from '../world/ChunkManager.ts'
+import { enterRoom, exitRoom, findTileInRoom, getTile, setTile, getActiveRoom } from '../world/ChunkManager.ts'
 import { HOUSE_ROOM_SIZE } from '../world/HouseGen.ts'
 import { CELLAR_ROOM_SIZE } from '../world/CellarGen.ts'
 import { getLocalPlayer, setLocalPlayer } from '../player/Auth.ts'
 import { remotePlayerTiles, remoteEnemyTiles, isPassable } from '../world/CollisionMap.ts'
-import { xpForLevel } from '../world/utils.ts'
-import { EnemyRegistry } from '../registry/registries.ts'
+import { xpForLevel, tileKey } from '../world/utils.ts'
+import { EnemyRegistry, TileRegistry } from '../registry/registries.ts'
 import { ScriptExecutor } from '../world/ScriptExecutor.ts'
 import type { NearbyPlayer } from '../world/ScriptExecutor.ts'
 import type { DialogSceneData } from './DialogScene.ts'
@@ -758,7 +758,11 @@ export class GameScene extends Phaser.Scene {
       }
     }
 
-    // No adjacent NPC — proceed with enemy attack (facing tile only)
+    // No adjacent NPC — check facing tile for gathering (Step 11)
+    const [fdx2, fdy2] = facingOffset[direction]
+    if (await this._handleGather(tx + fdx2, ty + fdy2)) return
+
+    // No gatherable tile either — proceed with enemy attack (facing tile only)
     await this._handlePlayerAttack(tx, ty, direction)
   }
 
@@ -788,6 +792,146 @@ export class GameScene extends Phaser.Scene {
       Phaser.Scenes.Events.SHUTDOWN,
       () => this.playerController.unfreeze(),
     )
+  }
+
+  // ── Gathering (Step 11) ────────────────────────────────────────────────────
+
+  /**
+   * Tool required per gather action (scythe covers cut; pick needs no tool).
+   */
+  private static readonly _GATHER_TOOL: Record<string, string> = {
+    chop: 'axe',
+    mine: 'pickaxe',
+    cut:  'scythe',
+  }
+
+  /**
+   * Try to gather the tile at world position (cx, cy).
+   * Returns true if the tile was gatherable (even if blocked by cooldown / missing tool),
+   * so the caller knows not to fall through to the attack handler.
+   */
+  private async _handleGather(cx: number, cy: number): Promise<boolean> {
+    const tileData = getTile(cx, cy)
+    if (!tileData) return false
+
+    // Find the gatherable tile ID (middle layer first, then ground)
+    let gatherTileId: string | null = null
+    let gatherLayer: 'MIDDLE' | 'GROUND' = 'GROUND'
+
+    for (const mid of (tileData.m ?? [])) {
+      try {
+        if (TileRegistry.get(mid).gatherAction) { gatherTileId = mid; gatherLayer = 'MIDDLE'; break }
+      } catch { /* unknown tile — skip */ }
+    }
+    if (!gatherTileId) {
+      try {
+        if (TileRegistry.get(tileData.g).gatherAction) { gatherTileId = tileData.g; gatherLayer = 'GROUND' }
+      } catch { /* skip */ }
+    }
+    if (!gatherTileId) return false  // tile is not gatherable
+
+    const tileDef = TileRegistry.get(gatherTileId)
+
+    // Cooldown check
+    if (tileData.metadata?.regenAt && Date.now() < tileData.metadata.regenAt) {
+      this._showFloatText(cx, cy, 'Not ready…', '#888888')
+      return true
+    }
+
+    // Tool check
+    const player  = getLocalPlayer()
+    const toolId  = GameScene._GATHER_TOOL[tileDef.gatherAction ?? '']
+    if (toolId) {
+      const hasTool = (player.inventory ?? []).some(s => s.itemId === toolId)
+        || player.equippedWeapon === toolId
+      if (!hasTool) {
+        const toolName = toolId.replace(/_/g, ' ')
+        this._showFloatText(cx, cy, `Need a ${toolName}`, '#ff8844')
+        return true
+      }
+    }
+
+    // Roll drops
+    const newInv  = [...(player.inventory ?? [])]
+    let   newGold = player.gold ?? 0
+
+    for (const drop of (tileDef.dropTable ?? [])) {
+      if (Math.random() >= drop.chance) continue
+      const qty = Math.floor(Math.random() * (drop.max - drop.min + 1)) + drop.min
+      if (drop.itemId === 'gold_coin') {
+        newGold += qty
+        this._showFloatText(cx, cy, `+${qty} gold`, '#ffdd88')
+      } else {
+        const slot = newInv.find(s => s.itemId === drop.itemId)
+        if (slot) slot.quantity += qty
+        else newInv.push({ itemId: drop.itemId, quantity: qty, metadata: {} })
+        const label = drop.itemId.replace(/_/g, ' ')
+        this._showFloatText(cx, cy, `+${qty} ${label}`, '#88ffcc')
+      }
+    }
+
+    player.inventory = newInv
+    player.gold      = newGold
+    setLocalPlayer(player)
+
+    // Build updated tile data
+    const regenAt = tileDef.regenSeconds
+      ? Date.now() + tileDef.regenSeconds * 1000
+      : undefined
+    const becomes  = tileDef.becomesOnGather ?? null
+    const becomesLayer = becomes ? (TILE_DEFS[becomes]?.layer ?? 'GROUND') : 'GROUND'
+
+    let newTileData: import('../world/types.ts').TileData
+    if (gatherLayer === 'MIDDLE') {
+      const newM = (tileData.m ?? []).filter(id => id !== gatherTileId)
+      if (becomes && becomesLayer === 'MIDDLE') newM.push(becomes)
+      newTileData = {
+        g: tileData.g,
+        ...(newM.length ? { m: newM } : {}),
+        ...(tileData.t  ? { t: tileData.t } : {}),
+        ...(regenAt ? { metadata: { ...tileData.metadata, regenAt } } : {}),
+      }
+    } else {
+      newTileData = {
+        g: becomes ?? tileData.g,
+        ...(tileData.m ? { m: tileData.m } : {}),
+        ...(tileData.t ? { t: tileData.t } : {}),
+        ...(regenAt ? { metadata: { ...tileData.metadata, regenAt } } : {}),
+      }
+    }
+
+    // Update local cache immediately (renderer + collision pick it up next frame)
+    setTile(cx, cy, newTileData)
+
+    // Persist to Firebase
+    const room = getActiveRoom() ?? '0'
+    await update(ref(db), {
+      [`map/${room}/${tileKey(cx, cy)}`]:  newTileData,
+      [`players/${player.id}/inventory`]:  newInv,
+      [`players/${player.id}/gold`]:       newGold,
+    })
+
+    return true
+  }
+
+  /**
+   * Show a short floating label above a tile position (same style as damage/regen floats).
+   */
+  private _showFloatText(tx: number, ty: number, text: string, color: string): void {
+    const wx = tx * TILE_SIZE + TILE_SIZE / 2
+    const wy = ty * TILE_SIZE
+    const t  = this.add.text(wx, wy, text, {
+      fontFamily: 'monospace', fontSize: '7px',
+      color, stroke: '#000000', strokeThickness: 2,
+    }).setOrigin(0.5, 1).setDepth(50)
+    this.tweens.add({
+      targets:  t,
+      y:        wy - TILE_SIZE * 1.5,
+      alpha:    0,
+      duration: 1400,
+      ease:     'Cubic.easeOut',
+      onComplete: () => t.destroy(),
+    })
   }
 
   /**
