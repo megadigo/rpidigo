@@ -45,7 +45,7 @@ export const tiles: TileDefinition[] = [
     gatherAction: 'pick', gatherCharges: 1,
     dropTable: [{ itemId: 'mushroom_item', min: 1, max: 2, chance: 1 }],
     regenSeconds: 90,
-    spriteFrame: 'World/Ground/Mushroom.png',
+    spriteFrame: 'World/Nature/Mushroom.png',
   },
   { id: 'log',       passable: true,  speedMod: 0.9, destructible: false, spriteFrame: 'World/Nature/Log.png' },
   { id: 'moss_rock', passable: false, speedMod: 0,   destructible: true,
@@ -65,7 +65,7 @@ export const tiles: TileDefinition[] = [
     gatherAction: 'cut', gatherCharges: 2,
     dropTable: [],
     regenSeconds: 60,
-    spriteFrame: 'World/Ground/Reeds.png',
+    spriteFrame: 'World/Nature/Reeds.png',
   },
   { id: 'mud', passable: true, speedMod: 0.5, destructible: false, spriteFrame: 'World/Ground/Mud.png' },
 

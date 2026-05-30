@@ -82,7 +82,7 @@ export const TILE_DEFS: Record<string, TileDef> = {
   tree_pine:           { sprite: 'World/Nature/PineTrees',          layer: 'MIDDLE', impassable: true },
   coconut_tree:        { sprite: 'World/Nature/CoconutTrees',       layer: 'MIDDLE', impassable: true },
   bush:                { sprite: 'World/Nature/Bush',               layer: 'MIDDLE', impassable: true },
-  mushroom:            { sprite: 'World/Ground/Mushroom',           layer: 'GROUND' },
+  mushroom:            { sprite: 'World/Nature/Mushroom',           layer: 'GROUND' },
   log:                 { sprite: 'World/Nature/Log',                layer: 'MIDDLE' },
   moss_rock:           { sprite: 'World/Nature/RockMoss',           layer: 'MIDDLE', impassable: true },
   stump:               { sprite: 'World/Nature/Stump',              layer: 'MIDDLE' },
@@ -90,7 +90,7 @@ export const TILE_DEFS: Record<string, TileDef> = {
   water_shallow:       { sprite: 'World/Ground/WaterShallow',       layer: 'GROUND', speedMod: 0.1 },
   water_deep:          { sprite: 'World/Ground/WaterDeep',          layer: 'GROUND', speedMod: 0.2 },
   sand_bank:           { sprite: 'World/Ground/SandBank',           layer: 'GROUND' },
-  reeds:               { sprite: 'World/Ground/Reeds',              layer: 'GROUND', speedMod: 0.7 },
+  reeds:               { sprite: 'World/Nature/Reeds',              layer: 'GROUND', speedMod: 0.7 },
   mud:                 { sprite: 'World/Ground/Mud',                layer: 'GROUND', speedMod: 0.5 },
   // ── Desert ────────────────────────────────────────────────────────────────
   sand:                { sprite: 'World/Ground/Sand',               layer: 'GROUND' },

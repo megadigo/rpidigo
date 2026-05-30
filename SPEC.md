@@ -96,7 +96,7 @@ All sprite paths are relative to `public/assets/sprites/`.
 | `tree_pine` | `World/Nature/PineTrees.png` |
 | `coconut_tree` | `World/Nature/CoconutTrees.png` |
 | `bush` | `World/Nature/Bush.png` |
-| `mushroom` | `World/Ground/Mushroom.png` |
+| `mushroom` | `World/Nature/Mushroom.png` |
 | `log` | `World/Nature/Log.png` |
 | `moss_rock` | `World/Nature/RockMoss.png` |
 | `stump` | `World/Nature/Stump.png` |
@@ -108,7 +108,7 @@ All sprite paths are relative to `public/assets/sprites/`.
 | `water_shallow` | `World/Ground/WaterShallow.png` |
 | `water_deep` | `World/Ground/WaterDeep.png` |
 | `sand_bank` | `World/Ground/SandBank.png` |
-| `reeds` | `World/Ground/Reeds.png` |
+| `reeds` | `World/Nature/Reeds.png` |
 | `mud` | `World/Ground/Mud.png` |
 
 **Desert**

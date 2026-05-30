@@ -173,8 +173,8 @@ const GROUND_TILES = [
   ['World/Ground/Mud.png',               '#6D4C41'],
   ['World/Ground/Cobblestone.png',       '#757575'],
   ['World/Ground/GardenPlot.png',        '#5D4037'],
-  ['World/Ground/Mushroom.png',          '#BF360C'],
-  ['World/Ground/Reeds.png',             '#558B2F'],
+  ['World/Nature/Mushroom.png',          '#BF360C'],
+  ['World/Nature/Reeds.png',             '#558B2F'],
   ['World/Ground/Quicksand.png',         '#F9A825'],
   ['World/Ground/Void.png',              '#212121'],
 ]
