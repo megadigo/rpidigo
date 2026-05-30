@@ -7,7 +7,10 @@
       "PowerShell(Get-ChildItem -Path \"d:\\\\GitHub\\\\rpidigo\\\\public\\\\assets\\\\sprites\" -Recurse -File | Where-Object { $_.Extension -eq \".png\" } | Select-Object -First 40 | ForEach-Object { $_.FullName.Replace\\(\"d:\\\\GitHub\\\\rpidigo\\\\public\\\\assets\\\\sprites\\\\\", \"\"\\) })",
       "PowerShell(Get-ChildItem -Path \"d:\\\\GitHub\\\\rpidigo\\\\public\\\\assets\\\\sprites\" -Recurse -File | Where-Object { $_.Extension -eq \".png\" } | Select-Object -Skip 40 | ForEach-Object { $_.FullName.Replace\\(\"d:\\\\GitHub\\\\rpidigo\\\\public\\\\assets\\\\sprites\\\\\", \"\"\\) })",
       "Bash(git -C \"d:/GitHub/rpidigo\" status --short)",
-      "Bash(npx tsc *)"
+      "Bash(npx tsc *)",
+      "Bash(Get-ChildItem -Path \"d:\\\\GitHub\\\\rpidigo\" -Recurse -Force)",
+      "Bash(Select-Object -Property FullName)",
+      "Bash(Sort-Object FullName)"
     ]
   }
 }

@@ -31,6 +31,7 @@ import type { NearbyPlayer } from '../world/ScriptExecutor.ts'
 import type { DialogSceneData } from './DialogScene.ts'
 import type { CraftSceneData } from './CraftScene.ts'
 import type { ShopSceneData } from './ShopScene.ts'
+import type { StorageSceneData } from './StorageScene.ts'
 
 /** Tile bounds of the 1000×1000 overworld in pixels. */
 const WORLD_PIXEL_SIZE = 1000 * TILE_SIZE
@@ -925,6 +926,20 @@ export class GameScene extends Phaser.Scene {
     )
   }
 
+  /**
+   * Freeze the player and open the personal storage UI for a storage chest.
+   */
+  private _openStorage(cx: number, cy: number, roomId: string): void {
+    if (this.scene.isActive('StorageScene')) return
+    this.playerController.freeze()
+    const data: StorageSceneData = { tileX: cx, tileY: cy, roomId }
+    this.scene.launch('StorageScene', data)
+    this.scene.get('StorageScene').events.once(
+      Phaser.Scenes.Events.SHUTDOWN,
+      () => this.playerController.unfreeze(),
+    )
+  }
+
   // ── Gathering (Step 11) ────────────────────────────────────────────────────
 
   /**
@@ -1079,6 +1094,12 @@ export class GameScene extends Phaser.Scene {
     if (!tile) return false
     const layers = [tile.g, ...(tile.m ?? [])]
     if (!layers.some(l => GameScene._CHEST_TILES.has(l))) return false
+
+    // Personal storage chest — open deposit/withdraw UI instead of looting
+    if (tile.metadata?.storage === true) {
+      this._openStorage(cx, cy, getActiveRoom() ?? '0')
+      return true
+    }
 
     // Already looted, or never held anything
     const gold  = tile.metadata?.gold ?? 0

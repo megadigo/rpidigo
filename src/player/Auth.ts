@@ -8,7 +8,10 @@ import type { PlayerInstance } from '../world/types.ts'
 import { sha256 } from '../world/utils.ts'
 import { ensureWorldReady } from '../world/WorldBootstrap.ts'
 import { isPassable } from '../world/CollisionMap.ts'
+import { ensureChunk, setTile } from '../world/ChunkManager.ts'
+import { CHUNK_SIZE } from '../world/ChunkGen.ts'
 import { generateHouseRoom } from '../world/HouseGen.ts'
+import type { TileData } from '../world/types.ts'
 
 let _localPlayer: PlayerInstance | null = null
 
@@ -63,8 +66,12 @@ export async function register(
     lastSeen: 0,
   }
 
-  // Write house tile (correct format — g = ground layer key)
-  await set(ref(db, `map/0/${housePos.x}_${housePos.y}`), { g: 'house_hut' })
+  // Ensure the chunk is generated before placing the house tile so that
+  // chunk generation cannot overwrite it afterwards.
+  await ensureChunk(Math.floor(housePos.x / CHUNK_SIZE), Math.floor(housePos.y / CHUNK_SIZE))
+  const houseTile: TileData = { g: 'grass', m: ['house_hut'] }
+  await set(ref(db, `map/0/${housePos.x}_${housePos.y}`), houseTile)
+  setTile(housePos.x, housePos.y, houseTile)
 
   // Generate and persist the personal house interior (workbench + storage chest)
   const houseRoom = generateHouseRoom(housePos.x, housePos.y, housePos.x * 73856093 ^ housePos.y * 19349663, 'player_house')
