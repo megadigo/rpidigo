@@ -119,6 +119,13 @@ export function generateHouseRoom(
 
   switch (buildingType) {
 
+    case 'player_house': {
+      // Personal player house: workbench for crafting, personal storage chest.
+      place('workbench', 1, 3, 1, 3)
+      place('chest', S - 4, S - 2, 1, 3, { storage: true })
+      break
+    }
+
     case 'workshop': {
       // 2–3 workbenches in the upper half, 1 chest
       const benches = 2 + (rand() < 0.5 ? 1 : 0)

@@ -123,7 +123,7 @@ export const TILE_DEFS: Record<string, TileDef> = {
   dungeon_stairs_up:   { sprite: 'Dungeon/StairUp',                 layer: 'MIDDLE', roomExit: true },
   dungeon_pillar:      { sprite: 'Dungeon/DungeonPillar',           layer: 'MIDDLE' },
   dungeon_trap:        { sprite: 'Dungeon/DungeonTrap',             layer: 'GROUND' },
-  dungeon_chest:       { sprite: 'Dungeon/Chest',                   layer: 'MIDDLE' },
+  dungeon_chest:       { sprite: 'Dungeon/Chest',                   layer: 'MIDDLE', impassable: true },
   dungeon_altar:       { sprite: 'Dungeon/DungeonAltar',            layer: 'MIDDLE', impassable: true },
   dungeon_tombstones:  { sprite: 'Dungeon/Tombstone',               layer: 'MIDDLE', impassable: true },
   // ── House / Interior ──────────────────────────────────────────────────────
@@ -133,12 +133,12 @@ export const TILE_DEFS: Record<string, TileDef> = {
   table:               { sprite: 'House/Table',                     layer: 'MIDDLE', impassable: true },
   bed:                 { sprite: 'House/Bed',                       layer: 'MIDDLE', impassable: true },
   sofa:                { sprite: 'House/Sofa',                      layer: 'MIDDLE', impassable: true },
-  chest:               { sprite: 'House/Chest',                     layer: 'MIDDLE' },
+  chest:               { sprite: 'House/Chest',                     layer: 'MIDDLE', impassable: true },
   void:                { sprite: 'World/Ground/Void',               layer: 'MIDDLE', impassable: true },
   // ── Cellars (under village houses) ───────────────────────────────────────
   cellar_floor:        { sprite: 'Cellars/CellarFloor',             layer: 'GROUND' },
   cellar_wall:         { sprite: 'Cellars/CellarWall',              layer: 'MIDDLE', impassable: true },
-  cellar_chest:        { sprite: 'Cellars/CellarChest',             layer: 'MIDDLE' },
+  cellar_chest:        { sprite: 'Cellars/CellarChest',             layer: 'MIDDLE', impassable: true },
   cellar_trap:         { sprite: 'Cellars/CellarTrap',              layer: 'GROUND' },
   cellar_stairs_up:    { sprite: 'Cellars/CellarStairsUp',          layer: 'MIDDLE', roomExit: true },
 }

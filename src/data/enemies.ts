@@ -281,7 +281,7 @@ export const enemies: EnemyDefinition[] = [
       { itemId: 'gold_coin', min: 100, max: 300, chance: 1 },
       { itemId: 'iron_ore',  min: 5,   max: 10,  chance: 1 },
     ],
-    behaviorScript: patrolAggressive, spriteFrame: 'dungeon_boss_strong.png',
+    behaviorScript: patrolAggressive, spriteFrame: 'dungeon_boss_strong.png', frameSize: 32,
     special: ['area', 'ignores_walls'],
   },
 ]

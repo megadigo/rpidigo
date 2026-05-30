@@ -22,6 +22,7 @@ import { getTile } from '../world/ChunkManager.ts'
 import { houseRoomId, parseHouseRoomId, HOUSE_ROOM_SIZE } from '../world/HouseGen.ts'
 import { dungeonRoomId, parseDungeonRoomId } from '../world/DungeonGen.ts'
 import { cellarRoomId, parseCellarRoomId } from '../world/CellarGen.ts'
+import { isRoomLocked } from '../world/RoomState.ts'
 
 /** Pixels per second at base speed. */
 const BASE_SPEED = 80
@@ -218,8 +219,9 @@ export class PlayerController {
   private _isOnTile(tx: number, ty: number): boolean {
     const cx = tx * TILE_SIZE + TILE_SIZE / 2
     const cy = ty * TILE_SIZE + TILE_SIZE / 2
-    return Math.abs(this.px - cx) < TILE_SIZE * 0.2
-        && Math.abs(this.py - cy) < TILE_SIZE * 0.2
+    // Stricter: must be within 10% of TILE_SIZE from center
+    return Math.abs(this.px - cx) < TILE_SIZE * 0.1
+      && Math.abs(this.py - cy) < TILE_SIZE * 0.1
   }
 
   /**
@@ -290,6 +292,11 @@ export class PlayerController {
         const d = parseDungeonRoomId(activeRoom)
         if (d) {
           if (d.floor > 1) {
+            if (isRoomLocked()) {
+              this._transitionCooldown = 800
+              this.scene.events.emit('hint', 'Defeat the boss to unlock the exit!')
+              return
+            }
             const roomId = dungeonRoomId(d.tx, d.ty, d.floor - 1)
             this._transitionCooldown = 800
             this._persistRoomOnly(roomId)
@@ -300,6 +307,12 @@ export class PlayerController {
       }
 
       if (tileTypes.some(t => isTileRoomExit(t))) {
+        // Block exit from any dungeon floor while the boss is aggroed.
+        if (getActiveRoom()?.startsWith('dungeon_') && isRoomLocked()) {
+          this._transitionCooldown = 800
+          this.scene.events.emit('hint', 'Defeat the boss to unlock the exit!')
+          return
+        }
         this._transitionCooldown = 800
         const player = getLocalPlayer()
         const oldRoom = player.room
@@ -365,17 +378,12 @@ export class PlayerController {
       }
     }
 
-    // Overworld — check adjacent tiles for impassable entry tiles (buildings).
-    // The player sprite must be fully centred on their current tile before
-    // an adjacent-building entry is allowed to fire.
-    if (!this._isOnTile(tx, ty)) return
-    const adjacentOffsets = [{ dx: 0, dy: -1 }, { dx: 0, dy: 1 }, { dx: -1, dy: 0 }, { dx: 1, dy: 0 }]
-    for (const { dx, dy } of adjacentOffsets) {
-      const atx = tx + dx
-      const aty = ty + dy
-      const tile = getTile(atx, aty)
-      if (!tile) continue
-
+    // Overworld — check the tile directly above the player for an impassable
+    // building entry. Player must be standing in front of the door (feet at the building's south edge).
+    const atx = tx
+    const aty = ty - 1
+    const tile = getTile(atx, aty)
+    if (tile && this._isAtHouseDoor(tx, ty)) {
       const allTypes = [tile.g, ...(tile.m ?? [])]
       for (const type of allTypes) {
         const entryType = getTileEntryType(type)
@@ -392,7 +400,22 @@ export class PlayerController {
         }
       }
     }
+    // ...existing code...
+    return;
   }
+    /**
+     * Returns true if the player's feet are just below the building's south edge (door).
+     * Used for house entry alignment.
+     */
+    private _isAtHouseDoor(tx: number, ty: number): boolean {
+      // Player feet Y = py + sprite.height / 2
+      // Building bottom Y = (ty-1) * TILE_SIZE + TILE_SIZE
+      if (!this.sprite) return false;
+      const feetY = this.py + this.sprite.height / 2;
+      const doorY = (ty - 1) * TILE_SIZE + TILE_SIZE;
+      // Allow a very forgiving threshold (±12px)
+      return Math.abs(feetY - doorY) <= 12 && Math.abs(this.px - (tx * TILE_SIZE + TILE_SIZE / 2)) < TILE_SIZE * 0.1;
+    }
 
   /**
    * Persist the overworld return position and active room to Firebase so re-login

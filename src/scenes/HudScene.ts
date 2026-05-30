@@ -6,8 +6,9 @@
 import Phaser from 'phaser'
 import { ref, onValue, push, remove } from 'firebase/database'
 import { db } from '../firebase.ts'
-import { getLocalPlayer } from '../player/Auth.ts'
+import { getLocalPlayer, setLocalPlayer } from '../player/Auth.ts'
 import { xpForLevel } from '../world/utils.ts'
+import type { PlayerInstance } from '../world/types.ts'
 
 /** Chebyshev tile radius — messages outside this range are hidden. */
 const CHAT_RANGE  = 15
@@ -45,6 +46,9 @@ export class HudScene extends Phaser.Scene {
   private _chatUnsub: (() => void) | null = null
   private _messages: ChatMsg[] = []
 
+  /** Unsubscribe for the /players/{id} stat listener (remote HP/MP/gold/etc.). */
+  private _playerUnsub: (() => void) | null = null
+
   private _renderTimer = 0
   private _lastRenderX = -1
   private _lastRenderY = -1
@@ -74,6 +78,7 @@ export class HudScene extends Phaser.Scene {
 
     this._buildChatPanel()
     this._subscribeChat(player.room)
+    this._subscribePlayer(player.id)
 
     // Global Enter — focus the chat input when it is not already active
     this._enterHandler = (e: KeyboardEvent) => {
@@ -237,9 +242,39 @@ export class HudScene extends Phaser.Scene {
 
   private _teardown(): void {
     document.removeEventListener('keydown', this._enterHandler)
-    if (this._chatUnsub) { this._chatUnsub(); this._chatUnsub = null }
+    if (this._chatUnsub)   { this._chatUnsub();   this._chatUnsub   = null }
+    if (this._playerUnsub) { this._playerUnsub(); this._playerUnsub = null }
     this._chatPanel?.remove()
     this._chatStyle?.remove()
+  }
+
+  // ── Remote player stats ─────────────────────────────────────────────────────
+
+  /**
+   * Subscribe to /players/{id} so externally-driven changes (e.g. a healer on
+   * another client writing HP/MP) are merged into the local player and shown in
+   * the HUD. Only HUD-relevant stat fields are merged — position, room, and
+   * inventory/equipment are left to the owning systems to avoid clobbering local
+   * optimistic state.
+   */
+  private _subscribePlayer(id: string): void {
+    if (this._playerUnsub) { this._playerUnsub(); this._playerUnsub = null }
+    this._playerUnsub = onValue(ref(db, `players/${id}`), snap => {
+      const data = snap.val() as Partial<PlayerInstance> | null
+      if (!data) return
+      const p = getLocalPlayer()
+      if (typeof data.hp           === 'number') p.hp           = data.hp
+      if (typeof data.mp           === 'number') p.mp           = data.mp
+      if (typeof data.maxHp        === 'number') p.maxHp        = data.maxHp
+      if (typeof data.maxMp        === 'number') p.maxMp        = data.maxMp
+      if (typeof data.gold         === 'number') p.gold         = data.gold
+      if (typeof data.xp           === 'number') p.xp           = data.xp
+      if (typeof data.level        === 'number') p.level        = data.level
+      if (typeof data.power        === 'number') p.power        = data.power
+      if (typeof data.totalDefense === 'number') p.totalDefense = data.totalDefense
+      setLocalPlayer(p)
+      this._refresh()
+    })
   }
 
   // ── Stats bar ─────────────────────────────────────────────────────────────

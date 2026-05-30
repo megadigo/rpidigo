@@ -111,6 +111,20 @@ function _regenIfExpired(tile: TileData, key: string, room: string): TileData {
 export function getActiveRoom(): string | null { return _activeRoom }
 
 /**
+ * Returns the natural terrain zone at a world tile position using the same
+ * noise thresholds as ChunkGen.  Returns 'plains' before initialisation.
+ */
+export function getWorldZone(x: number, y: number): string {
+  if (!_noise) return 'plains'
+  const el = (_noise.elevation(x / 300, y / 300) + 1) / 2
+  const mo = (_noise.moisture(x / 200, y / 200) + 1) / 2
+  if (el < 0.25 && mo > 0.6) return 'river'
+  if (el > 0.55 && mo < 0.35) return 'desert'
+  if (mo > 0.65 && el >= 0.3 && el <= 0.7) return 'forest'
+  return 'plains'
+}
+
+/**
  * Switch to a house or dungeon room: loads its tiles from Firebase into
  * `_roomTileCache` and marks the room active so `getTile` reads from it.
  */

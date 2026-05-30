@@ -11,13 +11,15 @@
  * Step 11: I key opens InventoryScene (equipment + bag) as an additive overlay.
  */
 import Phaser from 'phaser'
-import { ref, onValue, update } from 'firebase/database'
+import { ref, onValue, update, runTransaction } from 'firebase/database'
 import { db } from '../firebase.ts'
 import { TilemapRenderer, TILE_SIZE, isTileRoomExit } from '../renderer/TilemapRenderer.ts'
 import type { Direction } from '../renderer/SpriteAnim.ts'
 import { ANIM_FRAMES, FRAME_DURATION_MS, directionFromVelocity, getFrame } from '../renderer/SpriteAnim.ts'
 import { PlayerController } from '../player/PlayerController.ts'
-import { enterRoom, exitRoom, findTileInRoom, getTile, setTile, getActiveRoom } from '../world/ChunkManager.ts'
+import { enterRoom, exitRoom, findTileInRoom, getTile, setTile, getActiveRoom, getWorldZone } from '../world/ChunkManager.ts'
+import { getWorldConfig } from '../world/WorldBootstrap.ts'
+import { setRoomLocked } from '../world/RoomState.ts'
 import { HOUSE_ROOM_SIZE } from '../world/HouseGen.ts'
 import { CELLAR_ROOM_SIZE } from '../world/CellarGen.ts'
 import { getLocalPlayer, setLocalPlayer } from '../player/Auth.ts'
@@ -28,6 +30,7 @@ import { ScriptExecutor } from '../world/ScriptExecutor.ts'
 import type { NearbyPlayer } from '../world/ScriptExecutor.ts'
 import type { DialogSceneData } from './DialogScene.ts'
 import type { CraftSceneData } from './CraftScene.ts'
+import type { ShopSceneData } from './ShopScene.ts'
 
 /** Tile bounds of the 1000×1000 overworld in pixels. */
 const WORLD_PIXEL_SIZE = 1000 * TILE_SIZE
@@ -102,6 +105,9 @@ export class GameScene extends Phaser.Scene {
 
   /** Entity AI runner (Step 9). */
   private readonly _scriptExecutor = new ScriptExecutor()
+
+  /** True while a dungeon boss is aggroed — blocks exits from the room. */
+  private _roomLocked = false
 
   /** True while the death/respawn sequence is in progress. */
   private _isDead = false
@@ -178,6 +184,14 @@ export class GameScene extends Phaser.Scene {
       },
     )
 
+    // 'hint' — emitted by PlayerController when a blocked action needs feedback.
+    // Shows an orange float above the player's current tile.
+    this.events.on('hint', (text: string) => {
+      const tx = Math.floor(this.playerController.px / TILE_SIZE)
+      const ty = Math.floor(this.playerController.py / TILE_SIZE)
+      this._showFloatText(tx, ty, text, '#ff8844')
+    })
+
     // Subscribe to the overworld presence room on startup
     this._subscribePresence(getLocalPlayer().room)
 
@@ -194,6 +208,12 @@ export class GameScene extends Phaser.Scene {
 
   update(_time: number, delta: number): void {
     this.playerController.update(delta)
+
+    // Death may be triggered by remote damage (PVP or another client) — the
+    // shared local player object is kept current by HudScene's /players listener.
+    if (!this._isDead && getLocalPlayer().hp <= 0) {
+      this._triggerDeath()
+    }
 
     // ── Passive HP regen ──────────────────────────────────────────────────────
     // Ticks every _HEAL_INTERVAL_MS, but only while alive, out of combat for
@@ -358,8 +378,15 @@ export class GameScene extends Phaser.Scene {
 
     const player = getLocalPlayer()
     player.hp = 0
+
+    // Drop all carried items as loot at the death tile (gold is kept).
+    this._dropInventoryAsLoot(player.room)
+    player.inventory = []
     setLocalPlayer(player)
-    void update(ref(db), { [`players/${player.id}/hp`]: 0 })
+    void update(ref(db), {
+      [`players/${player.id}/hp`]:        0,
+      [`players/${player.id}/inventory`]: [],
+    })
 
     const overlay = document.createElement('div')
     overlay.id = 'death-overlay'
@@ -391,7 +418,8 @@ export class GameScene extends Phaser.Scene {
     const hx = player.house?.x ?? player.x
     const hy = player.house?.y ?? player.y
 
-    player.hp   = player.maxHp
+    // Respawn at 50% HP (minimum 1).
+    player.hp   = Math.max(1, Math.floor(player.maxHp * 0.5))
     player.room = '0'
     player.x    = hx
     player.y    = hy
@@ -409,7 +437,7 @@ export class GameScene extends Phaser.Scene {
     this._subscribePresence('0')
 
     const respawnUpdate: Record<string, unknown> = {
-      [`players/${player.id}/hp`]:   player.maxHp,
+      [`players/${player.id}/hp`]:   player.hp,
       [`players/${player.id}/x`]:    hx,
       [`players/${player.id}/y`]:    hy,
       [`players/${player.id}/room`]: '0',
@@ -531,6 +559,10 @@ export class GameScene extends Phaser.Scene {
       sprite.destroy()
     }
     this._remoteNpcs.clear()
+
+    // Clear boss lock whenever we switch rooms
+    this._roomLocked = false
+    setRoomLocked(false)
 
     // Tell the AI executor about the room change
     this._scriptExecutor.setRoom(room)
@@ -666,6 +698,30 @@ export class GameScene extends Phaser.Scene {
           // remoteEnemyTiles already rebuilt from snapshot above
         }
       }
+
+      // Boss aggro-lock: seal the room when the boss leaves idle state;
+      // unseal when it dies (removed from presence) or returns to idle.
+      const inDungeon = getActiveRoom()?.startsWith('dungeon_') ?? false
+      const newLocked = inDungeon && [...this._enemyData.values()].some(
+        e => e.templateId === 'dungeon_boss_strong' && e.state !== 'idle',
+      )
+      if (newLocked !== this._roomLocked) {
+        this._roomLocked = newLocked
+        setRoomLocked(newLocked)
+        const bossRoom = getActiveRoom()!
+        const now      = Date.now()
+        void update(ref(db), {
+          [`chat/${bossRoom}/_bosslock_${now}`]: {
+            sender:    'System',
+            x: 0, y: 0,
+            text:      newLocked
+              ? '⚠ The Dragon Lord has awakened! The room is sealed.'
+              : '✓ The boss has been defeated. The room is unsealed.',
+            timestamp: now,
+            system:    true,
+          },
+        })
+      }
     })
 
     // ── NPC sprites ────────────────────────────────────────────────────────
@@ -767,6 +823,9 @@ export class GameScene extends Phaser.Scene {
       return
     }
 
+    // Chest check — facing tile only (Step 13)
+    if (await this._handleChest(tx + fdx2, ty + fdy2)) return
+
     // Gathering check — facing tile only (Step 11)
     if (await this._handleGather(tx + fdx2, ty + fdy2)) return
 
@@ -779,7 +838,8 @@ export class GameScene extends Phaser.Scene {
    * Re-subscribes an unfreeze listener each time so it fires exactly once.
    */
   private _openDialog(npcId: string, templateId: string, npcX: number, npcY: number): void {
-    void npcId  // reserved for future per-NPC state (e.g. quest tracking)
+    // Merchants open the shop UI with zone-aware pricing (Step 14)
+    if (templateId.startsWith('merchant')) { this._openShop(npcId, npcX, npcY); return }
     this.playerController.freeze()
     const data: DialogSceneData = { templateId, npcX, npcY }
     this.scene.launch('DialogScene', data)
@@ -834,6 +894,32 @@ export class GameScene extends Phaser.Scene {
     this.playerController.freeze()
     this.scene.launch('InventoryScene')
     this.scene.get('InventoryScene').events.once(
+      Phaser.Scenes.Events.SHUTDOWN,
+      () => this.playerController.unfreeze(),
+    )
+  }
+
+  /**
+   * Freeze the player and open the merchant shop with zone-aware pricing (Step 14).
+   * Derives villageId from the NPC id, then looks up the POI for zone + seed.
+   */
+  private _openShop(npcId: string, npcX: number, npcY: number): void {
+    if (this.scene.isActive('ShopScene')) return
+
+    let data: ShopSceneData = { villageId: 'unknown', zone: 'plains', villageSeed: 0 }
+    try {
+      const cfg       = getWorldConfig()
+      // NPC id format: 'npc_{villageId}_merchant' → extract villageId
+      const villageId = npcId.replace(/^npc_/, '').replace(/_merchant$/, '')
+      const poi       = cfg.pois.villages.find(v => v.id === villageId)
+      const zone      = getWorldZone(poi?.x ?? npcX, poi?.y ?? npcY)
+      const villageSeed = poi ? cfg.seed ^ poi.x ^ poi.y : cfg.seed
+      data = { villageId, zone, villageSeed }
+    } catch { /* world config not ready — use safe defaults */ }
+
+    this.playerController.freeze()
+    this.scene.launch('ShopScene', data)
+    this.scene.get('ShopScene').events.once(
       Phaser.Scenes.Events.SHUTDOWN,
       () => this.playerController.unfreeze(),
     )
@@ -980,6 +1066,100 @@ export class GameScene extends Phaser.Scene {
     return true
   }
 
+  /** Chest tile IDs that can be opened for their stored gold (Step 13). */
+  private static readonly _CHEST_TILES = new Set(['chest', 'dungeon_chest', 'cellar_chest'])
+
+  /**
+   * Open a treasure chest at (cx, cy) if present. Awards its stored gold once,
+   * marks it opened so it can't be looted again, and persists the change.
+   * Returns true if a chest tile was handled (so the caller skips attacking).
+   */
+  private async _handleChest(cx: number, cy: number): Promise<boolean> {
+    const tile = getTile(cx, cy)
+    if (!tile) return false
+    const layers = [tile.g, ...(tile.m ?? [])]
+    if (!layers.some(l => GameScene._CHEST_TILES.has(l))) return false
+
+    // Already looted, or never held anything
+    const gold  = tile.metadata?.gold ?? 0
+    const items = tile.metadata?.items ?? []
+    if (tile.metadata?.opened || (gold <= 0 && items.length === 0)) {
+      this._showFloatText(cx, cy, 'Empty', '#888888')
+      return true
+    }
+
+    const player = getLocalPlayer()
+    if (gold > 0) {
+      player.gold = (player.gold ?? 0) + gold
+      this._showFloatText(cx, cy, `+${gold} gold`, '#ffdd88')
+    }
+    const inv = [...(player.inventory ?? [])]
+    for (const it of items) {
+      const slot = inv.find(s => s.itemId === it.itemId)
+      if (slot) slot.quantity += it.quantity
+      else inv.push({ itemId: it.itemId, quantity: it.quantity, metadata: {} })
+    }
+    player.inventory = inv
+    if (items.length) this._showFloatText(cx, cy, 'Items recovered', '#88ffcc')
+    setLocalPlayer(player)
+
+    let newTile: import('../world/types.ts').TileData
+    if (tile.metadata?.dropped) {
+      // Death-loot chest — remove it entirely so the tile is walkable again.
+      const chestId = layers.find(l => GameScene._CHEST_TILES.has(l))
+      const newM    = (tile.m ?? []).filter(m => m !== chestId)
+      const meta    = { ...(tile.metadata ?? {}) }
+      delete meta.gold; delete meta.items; delete meta.opened; delete meta.dropped
+      newTile = {
+        g: tile.g,
+        ...(newM.length ? { m: newM } : {}),
+        ...(tile.t ? { t: tile.t } : {}),
+        ...(Object.keys(meta).length ? { metadata: meta } : {}),
+      }
+    } else {
+      // Generated chest — keep it in place as (now-empty) decoration.
+      newTile = {
+        ...tile,
+        metadata: { ...(tile.metadata ?? {}), opened: true, gold: 0, items: [] },
+      }
+    }
+    setTile(cx, cy, newTile)
+    this.tilemapRenderer.invalidateTile(cx, cy)
+
+    const room = getActiveRoom() ?? '0'
+    await update(ref(db), {
+      [`map/${room}/${tileKey(cx, cy)}`]:  newTile,
+      [`players/${player.id}/gold`]:       player.gold,
+      [`players/${player.id}/inventory`]:  inv,
+    })
+    return true
+  }
+
+  /**
+   * Drop the player's entire inventory as a loot chest on their current tile
+   * (called on death). Gold is kept, not dropped. The chest can be reopened with
+   * E by anyone who returns to the spot.
+   */
+  private _dropInventoryAsLoot(room: string): void {
+    const inv = getLocalPlayer().inventory ?? []
+    if (!inv.length) return
+    const tx = Math.floor(this.playerController.px / TILE_SIZE)
+    const ty = Math.floor(this.playerController.py / TILE_SIZE)
+    const existing = getTile(tx, ty)
+    if (!existing) return
+
+    const items = inv.map(s => ({ itemId: s.itemId, quantity: s.quantity }))
+    const newTile: import('../world/types.ts').TileData = {
+      g: existing.g,
+      m: [...(existing.m ?? []).filter(m => m !== 'chest'), 'chest'],
+      ...(existing.t ? { t: existing.t } : {}),
+      metadata: { ...(existing.metadata ?? {}), opened: false, dropped: true, items },
+    }
+    setTile(tx, ty, newTile)
+    this.tilemapRenderer.invalidateTile(tx, ty)
+    void update(ref(db), { [`map/${room || '0'}/${tileKey(tx, ty)}`]: newTile })
+  }
+
   /**
    * Show a short floating label above a tile position (same style as damage/regen floats).
    */
@@ -998,6 +1178,34 @@ export class GameScene extends Phaser.Scene {
       ease:     'Cubic.easeOut',
       onComplete: () => t.destroy(),
     })
+  }
+
+  /**
+   * PVP: attempt to attack a remote player on tile (atx, aty). Allowed only when
+   * both the attacker and the target are level 10+. Damage is applied via a
+   * Firebase transaction on the target's hp; the target's own client detects the
+   * drop (via HudScene's /players listener) and handles death/respawn.
+   * Returns true if a player occupied the tile (so the caller stops here).
+   */
+  private _tryAttackPlayer(atx: number, aty: number): boolean {
+    const attacker = getLocalPlayer()
+    for (const [id, rec] of this._remotePlayers) {
+      if (rec.entry.x !== atx || rec.entry.y !== aty) continue
+      if (attacker.level < 10 || (rec.entry.level ?? 1) < 10) {
+        this._showFloatText(atx, aty, 'PVP needs Lv.10', '#ff8844')
+        return true
+      }
+      const dmg = Math.max(1, attacker.power)
+      void runTransaction(
+        ref(db, `players/${id}/hp`),
+        (hp: number | null) => (hp == null ? undefined : Math.max(0, hp - dmg)),
+      )
+      rec.sprite.setTint(0xff4444)
+      this.time.delayedCall(150, () => { if (rec.sprite.active) rec.sprite.clearTint() })
+      this._showFloatText(atx, aty, `-${dmg}`, '#ff3333')
+      return true
+    }
+    return false
   }
 
   /**
@@ -1029,7 +1237,11 @@ export class GameScene extends Phaser.Scene {
       }
     }
 
-    if (!targetId || !targetEntry) return
+    if (!targetId || !targetEntry) {
+      // No enemy on the facing tile — try PVP (same room, both level ≥ 10).
+      this._tryAttackPlayer(atx, aty)
+      return
+    }
 
     const player = getLocalPlayer()
     const damage  = Math.max(1, player.power)

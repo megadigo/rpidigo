@@ -51,10 +51,14 @@ export class LoadingScene extends Phaser.Scene {
     for (const [id, file] of Object.entries(CHAMPION_FILES)) {
       this.load.spritesheet(id, `assets/sprites/Player/${file}.png`, { frameWidth: 16, frameHeight: 16 })
     }
-    // Enemy spritesheets (80×128 — 5 frames × 8 rows: walk + attack)
-    const enemySheets = [...new Set(enemies.map(e => `Enemies/${e.spriteFrame.replace('.png', '')}`))]
-    for (const key of enemySheets) {
-      this.load.spritesheet(key, `assets/sprites/${key}.png`, { frameWidth: 16, frameHeight: 16 })
+    // Enemy spritesheets — most are 16×16 frames; some (e.g. boss) use a larger frame size.
+    const enemySheetMap = new Map<string, number>()
+    for (const e of enemies) {
+      const key = `Enemies/${e.spriteFrame.replace('.png', '')}`
+      enemySheetMap.set(key, e.frameSize ?? 16)
+    }
+    for (const [key, size] of enemySheetMap) {
+      this.load.spritesheet(key, `assets/sprites/${key}.png`, { frameWidth: size, frameHeight: size })
     }
     // NPC spritesheets (80×128 — 5 frames × 8 rows: walk + attack)
     for (const name of NPC_SPRITES) {

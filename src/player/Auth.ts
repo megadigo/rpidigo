@@ -3,11 +3,12 @@
  * Passwords are stored as SHA-256 hashes (Web Crypto API).
  */
 import { db } from '../firebase.ts'
-import { ref, get, set, query, orderByChild, equalTo, onDisconnect, serverTimestamp } from 'firebase/database'
+import { ref, get, set, update, query, orderByChild, equalTo, onDisconnect, serverTimestamp } from 'firebase/database'
 import type { PlayerInstance } from '../world/types.ts'
 import { sha256 } from '../world/utils.ts'
 import { ensureWorldReady } from '../world/WorldBootstrap.ts'
 import { isPassable } from '../world/CollisionMap.ts'
+import { generateHouseRoom } from '../world/HouseGen.ts'
 
 let _localPlayer: PlayerInstance | null = null
 
@@ -62,8 +63,14 @@ export async function register(
     lastSeen: 0,
   }
 
-  // Write house tile
-  await set(ref(db, `map/0/${housePos.x}_${housePos.y}`), { type: 'house' })
+  // Write house tile (correct format — g = ground layer key)
+  await set(ref(db, `map/0/${housePos.x}_${housePos.y}`), { g: 'house_hut' })
+
+  // Generate and persist the personal house interior (workbench + storage chest)
+  const houseRoom = generateHouseRoom(housePos.x, housePos.y, housePos.x * 73856093 ^ housePos.y * 19349663, 'player_house')
+  const roomTiles: Record<string, unknown> = {}
+  for (const [k, t] of houseRoom.tiles) roomTiles[`map/${houseRoom.roomId}/${k}`] = JSON.parse(JSON.stringify(t))
+  if (Object.keys(roomTiles).length) await update(ref(db), roomTiles)
 
   // Write player
   await set(ref(db, `players/${id}`), player)

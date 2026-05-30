@@ -33,6 +33,7 @@ export interface EnemyDefinition {
   lootTable: DropEntry[]
   behaviorScript: string
   spriteFrame: string         // filename in public/assets/sprites/Enemies/
+  frameSize?: number          // sprite frame width/height in px; defaults to 16
   special?: string[]
   stealGold?: [number, number]
 }

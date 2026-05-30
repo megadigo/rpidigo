@@ -16,6 +16,12 @@ export interface TileData {
   t?: string
   metadata?: {
     gold?: number
+    /** Items stored in a chest / dropped as death loot. */
+    items?: { itemId: string; quantity: number }[]
+    /** True for chests created by a death-loot drop; removed when emptied. */
+    dropped?: boolean
+    /** True for personal storage chests — opens the StorageScene instead of looting. */
+    storage?: boolean
     opened?: boolean
     regenAt?: number
     /** Remaining gather charges on a resource node. */
