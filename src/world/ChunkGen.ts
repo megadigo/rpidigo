@@ -85,9 +85,9 @@ function pickTileLayers(zone: Zone, detail: number, rand: () => number): TileDat
 /** Simple overworld enemy spawn table per zone. */
 const SPAWN_TABLES: Record<string, Array<{ id: string; weight: number }>> = {
   plains:  [{ id: 'wolf_weak', weight: 60 }, { id: 'wolf_strong', weight: 20 }, { id: 'bandit_weak', weight: 15 }, { id: 'bandit_strong', weight: 5 }],
-  forest:  [{ id: 'wolf_weak', weight: 40 }, { id: 'wolf_strong', weight: 20 }, { id: 'giant_spider', weight: 20 }, { id: 'goblin_scout_weak', weight: 10 }, { id: 'treant', weight: 10 }],
-  river:   [{ id: 'river_troll', weight: 40 }, { id: 'crocodile', weight: 30 }, { id: 'water_spirit', weight: 20 }, { id: 'river_troll', weight: 10 }],
-  desert:  [{ id: 'scorpion', weight: 35 }, { id: 'sand_worm', weight: 25 }, { id: 'mummy', weight: 25 }, { id: 'desert_bandit', weight: 15 }],
+  forest:  [{ id: 'wolf_weak', weight: 40 }, { id: 'wolf_strong', weight: 20 }, { id: 'giant_spider_weak', weight: 20 }, { id: 'goblin_scout_weak', weight: 10 }, { id: 'treant_strong', weight: 10 }],
+  river:   [{ id: 'river_troll_weak', weight: 40 }, { id: 'crocodile_weak', weight: 30 }, { id: 'water_spirit_weak', weight: 20 }, { id: 'river_troll_strong', weight: 10 }],
+  desert:  [{ id: 'scorpion_weak', weight: 35 }, { id: 'sand_worm_weak', weight: 25 }, { id: 'mummy_weak', weight: 25 }, { id: 'desert_bandit_strong', weight: 15 }],
 }
 
 const SPAWN_CHANCE: Record<string, number> = {
@@ -111,15 +111,16 @@ function rollEnemy(
   let picked = table[0]
   for (const e of table) { roll -= e.weight; if (roll <= 0) { picked = e; break } }
 
-  const [base, variant = 'standard'] = picked.id.split('_') as [string, string]
-
+  let base = picked.id, variant = 'standard'
   let hp = 40, power = 10, script = 'pass'
   try {
     const def = EnemyRegistry.get(picked.id)
+    base   = def.baseType
+    variant = def.variant
     hp     = def.baseHp
     power  = def.basePower
     script = def.behaviorScript
-  } catch { /* fallback values already set */ }
+  } catch { /* unknown template — keep fallback values */ }
 
   return {
     id: `enemy_${x}_${y}_${seed & 0xffff}`,

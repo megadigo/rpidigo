@@ -192,12 +192,12 @@ function generateFloor(
 }
 
 function pickFloor1Enemy(rand: () => number): string {
-  const table = ['skeleton', 'slime_weak', 'slime_corrosive', 'zombie', 'zombie_armoured'] as const
+  const table = ['skeleton_weak', 'slime_weak', 'slime_corrosive', 'zombie_weak', 'zombie_armoured'] as const
   return table[Math.floor(rand() * table.length)]
 }
 
 function pickFloor2Enemy(rand: () => number): string {
-  const table = ['dark_knight_weak', 'dark_knight_elite', 'ghost', 'ghost_enraged', 'necromancer', 'necromancer_strong'] as const
+  const table = ['dark_knight_weak', 'dark_knight_elite', 'ghost_weak', 'ghost_enraged', 'necromancer_weak', 'necromancer_strong'] as const
   return table[Math.floor(rand() * table.length)]
 }
 

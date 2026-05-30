@@ -141,7 +141,7 @@ export class GameScene extends Phaser.Scene {
     })
 
     const savedZoom = parseInt(localStorage.getItem('rpidigo.zoom') ?? '1', 10)
-    this.cameras.main.setZoom(Phaser.Math.Clamp(savedZoom, 1, 3))
+    this.cameras.main.setZoom(Phaser.Math.Clamp(savedZoom, 1, 4))
 
     // I key — open inventory (Step 11)
     const iKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.I)

@@ -137,7 +137,7 @@
 ---
 
 ## Step 12 — House Interior Maps
-*Goal: every enterable village building opens a 12×12 interior room; the player can craft and store items inside.*
+*Goal: every enterable village building opens an 8×8 interior room; the player can craft and store items inside.*
 
 1. Walk up to (touch) any building tile (`house_hut`, `house_cabin`, `barracks`, `chapel`, `tavern`, `workshop`) — `PlayerController._checkTileTransition()` auto-emits `'enterRoom'` with the room ID `house_${tx.padStart(4,'0')}_${ty.padStart(4,'0')}` and spawn coordinates.
 2. `GameScene` handles the event: calls `ChunkManager.enterRoom(roomId)` to load the room's tiles from Firebase, resets `TilemapRenderer`, teleports the player to `(spawnX, spawnY)`, and narrows camera bounds to `8×8` tiles.
@@ -177,7 +177,7 @@
 
 ---
 
-## Step 15 — Mini-map
+## Step 16 — Mini-map
 *Goal: a small map in the HUD shows explored terrain and the player's position.*
 
 1. Add a 64×64 canvas to `HudScene` (top-right corner); render explored chunks as coloured dots and POI icons for visited villages/dungeons.
@@ -186,7 +186,7 @@
 
 ---
 
-## Step 16 — Mobile / Touch Support
+## Step 17 — Mobile / Touch Support
 *Goal: the game is playable on a phone with a virtual joystick.*
 
 1. Detect `window.innerWidth < 640`; render a D-pad virtual joystick in `HudScene` using Phaser pointer events.

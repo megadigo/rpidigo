@@ -263,18 +263,18 @@ The room ID `house_${tx.padStart(4,'0')}_${ty.padStart(4,'0')}` is derived deter
 
 ### Sprites
 
-Players choose one of eight available champion sprites at character creation. All champion sprite files are in `public/assets/sprites/Player/`. The login selection grid uses `player_{id}.png` (raw `<img>` load, frame 0). In-game, the player uses directional 5-frame walk rows from the same sheet and faces the active movement direction — see the global [Sprite rendering convention](#sprite-rendering-convention).
+Players choose one of eight available champion sprites at character creation. All champion sprite files are in `public/assets/sprites/Player/`. The login selection grid draws **frame 0** (the top-left 16×16 cell) of each champion's own spritesheet onto a `<canvas>`, scaled to 32×32 — there are no separate `player_*.png` preview files. In-game, the player uses directional 5-frame walk rows from the same sheet and faces the active movement direction — see the global [Sprite rendering convention](#sprite-rendering-convention).
 
-| Champion | Spritesheet | Login preview |
-|---|---|---|
-| Arthax | `Player/Arthax.png` | `Player/player_arthax.png` |
-| Börg | `Player/Börg.png` | `Player/player_borg.png` |
-| Gangblanc | `Player/Gangblanc.png` | `Player/player_gangblanc.png` |
-| Grum | `Player/Grum.png` | `Player/player_grum.png` |
-| Kanji | `Player/Kanji.png` | `Player/player_kanji.png` |
-| Katan | `Player/Katan.png` | `Player/player_katan.png` |
-| Okomo | `Player/Okomo.png` | `Player/player_okomo.png` |
-| Zhinja | `Player/Zhinja.png` | `Player/player_zhinja.png` |
+| Champion | Spritesheet |
+|---|---|
+| Arthax | `Player/Arthax.png` |
+| Börg | `Player/Börg.png` |
+| Gangblanc | `Player/Gangblanc.png` |
+| Grum | `Player/Grum.png` |
+| Kanji | `Player/Kanji.png` |
+| Katan | `Player/Katan.png` |
+| Okomo | `Player/Okomo.png` |
+| Zhinja | `Player/Zhinja.png` |
 
 ---
 
@@ -329,7 +329,7 @@ All sprite paths are relative to `public/assets/sprites/`.
 
 ### Gossiper knowledge
 
-The gossiper NPC reads from `world/meta/pois` to generate contextual tips:
+The gossiper NPC reads from `config/pois` to generate contextual tips:
 - **Dungeon locations** — gives approximate coordinates of the nearest unvisited dungeons
 - **Village directions** — gives compass direction and rough distance to other villages
 - **Boss sightings** — warns about powerful enemies spotted nearby
@@ -425,10 +425,10 @@ All sprite paths are relative to `public/assets/sprites/`.
 - If no player is online within range, entities do not act.
 - Execution ownership must always prefer the nearest eligible player client. If a different player becomes nearer, ownership may move to that nearer client to balance.
 - Owned entities are refreshed in **oldest-update-first order** so the entities that have waited longest get processed first.
-- Each client may refresh only a **small capped batch of entities at a time** to avoid frame drops and excessive Firebase writes.
-- A client claims execution ownership by writing its player ID to the entity record. Ownership is released on disconnect or when a nearer eligible client takes over.
-- Recommended scheduler rule: sort owned nearby entities by `lastLogicAt` ascending and process only the first small batch each tick window.
-- Recommended default caps: refresh at most 4 enemies and 2 NPCs per scheduler slice, then continue with the next oldest entities on the following slice.
+- Each frame the scheduler runs scripts only until a **wall-clock time budget** (`BUDGET_MS`, 6 ms) is exhausted; any remaining overdue entities are deferred to the next frame. There is no fixed per-frame entity count — the budget self-limits work to avoid frame drops.
+- Only entities within a Chebyshev radius (`VICINITY_RADIUS`, 20 tiles) of the local player are considered. Each entity also has a per-tick interval derived from its `speed` (slow 1000 ms / normal 500 ms / fast 250 ms; NPCs 1000 ms), so a fast enemy is refreshed more often than a slow one.
+- A client claims execution ownership by writing its player ID to the entity record. A claim is considered **stale** once the entity's `lastLogicAt` has not advanced for `CLAIM_TTL_MS` (10 s) — at which point any other in-vicinity client may reclaim it. Ownership is also released when the scene shuts down.
+- Scheduler rule: collect all in-vicinity entities whose tick interval has elapsed, sort by `lastLogicAt` ascending, and execute from oldest until the time budget runs out.
 - Scripts run in a sandboxed Python environment (Pyodide WASM) with access to entity state, nearby world data, and a set of actions (`move`, `attack`, `speak`, `setState`). No file or network access is permitted.
 
 ---
@@ -642,7 +642,7 @@ Tier 4 items are never sold in shops — dungeon altar crafting only.
 | **Desert** | `chitin`, `sand_crystal`, chitin armor | `wood`, `fiber` |
 
 - Each village also applies a **±15% random jitter** seeded from its POI seed, so two forest villages may still have slightly different prices for the same item.
-- Rare items (`mana_crystal`, `ancient_wood`, `dark_crystal`) have limited stock (1–3 per real-time day) tracked in Firebase under `world/shops/{villageId}/limitedStock`.
+- Rare items (`mana_crystal`, `ancient_wood`, `dark_crystal`) have limited stock (1–3 per real-time day) tracked in Firebase under `shops/{villageId}/limitedStock`.
 
 ---
 
@@ -659,8 +659,8 @@ Tier 4 items are never sold in shops — dungeon altar crafting only.
 ## Viewport & Scaling
 
 ### Base resolution
-- The game renders at a **fixed logical resolution of 320×180 pixels** (16:9). All tiles, sprites, and HUD elements are sized against this base.
-- At 320×180 with 16×16 tiles, exactly **20 tiles wide × ~11 tiles tall** are visible at default zoom — enough context to see nearby threats and navigate without the world feeling overwhelming.
+- The game renders at a **fixed logical resolution of 640×360 pixels** (16:9). All tiles, sprites, and HUD elements are sized against this base.
+- At 640×360 with 16×16 tiles, exactly **40 tiles wide × ~22 tiles tall** are visible at the default 1× zoom — enough context to see nearby threats and navigate without the world feeling overwhelming.
 
 ### Scaling to the browser window
 - Phaser is configured with `ScaleManager` mode **`FIT`**: the canvas is scaled up (integer or fractional) to fill the browser window while preserving the 16:9 aspect ratio. Letterbox bars (CSS `background: #000`) fill any leftover space.
@@ -673,9 +673,9 @@ Tier 4 items are never sold in shops — dungeon altar crafting only.
 - All sprites and tiles are drawn at their native 16×16 size in logical pixels; the ScaleManager's CSS transform does the rest.
 
 ### Camera zoom
-- Default camera zoom is **2×** (each logical pixel becomes 2×2 logical pixels), giving an effective tile display size of 32×32 CSS pixels at 1:1 browser zoom. This makes the game comfortable on typical desktop monitors without the world feeling enormous.
-- Players can adjust zoom between **1× and 4×** via scroll-wheel or pinch gesture. The zoom is clamped to integer values to preserve pixel alignment.
-- Zoom preference is persisted in `localStorage` and restored on next session.
+- Default camera zoom is **1×** (each logical pixel maps to one canvas pixel before the ScaleManager's `FIT` transform). At 16×16 tiles this shows the full 40×22-tile viewport described above.
+- Players can adjust zoom between **1× and 4×** via the scroll wheel. The zoom is clamped to integer values to preserve pixel alignment.
+- Zoom preference is persisted in `localStorage` (`rpidigo.zoom`) and restored on next session.
 
 ### Mobile / touch
 - On viewport widths below **640 CSS pixels** the HUD switches to a compact layout: chat panel collapses to a single-line ticker; mini-map shrinks to 64×64; action buttons move to a bottom toolbar.
@@ -921,4 +921,4 @@ The game is built on a **data-driven registry architecture**. All content types 
 
 - Adding a new tile, enemy, zone, weapon, or enemy profile requires only adding a definition object to the appropriate data file. No engine code changes are needed.
 - Adding a new enemy profile (e.g. `wolf_aggressive`, `slime_typeA`, `goblin_special1`) means adding one `EnemyDefinition` with a Python script and one entry in the zone spawn table — nothing else.
-- Content can also be pushed to the Firebase `world/meta/extensions` path to go live without redeployment. Extensions are merged into the registries at startup and override built-in definitions with the same ID.
+- Content can also be pushed to the Firebase `config/extensions` path to go live without redeployment. Extensions are merged into the registries at startup and override built-in definitions with the same ID.

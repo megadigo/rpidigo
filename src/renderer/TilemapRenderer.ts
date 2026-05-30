@@ -191,6 +191,14 @@ export class TilemapRenderer {
   /** Shared object pool for recycled Image objects. */
   private pool: Phaser.GameObjects.Image[] = []
 
+  /** Last drawn tile-bounds — lets us skip the redraw pass when nothing moved. */
+  private _lastSX = NaN
+  private _lastSY = NaN
+  private _lastEX = NaN
+  private _lastEY = NaN
+  /** Set when a tile is invalidated or the renderer is reset, forcing a redraw. */
+  private _dirty = true
+
   constructor(scene: Phaser.Scene) {
     this.scene = scene
   }
@@ -225,6 +233,16 @@ export class TilemapRenderer {
     const startY = Math.floor(worldTop   / TILE_SIZE)
     const endX   = Math.ceil(worldRight  / TILE_SIZE)
     const endY   = Math.ceil(worldBottom / TILE_SIZE)
+
+    // Skip the whole pass when the visible tile-bounds are unchanged and no
+    // tile was invalidated since the last draw (the common stationary case).
+    if (!this._dirty && startX === this._lastSX && startY === this._lastSY
+        && endX === this._lastEX && endY === this._lastEY) {
+      return
+    }
+    this._lastSX = startX; this._lastSY = startY
+    this._lastEX = endX;   this._lastEY = endY
+    this._dirty  = false
 
     // Cull tiles that have scrolled out of the viewport
     for (const k of this.placedGround.keys()) {
@@ -273,6 +291,7 @@ export class TilemapRenderer {
 
   /** Force redraw of a single tile on all layers (e.g. after modification). */
   invalidateTile(tx: number, ty: number): void {
+    this._dirty = true
     const k = `${tx}_${ty}`
     const g = this.placedGround.get(k)
     if (g) { this.release(g); this.placedGround.delete(k) }
@@ -292,6 +311,8 @@ export class TilemapRenderer {
     this.placedMiddle.clear()
     this.placedTop.clear()
     this.pool.length = 0
+    this._dirty = true
+    this._lastSX = this._lastSY = this._lastEX = this._lastEY = NaN
   }
 }
 

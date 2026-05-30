@@ -17,20 +17,6 @@ export function seededRandInt(rand: () => number, min: number, max: number): num
   return min + Math.floor(rand() * (max - min + 1))
 }
 
-/** Pick a weighted random entry from a table. Returns the entry id. */
-export function weightedRandom<T extends { weight: number }>(
-  rand: () => number,
-  table: T[],
-): T {
-  const total = table.reduce((s, e) => s + e.weight, 0)
-  let roll = rand() * total
-  for (const entry of table) {
-    roll -= entry.weight
-    if (roll <= 0) return entry
-  }
-  return table[table.length - 1]
-}
-
 /** SHA-256 hex of a string.
  *  Uses the Web Crypto API when available (HTTPS / localhost).
  *  Falls back to a pure-JS implementation so the game works over plain HTTP. */
