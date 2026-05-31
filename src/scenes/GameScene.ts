@@ -171,6 +171,43 @@ export class GameScene extends Phaser.Scene {
       })
     }
 
+    // On-screen inventory button emitted by HudScene
+    this.game.events.on('openInventory', () => {
+      if (this._isDead) return
+      if (this.scene.isActive('DialogScene') || this.scene.isActive('InventoryScene')) return
+      this._openInventory()
+    })
+
+    // Pinch-to-zoom (two-finger touch)
+    let _pinchStartDist = 0
+    let _pinchStartZoom = 1
+    this.input.on('pointerdown', () => {
+      if (this.input.pointer1.isDown && this.input.pointer2.isDown) {
+        _pinchStartDist = Phaser.Math.Distance.Between(
+          this.input.pointer1.x, this.input.pointer1.y,
+          this.input.pointer2.x, this.input.pointer2.y,
+        )
+        _pinchStartZoom = this.cameras.main.zoom
+      }
+    })
+    this.input.on('pointermove', () => {
+      if (!this.input.pointer1.isDown || !this.input.pointer2.isDown || _pinchStartDist === 0) return
+      const d = Phaser.Math.Distance.Between(
+        this.input.pointer1.x, this.input.pointer1.y,
+        this.input.pointer2.x, this.input.pointer2.y,
+      )
+      const minZ = Math.min(window.innerWidth, window.innerHeight) < 600 ? 2 : 1
+      this.cameras.main.setZoom(Phaser.Math.Clamp(_pinchStartZoom * (d / _pinchStartDist), minZ, 4))
+    })
+    this.input.on('pointerup', () => {
+      if (!this.input.pointer1.isDown || !this.input.pointer2.isDown) {
+        if (_pinchStartDist > 0) {
+          localStorage.setItem('rpidigo.zoom', String(this.cameras.main.zoom))
+          _pinchStartDist = 0
+        }
+      }
+    })
+
     // Tap / click to interact — tapping an adjacent world tile acts like the A key
     {
       this.input.on('pointerup', (p: Phaser.Input.Pointer) => {
@@ -237,6 +274,7 @@ export class GameScene extends Phaser.Scene {
       if (this._npcUnsub)      { this._npcUnsub();      this._npcUnsub      = null }
       this._scriptExecutor.destroy()
       if (this.scene.isActive('DeathScene')) this.scene.stop('DeathScene')
+      this.game.events.off('openInventory')
     })
   }
 

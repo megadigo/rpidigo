@@ -464,6 +464,8 @@ const SHOP_CSS = `
     border-radius: 3px;
     width: 460px;
     max-width: 96vw;
+    max-height: 90vh;
+    overflow-y: auto;
     padding: 14px 16px;
     color: #eee;
     box-shadow: 0 4px 24px rgba(0,0,0,0.8);
@@ -507,7 +509,7 @@ const SHOP_CSS = `
   .shop-tab:hover  { color: #fff; }
 
   #shop-list {
-    max-height: 300px;
+    max-height: min(200px, 30vh);
     overflow-y: auto;
     display: flex;
     flex-direction: column;

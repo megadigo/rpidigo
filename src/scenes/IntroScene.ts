@@ -19,7 +19,7 @@ export class IntroScene extends Phaser.Scene {
         display: flex; align-items: center; justify-content: center;
         background:
           linear-gradient(rgba(0,0,0,0.55), rgba(0,0,0,0.75)),
-          url('/screenshot.png') center / cover no-repeat;
+          url('screenshot.png') center / cover no-repeat;
         font-family: monospace;
       }
       .intro-box {
@@ -27,7 +27,9 @@ export class IntroScene extends Phaser.Scene {
         display: flex; flex-direction: column; align-items: center; gap: 1rem;
       }
       .intro-title {
-        font-size: 4.5rem; letter-spacing: .55em;
+        font-size: clamp(1.5rem, 12vw, 25rem);
+        letter-spacing: .55em;
+        white-space: nowrap;
         color: #ffdd88; margin: 0;
         text-shadow: 0 0 30px rgba(255,200,60,.6), 0 2px 4px rgba(0,0,0,.9);
       }

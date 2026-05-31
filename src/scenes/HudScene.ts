@@ -290,11 +290,16 @@ export class HudScene extends Phaser.Scene {
       }
       .dpad-btn.pressed { background: rgba(255,255,255,0.25); }
 
-      /* Action button — bottom RIGHT, same baseline */
-      #dpad-action {
+      /* Right-side button column — A (action) at bottom, I (inventory) above */
+      #dpad-right-col {
         position: absolute;
         bottom: clamp(80px, 18vh, 150px);
         right: clamp(8px, 2vw, 20px);
+        display: flex; flex-direction: column-reverse; align-items: center;
+        gap: clamp(8px, 2vmin, 14px);
+        pointer-events: auto; touch-action: none;
+      }
+      #dpad-action {
         width:  clamp(52px, 13vmin, 70px);
         height: clamp(52px, 13vmin, 70px);
         border-radius: 50%;
@@ -303,10 +308,23 @@ export class HudScene extends Phaser.Scene {
         color: #ffdd44; font-family: monospace;
         font-size: clamp(16px, 4vmin, 22px); font-weight: bold;
         display: flex; align-items: center; justify-content: center;
-        cursor: pointer; pointer-events: auto; touch-action: none;
+        cursor: pointer; touch-action: none;
         transition: background 0.08s;
       }
       #dpad-action.pressed { background: rgba(255,220,80,0.4); }
+      #dpad-inventory {
+        width:  clamp(42px, 10vmin, 56px);
+        height: clamp(42px, 10vmin, 56px);
+        border-radius: 8px;
+        background: rgba(100,180,255,0.1);
+        border: 1px solid rgba(100,180,255,0.35);
+        color: #88bbff; font-family: monospace;
+        font-size: clamp(14px, 3.5vmin, 20px); font-weight: bold;
+        display: flex; align-items: center; justify-content: center;
+        cursor: pointer; touch-action: none;
+        transition: background 0.08s;
+      }
+      #dpad-inventory.pressed { background: rgba(100,180,255,0.3); }
 
       /* Compact chat — always compact since controls are always visible */
       #chat-panel { width: clamp(120px, 28vw, 200px) !important; bottom: 8px !important; }
@@ -329,10 +347,13 @@ export class HudScene extends Phaser.Scene {
         <button class="dpad-btn" id="dpad-down">▼</button>
         <div class="dpad-empty"></div>
       </div>
-      <button id="dpad-action">A</button>`
+      <div id="dpad-right-col">
+        <button id="dpad-action">A</button>
+        <button id="dpad-inventory">I</button>
+      </div>`
     document.body.appendChild(this._dpadWrap)
 
-    // Wire all buttons: directions (left) + action (right)
+    // Wire directional + action buttons via virtualInput
     const bindings: Array<[string, keyof typeof virtualInput]> = [
       ['dpad-up', 'up'], ['dpad-down', 'down'],
       ['dpad-left', 'left'], ['dpad-right', 'right'],
@@ -350,6 +371,18 @@ export class HudScene extends Phaser.Scene {
       btn.addEventListener('pointercancel', release)
       btn.addEventListener('pointerleave',  release)
     }
+
+    // Inventory button — emits a game event picked up by GameScene
+    const invBtn = this._dpadWrap.querySelector('#dpad-inventory') as HTMLElement
+    invBtn.addEventListener('pointerdown', (e) => {
+      invBtn.setPointerCapture(e.pointerId)
+      invBtn.classList.add('pressed')
+    })
+    invBtn.addEventListener('pointerup', () => {
+      invBtn.classList.remove('pressed')
+      this.game.events.emit('openInventory')
+    })
+    invBtn.addEventListener('pointercancel', () => invBtn.classList.remove('pressed'))
 
     // Chat compactness is driven by the #dpad CSS !important overrides above
   }

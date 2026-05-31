@@ -4,8 +4,9 @@
  */
 import Phaser from 'phaser'
 import { ensureWorldReady } from '../world/WorldBootstrap.ts'
-import { ensureRadius } from '../world/ChunkManager.ts'
+import { ensureRadius, ensureChunk, getTile, setTile } from '../world/ChunkManager.ts'
 import { getLocalPlayer, setLocalPlayer } from '../player/Auth.ts'
+import type { TileData } from '../world/types.ts'
 import { isPassable } from '../world/CollisionMap.ts'
 import { ref, update } from 'firebase/database'
 import { db } from '../firebase.ts'
@@ -119,6 +120,21 @@ export class LoadingScene extends Phaser.Scene {
       const cx = Math.floor(player.x / 32)
       const cy = Math.floor(player.y / 32)
       await ensureRadius(cx, cy, 2)
+
+      // Restore the house tile if it was lost (schema wipe or race condition).
+      // The player record always has the correct coordinates, but the tile itself
+      // may have been wiped along with all map data.
+      const house = player.house
+      if (house) {
+        await ensureChunk(Math.floor(house.x / 32), Math.floor(house.y / 32))
+        const existing = getTile(house.x, house.y)
+        const hasHut = existing && [existing.g, ...(existing.m ?? [])].includes('house_hut')
+        if (!hasHut) {
+          const houseTile: TileData = { g: 'grass', m: ['house_hut'] }
+          setTile(house.x, house.y, houseTile)
+          void update(ref(db), { [`map/0/${house.x}_${house.y}`]: houseTile })
+        }
+      }
 
       await this.setProgress(0.6, 'Loading AI runtime…')
       // Loads Pyodide WASM from CDN; continues silently if offline or blocked.

@@ -7,7 +7,7 @@
 import Phaser from 'phaser'
 
 // Sprite paths relative to the public root
-const S = (path: string) => `/assets/sprites/${path}`
+const S = (path: string) => `assets/sprites/${path}`
 
 // [canvas-id, sprite-path] pairs loaded after the DOM is built
 type SpriteEntry = [string, string]
