@@ -153,7 +153,7 @@ export class DialogScene extends Phaser.Scene {
     // Close on Escape or E key (Phaser input)
     if (this.input.keyboard) {
       this.input.keyboard.once('keydown-ESC', () => this._close())
-      this.input.keyboard.once('keydown-E',   () => this._close())
+      this.input.keyboard.once('keydown-A',   () => this._close())
     }
 
     void this._open()

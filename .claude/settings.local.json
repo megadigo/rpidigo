@@ -12,7 +12,9 @@
       "Bash(Select-Object -Property FullName)",
       "Bash(Sort-Object FullName)",
       "Bash(Get-ChildItem -Path \"d:\\\\GitHub\\\\rpidigo\" -Recurse -Directory)",
-      "Bash(Select-Object -ExpandProperty FullName)"
+      "Bash(Select-Object -ExpandProperty FullName)",
+      "Bash(Remove-Item \"d:\\\\GitHub\\\\rpidigo\\\\src\\\\scenes\\\\MapScene.ts\")",
+      "Bash(npm run *)"
     ]
   }
 }

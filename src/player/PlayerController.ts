@@ -23,6 +23,7 @@ import { houseRoomId, parseHouseRoomId, HOUSE_ROOM_SIZE } from '../world/HouseGe
 import { dungeonRoomId, parseDungeonRoomId } from '../world/DungeonGen.ts'
 import { cellarRoomId, parseCellarRoomId } from '../world/CellarGen.ts'
 import { isRoomLocked } from '../world/RoomState.ts'
+import { virtualInput } from '../input/VirtualInput.ts'
 
 /** Pixels per second at base speed. */
 const BASE_SPEED = 80
@@ -31,7 +32,6 @@ const SYNC_INTERVAL = 100
 
 export class PlayerController {
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys
-  private wasd!: { up: Phaser.Input.Keyboard.Key; down: Phaser.Input.Keyboard.Key; left: Phaser.Input.Keyboard.Key; right: Phaser.Input.Keyboard.Key }
   private sprite!: Phaser.GameObjects.Sprite
   private lastSync = 0
   private lastChunk = ''
@@ -44,8 +44,8 @@ export class PlayerController {
   /** Cooldown (ms) to prevent re-triggering a room transition immediately after one fires. */
   private _transitionCooldown = 0
 
-  /** E key for interact / attack. */
-  private eKey: Phaser.Input.Keyboard.Key | null = null
+  /** A key for interact / attack / action. */
+  private aKey: Phaser.Input.Keyboard.Key | null = null
   /** Cooldown (ms) between attacks. */
   private _attackCooldown = 0
   /** Current frame index of the attack animation. */
@@ -59,6 +59,9 @@ export class PlayerController {
 
   /** When true, all movement and attack input is suppressed (e.g. during death). */
   private _frozen = false
+
+  /** Previous-frame state of virtualInput.action — used for rising-edge detection. */
+  private _prevVirtualAction = false
 
   /** World-pixel position (not tile). */
   px = 0
@@ -96,19 +99,13 @@ export class PlayerController {
 
     if (this.scene.input.keyboard) {
       this.cursors = this.scene.input.keyboard.createCursorKeys()
-      this.wasd = {
-        up:    this.scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.W),
-        down:  this.scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.S),
-        left:  this.scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.A),
-        right: this.scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.D),
-      }
-      this.eKey = this.scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.E)
+      this.aKey    = this.scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.A)
     }
 
     // Follow camera — lerp 1 = instant snap so tiles are always in view
     this.scene.cameras.main.startFollow(this.sprite, true, 1, 1)
     this.scene.cameras.main.setBounds(0, 0, 1000 * TILE_SIZE, 1000 * TILE_SIZE)
-    this.scene.cameras.main.setZoom(1)
+    // Zoom is set by GameScene after create() returns, so no override here
   }
 
   update(delta: number): void {
@@ -117,10 +114,10 @@ export class PlayerController {
     // Freeze movement while the chat input (or any text input) has keyboard focus
     if (document.activeElement instanceof HTMLInputElement) return
 
-    const up    = this.cursors.up.isDown    || this.wasd.up.isDown
-    const down  = this.cursors.down.isDown  || this.wasd.down.isDown
-    const left  = this.cursors.left.isDown  || this.wasd.left.isDown
-    const right = this.cursors.right.isDown || this.wasd.right.isDown
+    const up    = this.cursors.up.isDown    || virtualInput.up
+    const down  = this.cursors.down.isDown  || virtualInput.down
+    const left  = this.cursors.left.isDown  || virtualInput.left
+    const right = this.cursors.right.isDown || virtualInput.right
 
     let vx = 0
     let vy = 0
@@ -190,10 +187,12 @@ export class PlayerController {
       this._syncPosition()
     }
 
-    // Attack / interact (E key) — ignore when chat input is focused
+    // Attack / interact — A key or D-pad action button (rising edge only)
     if (this._attackCooldown > 0) this._attackCooldown -= delta
+    const vActionRising = virtualInput.action && !this._prevVirtualAction
+    this._prevVirtualAction = virtualInput.action
     if (this._attackCooldown <= 0
-        && this.eKey?.isDown
+        && (this.aKey?.isDown || vActionRising)
         && !(document.activeElement instanceof HTMLInputElement)) {
       const tx = Math.floor(this.px / TILE_SIZE)
       const ty = Math.floor(this.py / TILE_SIZE)

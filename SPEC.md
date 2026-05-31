@@ -698,12 +698,34 @@ The game is built as a set of Phaser scenes. Scenes stack additively where noted
 Displayed once on first page load before any Firebase call is made.
 
 **Content:**
-- Full-screen background art (game title and atmosphere illustration)
-- Game title and short tagline
-- **Play** button
+- Full-screen screenshot background (darkened overlay for readability)
+- Game title **DIGON** in large gold monospace lettering
+- Short tagline
+- **Play** button → `LoginScene`
+- **How to Play** button → `InstructionsScene`
 
 **Transitions:**
 - **Play** → `LoginScene`
+- **How to Play** → `InstructionsScene`
+
+---
+
+### Instructions Screen (`InstructionsScene`)
+Accessible from the title screen. No Firebase call required — sprites are
+loaded directly from PNG files using the HTML Canvas API (frame 0, 16×16).
+
+**Content:**
+- **Controls**: WASD/arrows = move; **A** = Action (attack · interact · open · gather · talk); **I** = Inventory; **Enter** = Chat; **Esc** = close overlay
+- **World**: biomes, buildings, dungeons — sprite examples
+- **Combat**: face enemy + press A; XP and loot on kill; PVP at level 10+
+- **NPCs**: Healer, Merchant, Guard, Dog — each with frame-0 sprite
+- **Gathering & Crafting**: press A on resources; workbench/workshop/dungeon altar
+- **Chests**: shared by all players; personal house chest is private storage
+- **Death & Respawn**: items drop; respawn at house; compass hint to loot
+- **Multiplayer**: real-time presence; proximity chat
+
+**Transitions:**
+- **← Back** / **Esc** → `IntroScene`
 
 ---
 
@@ -898,6 +920,7 @@ Shown when the player's HP reaches zero.
 
 ```
 IntroScene
+  ├─► InstructionsScene ──────────────────────────────────────► IntroScene
   └─► LoginScene
         └─► LoadingScene
               └─► GameScene ◄────────────────────────────┐

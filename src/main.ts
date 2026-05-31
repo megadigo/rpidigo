@@ -2,6 +2,7 @@ import './style.css'
 import Phaser from 'phaser'
 import { bootstrapRegistries } from './registry/bootstrap'
 import { IntroScene } from './scenes/IntroScene'
+import { InstructionsScene } from './scenes/InstructionsScene'
 import { LoginScene } from './scenes/LoginScene'
 import { LoadingScene } from './scenes/LoadingScene'
 import { GameScene } from './scenes/GameScene'
@@ -26,7 +27,7 @@ async function main(): Promise<void> {
       mode: Phaser.Scale.FIT,
       autoCenter: Phaser.Scale.CENTER_BOTH,
     },
-    scene: [IntroScene, LoginScene, LoadingScene, GameScene, HudScene, DialogScene, InventoryScene, CraftScene, ShopScene, StorageScene, DeathScene],
+    scene: [IntroScene, InstructionsScene, LoginScene, LoadingScene, GameScene, HudScene, DialogScene, InventoryScene, CraftScene, ShopScene, StorageScene, DeathScene],
   })
 }
 

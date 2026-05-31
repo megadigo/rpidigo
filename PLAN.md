@@ -30,7 +30,10 @@
    All sprites are committed to the repository. This step only applies when regenerating missing placeholders on a fresh clone.
 3. ✅ Publish `database.rules.json` via `firebase deploy --only database`. Rules cover `/config`, `/map`, `/players`, `/entities`, `/presence`, `/chat`, `/shops`.
 4. ✅ `firebase.ts` and `registry/bootstrap.ts` are already correct — no changes needed.
-5. ✅ **Checkpoint**: `npm run dev` opens the browser; the "rpidigo" title screen appears; clicking **Play** navigates to the login screen; browser console shows no Firebase errors.
+5. ✅ **IntroScene** updated: game title is **DIGON**, background uses `public/screenshot.png` (darkened overlay), two buttons — **Play** → `LoginScene` and **How to Play** → `InstructionsScene`.
+6. ✅ **InstructionsScene** added: full how-to-play screen with keyboard controls (`A` = Action), world, combat, NPC, gathering/crafting, death, and multiplayer sections. Sprites drawn from raw PNGs (frame 0, 16×16 → 32×32) without requiring Phaser texture loading.
+7. ✅ **Action key changed from `E` to `A`** throughout: `PlayerController`, `DialogScene`, `ShopScene`, `HudScene` D-pad label.
+8. ✅ **Checkpoint**: `npm run dev` opens the browser; the **DIGON** title screen appears over the screenshot; clicking **How to Play** shows the instruction screen with game sprites; clicking **Play** navigates to the login screen.
 
 ---
 
@@ -101,9 +104,9 @@
 ## Step 8 — Player Attack & Enemy Death ✅
 *Goal: the player can attack adjacent enemies, deal damage, and earn XP on kill.*
 
-1. ✅ On the interact key (e.g. `E`) when the player is adjacent to an enemy, calculate damage and write the updated HP to `/presence/{room}/enemies/{id}`.
+1. ✅ On the interact key (`A`) when the player is adjacent to an enemy, calculate damage and write the updated HP to `/presence/{room}/enemies/{id}`.
 2. ✅ When HP reaches 0, write loot to Firebase and grant XP to the attacking player (`/players/{id}/xp`).
-3. ✅ **Checkpoint**: Walk up to an enemy, press `E` repeatedly; enemy HP decreases and the sprite disappears on death; XP is added to the player record in Firebase.
+3. ✅ **Checkpoint**: Walk up to an enemy, press `A` repeatedly; enemy HP decreases and the sprite disappears on death; XP is added to the player record in Firebase.
 
 ---
 
@@ -122,7 +125,7 @@
 
 1. ✅ On the interact key adjacent to an NPC, open a `DialogScene` DOM overlay showing the NPC portrait (frame 0) and speech text from its script.
 2. ✅ Healer: write full HP/MP to `/players/{id}`; Gossiper: read `config/pois` for directional tips; Merchant: open `ShopScene` instead.
-3. ✅ Dog NPC: spawns in villages (50% chance), follows the player when interacted with via E, loses interest after 5 minutes without re-interaction (`dog_follow.py`).
+3. ✅ Dog NPC: spawns in villages (50% chance), follows the player when interacted with via `A`, loses interest after 5 minutes without re-interaction (`dog_follow.py`).
 4. ✅ **Checkpoint**: Walk up to a healer with reduced HP and press `E`; HP is restored and the HUD updates.
 
 ---
@@ -181,24 +184,22 @@
    - "Respawn at House" button
 3. ✅ After respawn, overworld chunks around the house are pre-loaded before unfreezing the player (prevents blank-world spawn).
 4. ✅ After respawn, if items were dropped, a system chat message gives the compass direction and tile distance to the loot chest (handles overworld, house, dungeon floor N, and cellar rooms).
-5. ⬜ PVP: attack allowed only when both players are ≥ level 10 and in the same room. *(not yet implemented — requires PVP system)*
+5. ✅ PVP: attack allowed only when both players are ≥ level 10 and in the same room. Facing a remote player with E reads their HP via Firebase, applies attacker's power as damage, writes the new HP back, and shows a float text. Below level 10 shows "PVP: level 10+ only" hint.
 6. ✅ **Checkpoint**: Take enough damage to die; items drop; the death screen shows with killer info and countdown; player respawns at house with half HP; a chat hint points toward the dropped loot.
 
 ---
 
-## Step 16 — Mini-map ⬜
-*Goal: a small map in the HUD shows explored terrain and the player's position.*
-
-1. ⬜ Add a 64×64 canvas to `HudScene` (top-right corner); render explored chunks as coloured dots and POI icons for visited villages/dungeons.
-2. ⬜ `MapScene` full-screen overlay: zoomed-out explored world with fog-of-war, accessible from the HUD.
-3. ⬜ **Checkpoint**: Mini-map updates as the player walks into new chunks; opening the full map shows all explored areas.
+## Step 16 — Mini-map ⬜ *(removed by design decision)*
+*Skipped — mini-map was implemented and then removed. Not part of the current scope.*
 
 ---
 
-## Step 17 — Mobile / Touch Support ⬜
+## Step 17 — Mobile / Touch Support ✅
 *Goal: the game is playable on a phone with a virtual joystick.*
 
-1. ⬜ Detect `window.innerWidth < 640`; render a D-pad virtual joystick in `HudScene` using Phaser pointer events.
-2. ⬜ Compact HUD: chat collapses to a ticker, mini-map shrinks to 64×64.
-3. ⬜ Tapping an adjacent tile or entity triggers interaction.
-4. ⬜ **Checkpoint**: Load the game on a phone (or in a narrow browser window); the virtual joystick appears and the player can move and interact without a keyboard.
+1. ✅ `isMobileDevice()` exported from `src/input/VirtualInput.ts` — true when `window.innerWidth < 640`.
+2. ✅ `virtualInput` module-level object (`up/down/left/right/action`) shared between HudScene (writer) and PlayerController (reader). PlayerController ORs virtual flags with keyboard; D-pad action button uses rising-edge detection to fire a single `playerAttack` event per press.
+3. ✅ D-pad rendered by `HudScene._buildDpad()` when mobile: 3×3 CSS grid of 44×44 buttons (bottom-right), pointer capture per button so held movement survives slight finger drift. Centre button = **E** (interact/attack).
+4. ✅ Compact chat: `#chat-panel.mobile` CSS class applied on mobile — 150px wide, 44px max-height, 9px font.
+5. ✅ Tap-to-interact in `GameScene`: on `pointerup`, if distance < 12 px (true tap) and the tapped tile is adjacent to the player, calls `_handleInteract` toward that tile. Skipped when any overlay scene is active.
+6. ✅ **Checkpoint**: Narrow the browser to < 640 px; D-pad appears at bottom-right; all four directions and the E button work; tapping adjacent tiles/entities triggers interaction.

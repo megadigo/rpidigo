@@ -8,6 +8,7 @@ import { ref, onValue, push, remove } from 'firebase/database'
 import { db } from '../firebase.ts'
 import { getLocalPlayer, setLocalPlayer } from '../player/Auth.ts'
 import { xpForLevel } from '../world/utils.ts'
+import { virtualInput, isMobileDevice } from '../input/VirtualInput.ts'
 import type { PlayerInstance } from '../world/types.ts'
 
 /** Chebyshev tile radius — messages outside this range are hidden. */
@@ -53,6 +54,9 @@ export class HudScene extends Phaser.Scene {
   private _lastRenderX = -1
   private _lastRenderY = -1
 
+  private _dpadWrap:  HTMLDivElement | null = null
+  private _dpadStyle: HTMLStyleElement | null = null
+
   /** Bound Enter-key handler so it can be removed on shutdown. */
   private _enterHandler!: (e: KeyboardEvent) => void
 
@@ -77,6 +81,7 @@ export class HudScene extends Phaser.Scene {
       .setOrigin(1, 1).setDepth(101)
 
     this._buildChatPanel()
+    if (isMobileDevice()) this._buildDpad()
     this._subscribeChat(player.room)
     this._subscribePlayer(player.id)
 
@@ -108,6 +113,7 @@ export class HudScene extends Phaser.Scene {
       this._lastRenderY = p.y
       this._renderMessages()
     }
+
   }
 
   // ── Chat panel ────────────────────────────────────────────────────────────
@@ -240,12 +246,115 @@ export class HudScene extends Phaser.Scene {
     this._chatLog.scrollTop = this._chatLog.scrollHeight
   }
 
+  // ── D-pad (mobile only) ───────────────────────────────────────────────────
+
+  private _buildDpad(): void {
+    this._dpadStyle = document.createElement('style')
+    this._dpadStyle.textContent = `
+      /* Full-screen transparent wrapper — children are positioned independently */
+      #dpad {
+        position: fixed; inset: 0;
+        pointer-events: none;
+        z-index: 60; user-select: none; -webkit-user-select: none;
+      }
+
+      /* Directional cross — bottom LEFT, raised above the compact chat panel */
+      #dpad-dirs {
+        position: absolute; bottom: 90px; left: 16px;
+        display: grid;
+        grid-template-columns: repeat(3, 48px);
+        grid-template-rows: repeat(3, 48px);
+        gap: 3px;
+        pointer-events: auto; touch-action: none;
+      }
+      .dpad-empty { width: 48px; height: 48px; }
+      #dpad-center { width: 48px; height: 48px; }
+
+      /* Action button — bottom RIGHT, same baseline as directional cross */
+      #dpad-action {
+        position: absolute; bottom: 90px; right: 24px;
+        width: 64px; height: 64px;
+        border-radius: 50%;
+        background: rgba(255,220,80,0.15);
+        border: 2px solid rgba(255,220,80,0.45);
+        color: #ffdd44; font-family: monospace;
+        font-size: 18px; font-weight: bold;
+        display: flex; align-items: center; justify-content: center;
+        cursor: pointer; pointer-events: auto; touch-action: none;
+        transition: background 0.08s;
+      }
+      #dpad-action.pressed { background: rgba(255,220,80,0.4); }
+
+      /* Shared button style for directional buttons */
+      .dpad-btn {
+        width: 48px; height: 48px;
+        background: rgba(255,255,255,0.08);
+        border: 1px solid rgba(255,255,255,0.2);
+        border-radius: 8px;
+        color: #fff; font-size: 17px;
+        display: flex; align-items: center; justify-content: center;
+        cursor: pointer; touch-action: none;
+        transition: background 0.08s;
+      }
+      .dpad-btn.pressed { background: rgba(255,255,255,0.25); }
+
+      /* Compact chat on mobile */
+      #chat-panel.mobile { width: 150px; bottom: 8px; }
+      #chat-panel.mobile #chat-log  { max-height: 44px; font-size: 9px; }
+      #chat-panel.mobile #chat-input { font-size: 9px; padding: 1px 4px; }
+    `
+    document.head.appendChild(this._dpadStyle)
+
+    this._dpadWrap = document.createElement('div')
+    this._dpadWrap.id = 'dpad'
+    this._dpadWrap.innerHTML = `
+      <div id="dpad-dirs">
+        <div class="dpad-empty"></div>
+        <button class="dpad-btn" id="dpad-up">▲</button>
+        <div class="dpad-empty"></div>
+        <button class="dpad-btn" id="dpad-left">◄</button>
+        <div id="dpad-center"></div>
+        <button class="dpad-btn" id="dpad-right">►</button>
+        <div class="dpad-empty"></div>
+        <button class="dpad-btn" id="dpad-down">▼</button>
+        <div class="dpad-empty"></div>
+      </div>
+      <button id="dpad-action">A</button>`
+    document.body.appendChild(this._dpadWrap)
+
+    // Wire all buttons: directions (left) + action (right)
+    const bindings: Array<[string, keyof typeof virtualInput]> = [
+      ['dpad-up', 'up'], ['dpad-down', 'down'],
+      ['dpad-left', 'left'], ['dpad-right', 'right'],
+      ['dpad-action', 'action'],
+    ]
+    for (const [id, key] of bindings) {
+      const btn = this._dpadWrap.querySelector(`#${id}`) as HTMLElement
+      btn.addEventListener('pointerdown', (e) => {
+        btn.setPointerCapture(e.pointerId)
+        btn.classList.add('pressed')
+        virtualInput[key] = true
+      })
+      const release = () => { btn.classList.remove('pressed'); virtualInput[key] = false }
+      btn.addEventListener('pointerup',     release)
+      btn.addEventListener('pointercancel', release)
+      btn.addEventListener('pointerleave',  release)
+    }
+
+    // Compact chat
+    this._chatPanel?.classList.add('mobile')
+  }
+
   private _teardown(): void {
     document.removeEventListener('keydown', this._enterHandler)
     if (this._chatUnsub)   { this._chatUnsub();   this._chatUnsub   = null }
     if (this._playerUnsub) { this._playerUnsub(); this._playerUnsub = null }
     this._chatPanel?.remove()
     this._chatStyle?.remove()
+    this._dpadWrap?.remove()
+    this._dpadStyle?.remove()
+    // Release all virtual inputs so nothing stays stuck after scene teardown
+    virtualInput.up = virtualInput.down = virtualInput.left = virtualInput.right = virtualInput.action = false
   }
 
   // ── Remote player stats ─────────────────────────────────────────────────────

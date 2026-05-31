@@ -11,7 +11,7 @@
  * Step 11: I key opens InventoryScene (equipment + bag) as an additive overlay.
  */
 import Phaser from 'phaser'
-import { ref, onValue, update, runTransaction } from 'firebase/database'
+import { ref, onValue, update, runTransaction, get } from 'firebase/database'
 import { db } from '../firebase.ts'
 import { TilemapRenderer, TILE_SIZE, isTileRoomExit } from '../renderer/TilemapRenderer.ts'
 import type { Direction } from '../renderer/SpriteAnim.ts'
@@ -33,6 +33,7 @@ import type { CraftSceneData } from './CraftScene.ts'
 import type { ShopSceneData } from './ShopScene.ts'
 import type { StorageSceneData } from './StorageScene.ts'
 import type { DeathSceneData } from './DeathScene.ts'
+import { isMobileDevice } from '../input/VirtualInput.ts'
 
 /** Tile bounds of the 1000×1000 overworld in pixels. */
 const WORLD_PIXEL_SIZE = 1000 * TILE_SIZE
@@ -147,15 +148,19 @@ export class GameScene extends Phaser.Scene {
 
     // Zoom controls (scroll wheel)
     this.input.on('wheel', (_p: unknown, _go: unknown, _dx: number, dy: number) => {
-      const cam = this.cameras.main
-      const step = dy > 0 ? -1 : 1
-      const newZoom = Phaser.Math.Clamp(cam.zoom + step, 1, 4)
+      const cam     = this.cameras.main
+      const minZ    = isMobileDevice() ? 2 : 1
+      const step    = dy > 0 ? -1 : 1
+      const newZoom = Phaser.Math.Clamp(cam.zoom + step, minZ, 4)
       cam.setZoom(newZoom)
       localStorage.setItem('rpidigo.zoom', String(newZoom))
     })
 
-    const savedZoom = parseInt(localStorage.getItem('rpidigo.zoom') ?? '1', 10)
-    this.cameras.main.setZoom(Phaser.Math.Clamp(savedZoom, 1, 4))
+    const isMobile    = isMobileDevice()
+    const minZoom     = isMobile ? 2 : 1
+    const defaultZoom = isMobile ? 2 : 1
+    const savedZoom   = parseInt(localStorage.getItem('rpidigo.zoom') ?? String(defaultZoom), 10)
+    this.cameras.main.setZoom(Phaser.Math.Clamp(savedZoom, minZoom, 4))
 
     // I key — open inventory (Step 11)
     const iKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.I)
@@ -165,6 +170,30 @@ export class GameScene extends Phaser.Scene {
         if (this.scene.isActive('DialogScene'))   return
         if (this.scene.isActive('InventoryScene')) return
         this._openInventory()
+      })
+    }
+
+    // Tap-to-interact on mobile — tapping an adjacent world tile acts like E key
+    if (isMobileDevice()) {
+      this.input.on('pointerup', (p: Phaser.Input.Pointer) => {
+        if (this._isDead) return
+        // Ignore taps consumed by DOM overlays (dialogs, inventory, etc.)
+        const activeOverlays = ['DialogScene', 'InventoryScene', 'CraftScene',
+          'ShopScene', 'StorageScene', 'DeathScene']
+        if (activeOverlays.some(s => this.scene.isActive(s))) return
+        // Only react to taps, not drags
+        if (Phaser.Math.Distance.Between(p.downX, p.downY, p.x, p.y) > 12) return
+        const tapTx = Math.floor(p.worldX / TILE_SIZE)
+        const tapTy = Math.floor(p.worldY / TILE_SIZE)
+        const ptx   = Math.floor(this.playerController.px / TILE_SIZE)
+        const pty   = Math.floor(this.playerController.py / TILE_SIZE)
+        const dx = tapTx - ptx
+        const dy = tapTy - pty
+        if (Math.abs(dx) > 1 || Math.abs(dy) > 1 || (dx === 0 && dy === 0)) return
+        const dir: Direction = Math.abs(dx) >= Math.abs(dy)
+          ? (dx > 0 ? 'right' : 'left')
+          : (dy > 0 ? 'down' : 'up')
+        void this._handleInteract(ptx, pty, dir)
       })
     }
 
@@ -902,6 +931,24 @@ export class GameScene extends Phaser.Scene {
       }
     }
 
+    // PVP check — facing tile only, both players must be level 10+
+    {
+      const [fdxPvp, fdyPvp] = facingOffset[direction]
+      const px = tx + fdxPvp
+      const py = ty + fdyPvp
+      const localLevel = getLocalPlayer().level ?? 0
+      for (const [targetId, rec] of this._remotePlayers.entries()) {
+        if (rec.entry.x === px && rec.entry.y === py) {
+          if (localLevel >= 10 && (rec.entry.level ?? 0) >= 10) {
+            void this._handlePvpAttack(targetId, rec.sprite)
+          } else {
+            this._showFloatText(px, py, 'PVP: level 10+ only', '#888888')
+          }
+          return
+        }
+      }
+    }
+
     // Crafting station check — facing tile only (Step 11)
     const [fdx2, fdy2] = facingOffset[direction]
     const craftStation = this._getCraftStation(tx + fdx2, ty + fdy2)
@@ -982,6 +1029,19 @@ export class GameScene extends Phaser.Scene {
       Phaser.Scenes.Events.SHUTDOWN,
       () => this.playerController.unfreeze(),
     )
+  }
+
+  /** PVP attack: deals power damage to a remote player. Level 10+ gate enforced. */
+  private async _handlePvpAttack(targetId: string, targetSprite: Phaser.GameObjects.Sprite): Promise<void> {
+    const player = getLocalPlayer()
+    const damage = Math.max(1, player.power)
+    const snap   = await get(ref(db, `players/${targetId}/hp`))
+    const curHp  = typeof snap.val() === 'number' ? (snap.val() as number) : 1
+    const newHp  = Math.max(0, curHp - damage)
+    void update(ref(db), { [`players/${targetId}/hp`]: newHp })
+    const tx = Math.floor(targetSprite.x / TILE_SIZE)
+    const ty = Math.floor(targetSprite.y / TILE_SIZE)
+    this._showFloatText(tx, ty, `-${damage}`, '#ff8888')
   }
 
   /**
