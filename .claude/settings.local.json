@@ -10,7 +10,9 @@
       "Bash(npx tsc *)",
       "Bash(Get-ChildItem -Path \"d:\\\\GitHub\\\\rpidigo\" -Recurse -Force)",
       "Bash(Select-Object -Property FullName)",
-      "Bash(Sort-Object FullName)"
+      "Bash(Sort-Object FullName)",
+      "Bash(Get-ChildItem -Path \"d:\\\\GitHub\\\\rpidigo\" -Recurse -Directory)",
+      "Bash(Select-Object -ExpandProperty FullName)"
     ]
   }
 }

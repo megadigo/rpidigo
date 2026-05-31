@@ -161,6 +161,27 @@ export function findTileInRoom(tileType: string): { x: number; y: number } | nul
   return null
 }
 
+/**
+ * Return all room-tile positions whose ground or middle layers include at least
+ * one type from `tileTypes`. Results are sorted top-to-bottom, left-to-right.
+ * Only works when a room is loaded (house / cellar / dungeon); returns [] on
+ * the overworld.
+ */
+export function findAllTilesInRoom(
+  tileTypes: ReadonlySet<string>,
+): Array<{ x: number; y: number }> {
+  const results: Array<{ x: number; y: number }> = []
+  for (const [key, tile] of _roomTileCache) {
+    const allTypes = [tile.g, ...(tile.m ?? [])]
+    if (allTypes.some(t => tileTypes.has(t))) {
+      const parts = key.split('_')
+      results.push({ x: parseInt(parts[0], 10), y: parseInt(parts[1], 10) })
+    }
+  }
+  results.sort((a, b) => a.y !== b.y ? a.y - b.y : a.x - b.x)
+  return results
+}
+
 /** Ensure a chunk is loaded.  Returns when the chunk is in tileCache. */
 export async function ensureChunk(cx: number, cy: number): Promise<void> {
   const key = chunkKey(cx, cy)
@@ -294,10 +315,21 @@ async function _generateAndPersistChunk(cx: number, cy: number, key: string): Pr
     }
   }
 
-  // 4b. Cellar rooms — each room's tiles batched separately
+  // 4b. Cellar rooms — tiles + rat enemies
   if (chunkData.cellarRooms) {
     for (const room of chunkData.cellarRooms) {
       await _persistRoomTiles(room.roomId, room.tiles)
+      const cellarEntityUpdate: Record<string, unknown> = {}
+      for (const enemy of room.enemies) {
+        cellarEntityUpdate[`entities/enemies/${enemy.id}`] = JSON.parse(JSON.stringify(enemy))
+        cellarEntityUpdate[`presence/${room.roomId}/enemies/${enemy.id}`] = {
+          x: enemy.x, y: enemy.y,
+          templateId: enemy.templateId,
+          state: enemy.state,
+          hp: enemy.hp,
+        }
+      }
+      if (Object.keys(cellarEntityUpdate).length > 0) await update(ref(db), cellarEntityUpdate)
     }
   }
 

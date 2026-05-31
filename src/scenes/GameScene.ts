@@ -17,7 +17,7 @@ import { TilemapRenderer, TILE_SIZE, isTileRoomExit } from '../renderer/TilemapR
 import type { Direction } from '../renderer/SpriteAnim.ts'
 import { ANIM_FRAMES, FRAME_DURATION_MS, directionFromVelocity, getFrame } from '../renderer/SpriteAnim.ts'
 import { PlayerController } from '../player/PlayerController.ts'
-import { enterRoom, exitRoom, findTileInRoom, getTile, setTile, getActiveRoom, getWorldZone } from '../world/ChunkManager.ts'
+import { enterRoom, exitRoom, findTileInRoom, findAllTilesInRoom, getTile, setTile, getActiveRoom, getWorldZone, ensureRadius, tileToChunk } from '../world/ChunkManager.ts'
 import { getWorldConfig } from '../world/WorldBootstrap.ts'
 import { setRoomLocked } from '../world/RoomState.ts'
 import { HOUSE_ROOM_SIZE } from '../world/HouseGen.ts'
@@ -32,6 +32,7 @@ import type { DialogSceneData } from './DialogScene.ts'
 import type { CraftSceneData } from './CraftScene.ts'
 import type { ShopSceneData } from './ShopScene.ts'
 import type { StorageSceneData } from './StorageScene.ts'
+import type { DeathSceneData } from './DeathScene.ts'
 
 /** Tile bounds of the 1000×1000 overworld in pixels. */
 const WORLD_PIXEL_SIZE = 1000 * TILE_SIZE
@@ -112,8 +113,14 @@ export class GameScene extends Phaser.Scene {
 
   /** True while the death/respawn sequence is in progress. */
   private _isDead = false
-  /** The DOM death overlay element, if currently shown. */
-  private _deathOverlay: HTMLDivElement | null = null
+  /** Display name of the last entity that damaged the player (for DeathScene). */
+  private _lastKillerName: string | null = null
+  /** Tile coordinates and room where the player died (for the post-respawn loot hint). */
+  private _deathTx   = 0
+  private _deathTy   = 0
+  private _deathRoom = '0'
+  /** Number of item stacks dropped as loot on the last death. */
+  private _deathItemsDropped = 0
   /** performance.now() timestamp of the last time enemy damage landed. Used for the invincibility window. */
   private _lastDamageAt = 0
   /** Minimum milliseconds between consecutive enemy hits (invincibility window). */
@@ -202,8 +209,7 @@ export class GameScene extends Phaser.Scene {
       if (this._enemyUnsub)    { this._enemyUnsub();    this._enemyUnsub    = null }
       if (this._npcUnsub)      { this._npcUnsub();      this._npcUnsub      = null }
       this._scriptExecutor.destroy()
-      this._deathOverlay?.remove()
-      this._deathOverlay = null
+      if (this.scene.isActive('DeathScene')) this.scene.stop('DeathScene')
     })
   }
 
@@ -238,10 +244,9 @@ export class GameScene extends Phaser.Scene {
     // Run entity AI scripts (time-sliced: at most BUDGET_MS wall-clock per frame)
     const tx = Math.floor(this.playerController.px / TILE_SIZE)
     const ty = Math.floor(this.playerController.py / TILE_SIZE)
-    this._scriptExecutor.tick(tx, ty, this._buildNearbyPlayers(), (targetPlayerId, damage) => {
-      // Only apply damage to the local player
+    this._scriptExecutor.tick(tx, ty, this._buildNearbyPlayers(), (targetPlayerId, damage, killerTemplateId) => {
       if (targetPlayerId === getLocalPlayer().id) {
-        this._applyEnemyDamage(damage)
+        this._applyEnemyDamage(damage, killerTemplateId)
       }
     })
 
@@ -301,7 +306,7 @@ export class GameScene extends Phaser.Scene {
    * Apply damage from an enemy attack to the local player.
    * Subtracts defense, flashes sprite, writes HP to Firebase, triggers death if HP <= 0.
    */
-  private _applyEnemyDamage(rawDamage: number): void {
+  private _applyEnemyDamage(rawDamage: number, killerTemplateId?: string): void {
     if (this._isDead) return
     const now = performance.now()
     if (now - this._lastDamageAt < GameScene._INVINCIBILITY_MS) return
@@ -333,6 +338,10 @@ export class GameScene extends Phaser.Scene {
 
     void update(ref(db), { [`players/${player.id}/hp`]: newHp })
 
+    if (killerTemplateId) {
+      try { this._lastKillerName = EnemyRegistry.get(killerTemplateId).displayName }
+      catch { this._lastKillerName = killerTemplateId.replace(/_/g, ' ') }
+    }
     if (newHp <= 0) this._triggerDeath()
   }
 
@@ -370,7 +379,8 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
-   * Trigger the death sequence: freeze input, show overlay, auto-respawn after 3 s.
+   * Trigger the death sequence: freeze input, drop loot, launch DeathScene.
+   * DeathScene's SHUTDOWN event fires _respawn() once the countdown or button resolves.
    */
   private _triggerDeath(): void {
     if (this._isDead) return
@@ -380,7 +390,13 @@ export class GameScene extends Phaser.Scene {
     const player = getLocalPlayer()
     player.hp = 0
 
-    // Drop all carried items as loot at the death tile (gold is kept).
+    // Capture death location before dropping loot (uses current player tile).
+    this._deathTx   = Math.floor(this.playerController.px / TILE_SIZE)
+    this._deathTy   = Math.floor(this.playerController.py / TILE_SIZE)
+    this._deathRoom = player.room
+
+    const inv = player.inventory ?? []
+    this._deathItemsDropped = inv.length
     this._dropInventoryAsLoot(player.room)
     player.inventory = []
     setLocalPlayer(player)
@@ -389,37 +405,32 @@ export class GameScene extends Phaser.Scene {
       [`players/${player.id}/inventory`]: [],
     })
 
-    const overlay = document.createElement('div')
-    overlay.id = 'death-overlay'
-    overlay.style.cssText = [
-      'position:fixed', 'inset:0', 'background:rgba(0,0,0,0.75)',
-      'display:flex', 'flex-direction:column', 'align-items:center', 'justify-content:center',
-      'z-index:1000', 'color:#ff4444', 'font-family:monospace', 'user-select:none',
-    ].join(';')
-    overlay.innerHTML = [
-      '<div style="font-size:36px;letter-spacing:6px;text-shadow:0 0 20px #f00">YOU DIED</div>',
-      '<div style="font-size:12px;color:#aaa;margin-top:14px">Respawning at your house in 3 seconds...</div>',
-    ].join('')
-    document.body.appendChild(overlay)
-    this._deathOverlay = overlay
-
-    this.time.delayedCall(3000, () => this._respawn())
+    const data: DeathSceneData = {
+      killerName:   this._lastKillerName,
+      goldRetained: player.gold,
+      itemsLost:    this._deathItemsDropped,
+    }
+    this.scene.launch('DeathScene', data)
+    this.scene.get('DeathScene').events.once(
+      Phaser.Scenes.Events.SHUTDOWN,
+      () => void this._respawn(),
+    )
   }
 
   /**
-   * Respawn: restore HP, teleport to player house, exit any active room, re-enable input.
+   * Respawn: restore HP, teleport to player house, exit any active room.
+   *
+   * Async so we can await the overworld chunk load before unfreezing — without
+   * this the renderer has no tile data and the player spawns into a black world
+   * with only presence-driven enemy sprites visible.
    */
-  private _respawn(): void {
-    this._deathOverlay?.remove()
-    this._deathOverlay = null
-    this._isDead = false
-
-    const player = getLocalPlayer()
+  private async _respawn(): Promise<void> {
+    const player  = getLocalPlayer()
     const oldRoom = player.room
     const hx = player.house?.x ?? player.x
     const hy = player.house?.y ?? player.y
 
-    // Respawn at 50% HP (minimum 1).
+    // Restore HP and persist position before any async work
     player.hp   = Math.max(1, Math.floor(player.maxHp * 0.5))
     player.room = '0'
     player.x    = hx
@@ -434,9 +445,11 @@ export class GameScene extends Phaser.Scene {
       this.playerController.startCameraFollow()
     }
 
+    // Move sprite and camera to house now (still frozen)
     this.playerController.teleport(hx, hy)
     this._subscribePresence('0')
 
+    // Persist respawn state to Firebase
     const respawnUpdate: Record<string, unknown> = {
       [`players/${player.id}/hp`]:   player.hp,
       [`players/${player.id}/x`]:    hx,
@@ -450,14 +463,87 @@ export class GameScene extends Phaser.Scene {
       [`presence/0/players/${player.id}/state`]:       'idle',
       [`presence/0/players/${player.id}/direction`]:   'down',
     }
-    // Only null the old-room presence entry when it's a different room;
-    // setting a parent to null AND its children in the same update() is invalid.
     if (oldRoom !== '0') {
       respawnUpdate[`presence/${oldRoom}/players/${player.id}`] = null
     }
     void update(ref(db), respawnUpdate)
 
+    // Wait for the overworld chunks around the house to be in the local tile
+    // cache before unfreezing — prevents the player from spawning into a blank
+    // world where only presence-driven enemies are visible.
+    const ck = tileToChunk(hx, hy)
+    const [cxStr, cyStr] = ck.split('_')
+    await ensureRadius(parseInt(cxStr, 10), parseInt(cyStr, 10), 2)
+
+    // Chunks are ready — mark the renderer dirty so drawViewport paints them
+    // on the very next update() call, then hand control back to the player.
+    this.tilemapRenderer.markDirty()
+    this._isDead = false
     this.playerController.unfreeze()
+
+    // If the player dropped items, write a direction hint to the chat so they
+    // know where to retrieve their belongings.
+    if (this._deathItemsDropped > 0) {
+      const hint = this._lootDirectionHint(hx, hy)
+      if (hint) {
+        const now = Date.now()
+        void update(ref(db), {
+          [`chat/0/_loot_hint_${player.id}_${now}`]: {
+            sender: 'System', x: hx, y: hy,
+            text: hint, timestamp: now, system: true,
+          },
+        })
+      }
+    }
+  }
+
+  /** Build a proximity-chat hint pointing from (hx,hy) toward the loot chest. */
+  private _lootDirectionHint(hx: number, hy: number): string | null {
+    const room = this._deathRoom
+    let targetX: number
+    let targetY: number
+    let prefix: string
+
+    if (room === '0') {
+      targetX = this._deathTx
+      targetY = this._deathTy
+      prefix  = 'Your belongings lie'
+    } else {
+      // Parse the room ID to find the building's overworld tile coordinates
+      const houseM   = /^house_(\d{4})_(\d{4})$/.exec(room)
+      const dungeonM = /^dungeon_(\d{4})_(\d{4})_floor_(\d+)$/.exec(room)
+      const cellarM  = /^cellar_(\d{4})_(\d{4})$/.exec(room)
+      if (houseM) {
+        targetX = parseInt(houseM[1], 10); targetY = parseInt(houseM[2], 10)
+        prefix  = 'Your belongings are in a house'
+      } else if (dungeonM) {
+        targetX = parseInt(dungeonM[1], 10); targetY = parseInt(dungeonM[2], 10)
+        prefix  = `Your belongings are in a dungeon (floor ${dungeonM[3]})`
+      } else if (cellarM) {
+        targetX = parseInt(cellarM[1], 10); targetY = parseInt(cellarM[2], 10)
+        prefix  = 'Your belongings are in a cellar'
+      } else {
+        return null
+      }
+    }
+
+    const dx   = targetX - hx
+    const dy   = targetY - hy
+    const dist = Math.round(Math.hypot(dx, dy))
+    if (dist < 2) return null  // dropped right here — no hint needed
+
+    const angle = Math.atan2(dy, dx) * (180 / Math.PI)
+    let dir: string
+    if (angle < -157.5 || angle >= 157.5) dir = 'west'
+    else if (angle < -112.5) dir = 'north-west'
+    else if (angle < -67.5)  dir = 'north'
+    else if (angle < -22.5)  dir = 'north-east'
+    else if (angle < 22.5)   dir = 'east'
+    else if (angle < 67.5)   dir = 'south-east'
+    else if (angle < 112.5)  dir = 'south'
+    else                     dir = 'south-west'
+
+    return `${prefix} to the ${dir}, ~${dist} tiles away.`
   }
 
   /**
@@ -825,7 +911,7 @@ export class GameScene extends Phaser.Scene {
     }
 
     // Chest check — facing tile only (Step 13)
-    if (await this._handleChest(tx + fdx2, ty + fdy2)) return
+    if (this._handleChest(tx + fdx2, ty + fdy2)) return
 
     // Gathering check — facing tile only (Step 11)
     if (await this._handleGather(tx + fdx2, ty + fdy2)) return
@@ -839,12 +925,10 @@ export class GameScene extends Phaser.Scene {
    * Re-subscribes an unfreeze listener each time so it fires exactly once.
    */
   private _openDialog(npcId: string, templateId: string, npcX: number, npcY: number): void {
-    // Merchants open the shop UI with zone-aware pricing (Step 14)
     if (templateId.startsWith('merchant')) { this._openShop(npcId, npcX, npcY); return }
     this.playerController.freeze()
-    const data: DialogSceneData = { templateId, npcX, npcY }
+    const data: DialogSceneData = { templateId, npcX, npcY, npcId }
     this.scene.launch('DialogScene', data)
-    // Unfreeze exactly once when DialogScene shuts down
     this.scene.get('DialogScene').events.once(
       Phaser.Scenes.Events.SHUTDOWN,
       () => this.playerController.unfreeze(),
@@ -927,16 +1011,20 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
-   * Freeze the player and open the personal storage UI for a storage chest.
+   * Freeze the player and open the chest UI (storage or loot mode).
+   * On close, invalidates all chest tile positions so death-loot removals render.
    */
-  private _openStorage(cx: number, cy: number, roomId: string): void {
+  private _openChestUI(data: StorageSceneData): void {
     if (this.scene.isActive('StorageScene')) return
     this.playerController.freeze()
-    const data: StorageSceneData = { tileX: cx, tileY: cy, roomId }
     this.scene.launch('StorageScene', data)
     this.scene.get('StorageScene').events.once(
       Phaser.Scenes.Events.SHUTDOWN,
-      () => this.playerController.unfreeze(),
+      () => {
+        this.playerController.unfreeze()
+        const positions = data.chestList ?? [{ x: data.tileX, y: data.tileY }]
+        for (const pos of positions) this.tilemapRenderer.invalidateTile(pos.x, pos.y)
+      },
     )
   }
 
@@ -1081,78 +1169,25 @@ export class GameScene extends Phaser.Scene {
     return true
   }
 
-  /** Chest tile IDs that can be opened for their stored gold (Step 13). */
+  /** Chest tile IDs recognised by the interact system. */
   private static readonly _CHEST_TILES = new Set(['chest', 'dungeon_chest', 'cellar_chest'])
 
   /**
-   * Open a treasure chest at (cx, cy) if present. Awards its stored gold once,
-   * marks it opened so it can't be looted again, and persists the change.
+   * Open a chest at (cx, cy) via the StorageScene UI.
+   * Collects all chests in the current room to enable prev/next navigation.
    * Returns true if a chest tile was handled (so the caller skips attacking).
    */
-  private async _handleChest(cx: number, cy: number): Promise<boolean> {
+  private _handleChest(cx: number, cy: number): boolean {
     const tile = getTile(cx, cy)
     if (!tile) return false
-    const layers = [tile.g, ...(tile.m ?? [])]
-    if (!layers.some(l => GameScene._CHEST_TILES.has(l))) return false
+    if (![tile.g, ...(tile.m ?? [])].some(l => GameScene._CHEST_TILES.has(l))) return false
 
-    // Personal storage chest — open deposit/withdraw UI instead of looting
-    if (tile.metadata?.storage === true) {
-      this._openStorage(cx, cy, getActiveRoom() ?? '0')
-      return true
-    }
+    const room       = getActiveRoom() ?? '0'
+    const allInRoom  = findAllTilesInRoom(GameScene._CHEST_TILES)
+    const chestList  = allInRoom.length ? allInRoom : [{ x: cx, y: cy }]
+    const chestIndex = Math.max(0, chestList.findIndex(p => p.x === cx && p.y === cy))
 
-    // Already looted, or never held anything
-    const gold  = tile.metadata?.gold ?? 0
-    const items = tile.metadata?.items ?? []
-    if (tile.metadata?.opened || (gold <= 0 && items.length === 0)) {
-      this._showFloatText(cx, cy, 'Empty', '#888888')
-      return true
-    }
-
-    const player = getLocalPlayer()
-    if (gold > 0) {
-      player.gold = (player.gold ?? 0) + gold
-      this._showFloatText(cx, cy, `+${gold} gold`, '#ffdd88')
-    }
-    const inv = [...(player.inventory ?? [])]
-    for (const it of items) {
-      const slot = inv.find(s => s.itemId === it.itemId)
-      if (slot) slot.quantity += it.quantity
-      else inv.push({ itemId: it.itemId, quantity: it.quantity, metadata: {} })
-    }
-    player.inventory = inv
-    if (items.length) this._showFloatText(cx, cy, 'Items recovered', '#88ffcc')
-    setLocalPlayer(player)
-
-    let newTile: import('../world/types.ts').TileData
-    if (tile.metadata?.dropped) {
-      // Death-loot chest — remove it entirely so the tile is walkable again.
-      const chestId = layers.find(l => GameScene._CHEST_TILES.has(l))
-      const newM    = (tile.m ?? []).filter(m => m !== chestId)
-      const meta    = { ...(tile.metadata ?? {}) }
-      delete meta.gold; delete meta.items; delete meta.opened; delete meta.dropped
-      newTile = {
-        g: tile.g,
-        ...(newM.length ? { m: newM } : {}),
-        ...(tile.t ? { t: tile.t } : {}),
-        ...(Object.keys(meta).length ? { metadata: meta } : {}),
-      }
-    } else {
-      // Generated chest — keep it in place as (now-empty) decoration.
-      newTile = {
-        ...tile,
-        metadata: { ...(tile.metadata ?? {}), opened: true, gold: 0, items: [] },
-      }
-    }
-    setTile(cx, cy, newTile)
-    this.tilemapRenderer.invalidateTile(cx, cy)
-
-    const room = getActiveRoom() ?? '0'
-    await update(ref(db), {
-      [`map/${room}/${tileKey(cx, cy)}`]:  newTile,
-      [`players/${player.id}/gold`]:       player.gold,
-      [`players/${player.id}/inventory`]:  inv,
-    })
+    this._openChestUI({ tileX: cx, tileY: cy, roomId: room, chestList, chestIndex })
     return true
   }
 

@@ -84,9 +84,9 @@ function pickTileLayers(zone: Zone, detail: number, rand: () => number): TileDat
 
 /** Simple overworld enemy spawn table per zone. */
 const SPAWN_TABLES: Record<string, Array<{ id: string; weight: number }>> = {
-  plains:  [{ id: 'wolf_weak', weight: 60 }, { id: 'wolf_strong', weight: 20 }, { id: 'bandit_weak', weight: 15 }, { id: 'bandit_strong', weight: 5 }],
+  plains:  [{ id: 'wolf_weak', weight: 50 }, { id: 'wolf_strong', weight: 15 }, { id: 'bandit_weak', weight: 15 }, { id: 'bandit_strong', weight: 5 }, { id: 'rat_weak', weight: 15 }],
   forest:  [{ id: 'wolf_weak', weight: 40 }, { id: 'wolf_strong', weight: 20 }, { id: 'giant_spider_weak', weight: 20 }, { id: 'goblin_scout_weak', weight: 10 }, { id: 'treant_strong', weight: 10 }],
-  river:   [{ id: 'river_troll_weak', weight: 40 }, { id: 'crocodile_weak', weight: 30 }, { id: 'water_spirit_weak', weight: 20 }, { id: 'river_troll_strong', weight: 10 }],
+  river:   [{ id: 'river_troll_weak', weight: 30 }, { id: 'river_troll_strong', weight: 15 }, { id: 'water_spirit_weak', weight: 15 }, { id: 'water_spirit_enraged', weight: 5 }, { id: 'crab_weak', weight: 25 }, { id: 'crab_strong', weight: 10 }],
   desert:  [{ id: 'scorpion_weak', weight: 35 }, { id: 'sand_worm_weak', weight: 25 }, { id: 'mummy_weak', weight: 25 }, { id: 'desert_bandit_strong', weight: 15 }],
 }
 

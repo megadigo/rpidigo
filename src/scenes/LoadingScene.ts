@@ -30,6 +30,7 @@ const CHAMPION_FILES: Record<string, string> = {
 
 /** All NPC sprite names (in public/assets/sprites/NPCs/). */
 const NPC_SPRITES = [
+  'dog',
   'guard_patrol', 'healer_standard', 'merchant_standard',
   'villager_fisherman', 'villager_gossiper', 'villager_hunter', 'villager_wanderer',
 ] as const

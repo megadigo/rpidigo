@@ -19,7 +19,8 @@
  */
 import type { TileData, NpcInstance } from './types.ts'
 import { mulberry32, seededRandInt, tileKey } from './utils.ts'
-import npcWander from '../scripts/npcs/wander.py?raw'
+import npcWander   from '../scripts/npcs/wander.py?raw'
+import dogFollow   from '../scripts/npcs/dog_follow.py?raw'
 
 export interface VillageLayout {
   tiles: Map<string, TileData>   // key `${x}_${y}`
@@ -185,6 +186,13 @@ export function generateVillage(
     npcs.push(makeNpc(`npc_${villageId}_guard_${g}`, 'guard_patrol', 'guard', 'patrol', gx, gy, villageId))
   }
 
+  // 50 % chance for a village dog — roams near the central square
+  if (rand() < 0.5) {
+    const dogX = originX + seededRandInt(rand, -3, 3)
+    const dogY = originY + seededRandInt(rand, -3, 3)
+    npcs.push(makeNpc(`npc_${villageId}_dog`, 'dog', 'dog', 'standard', dogX, dogY, villageId, dogFollow))
+  }
+
   return { tiles, npcs, buildingPositions }
 }
 
@@ -196,6 +204,7 @@ function makeNpc(
   x: number,
   y: number,
   villageId: string,
+  script = npcWander,
 ): NpcInstance {
   return {
     id,
@@ -209,7 +218,7 @@ function makeNpc(
     state: 'idle',
     executingPlayerId: null,
     lastLogicAt: 0,
-    script: npcWander,
+    script,
     memory: {},
   }
 }

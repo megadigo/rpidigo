@@ -130,7 +130,11 @@ export function generateHouseRoom(
       // 2–3 workbenches in the upper half, 1 chest
       const benches = 2 + (rand() < 0.5 ? 1 : 0)
       for (let i = 0; i < benches; i++) place('workbench', 1, S - 2, 1, Math.floor(S / 2) - 1)
-      place('chest', 1, S - 2, 1, S - 4)
+      const wItems: Array<{itemId: string; quantity: number}> = []
+      if (rand() < 0.7) wItems.push({ itemId: 'iron_ore',  quantity: seededRandInt(rand, 1, 3) })
+      if (rand() < 0.5) wItems.push({ itemId: 'stone',     quantity: seededRandInt(rand, 2, 5) })
+      if (rand() < 0.3) wItems.push({ itemId: 'leather',   quantity: seededRandInt(rand, 1, 2) })
+      place('chest', 1, S - 2, 1, S - 4, { gold: seededRandInt(rand, 5, 20), items: wItems })
       // Optional extra table
       if (rand() < 0.4) place('table', 1, S - 2, 1, S - 4)
       break
@@ -140,8 +144,12 @@ export function generateHouseRoom(
       // Quest board near top-centre, 2–3 chests around the room
       place('quest_board', 2, S - 3, 1, 3)
       const chests = 2 + (rand() < 0.4 ? 1 : 0)
-      for (let i = 0; i < chests; i++)
-        place('chest', 1, S - 2, 1, S - 4)
+      for (let i = 0; i < chests; i++) {
+        const bItems: Array<{itemId: string; quantity: number}> = []
+        if (rand() < 0.7) bItems.push({ itemId: 'health_potion', quantity: seededRandInt(rand, 1, 2) })
+        if (rand() < 0.4) bItems.push({ itemId: 'antidote',      quantity: 1 })
+        place('chest', 1, S - 2, 1, S - 4, { gold: seededRandInt(rand, 10, 30), items: bItems })
+      }
       // Occasional table (briefing table)
       if (rand() < 0.5) place('table', 1, S - 2, Math.floor(S / 3), S - 4)
       break
@@ -154,7 +162,13 @@ export function generateHouseRoom(
       occupied.add(altarK)
       tiles.set(altarK, { g: 'house_floor', m: ['dungeon_altar'] })
       const chests = 1 + (rand() < 0.6 ? 1 : 0)
-      for (let i = 0; i < chests; i++) place('chest', 1, S - 2, 2, S - 4)
+      for (let i = 0; i < chests; i++) {
+        const cItems: Array<{itemId: string; quantity: number}> = []
+        if (rand() < 0.7) cItems.push({ itemId: 'health_potion', quantity: seededRandInt(rand, 1, 2) })
+        if (rand() < 0.5) cItems.push({ itemId: 'mana_potion',   quantity: 1 })
+        if (rand() < 0.3) cItems.push({ itemId: 'antidote',      quantity: 1 })
+        place('chest', 1, S - 2, 2, S - 4, { gold: seededRandInt(rand, 5, 15), items: cItems })
+      }
       if (rand() < 0.4) place('sofa', 1, S - 2, Math.floor(S / 2), S - 4)
       break
     }
@@ -165,8 +179,10 @@ export function generateHouseRoom(
       for (let i = 0; i < tables; i++) place('table', 2, S - 3, 2, S - 4)
       const sofas = 1 + (rand() < 0.5 ? 1 : 0)
       for (let i = 0; i < sofas; i++) place('sofa', 2, S - 3, 2, S - 4)
-      place('chest', 1, S - 2, 1, S - 4,
-        { gold: seededRandInt(rand, 5, 25) })
+      const tItems: Array<{itemId: string; quantity: number}> = []
+      if (rand() < 0.5) tItems.push({ itemId: 'cooked_mushroom', quantity: seededRandInt(rand, 1, 3) })
+      if (rand() < 0.3) tItems.push({ itemId: 'health_potion',   quantity: 1 })
+      place('chest', 1, S - 2, 1, S - 4, { gold: seededRandInt(rand, 5, 25), items: tItems })
       break
     }
 
@@ -175,8 +191,10 @@ export function generateHouseRoom(
       place('bed', 1, S - 2, 1, 4)
       if (rand() < 0.6) place(rand() < 0.5 ? 'table' : 'sofa', 1, S - 2, 2, S - 4)
       if (rand() < 0.35) place('sofa', 1, S - 2, 2, S - 4)
-      place('chest', 1, S - 2, 1, S - 4,
-        { gold: seededRandInt(rand, 10, 50) })
+      const rItems: Array<{itemId: string; quantity: number}> = []
+      if (rand() < 0.4) rItems.push({ itemId: 'wood',         quantity: seededRandInt(rand, 1, 5) })
+      if (rand() < 0.3) rItems.push({ itemId: 'mushroom_item', quantity: seededRandInt(rand, 1, 2) })
+      place('chest', 1, S - 2, 1, S - 4, { gold: seededRandInt(rand, 10, 50), items: rItems })
       break
     }
   }

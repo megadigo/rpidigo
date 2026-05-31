@@ -1,13 +1,16 @@
 /**
  * CellarGen — generates small cellar dungeons attached to some houses.
  * Room key: `cellar_{tx}_{ty}` where (tx, ty) is the source house tile.
+ *
+ * Each cellar is infested with 2–4 rats.
  */
-import type { TileData } from './types.ts'
+import type { TileData, EnemyInstance } from './types.ts'
 import { mulberry32, seededRandInt, tileKey } from './utils.ts'
+import { EnemyRegistry } from '../registry/registries.ts'
 
 export const CELLAR_ROOM_SIZE = 20
 const CHEST_SPAWN_PROBABILITY = 0.7
-const TRAP_SPAWN_PROBABILITY = 0.4
+const TRAP_SPAWN_PROBABILITY  = 0.4
 
 function pad4(n: number): string {
   return String(n).padStart(4, '0')
@@ -24,15 +27,17 @@ export function parseCellarRoomId(roomId: string): { tx: number; ty: number } | 
 }
 
 export interface CellarRoom {
-  roomId: string
-  tiles: Map<string, TileData>
+  roomId:  string
+  tiles:   Map<string, TileData>
+  enemies: EnemyInstance[]
 }
 
 export function generateCellarRoom(tx: number, ty: number, seed: number): CellarRoom {
-  const roomId = cellarRoomId(tx, ty)
-  const rand = mulberry32(seed ^ (tx * 1103515245) ^ (ty * 12345))
-  const S = CELLAR_ROOM_SIZE
-  const tiles = new Map<string, TileData>()
+  const roomId  = cellarRoomId(tx, ty)
+  const rand    = mulberry32(seed ^ (tx * 1103515245) ^ (ty * 12345))
+  const S       = CELLAR_ROOM_SIZE
+  const tiles   = new Map<string, TileData>()
+  const enemies: EnemyInstance[] = []
 
   // Base: solid room with border walls
   for (let x = 0; x < S; x++) {
@@ -45,13 +50,12 @@ export function generateCellarRoom(tx: number, ty: number, seed: number): Cellar
   }
 
   // Carve a few inner wall clusters to make it feel dungeon-like.
-  // 4–6 clusters keeps the room navigable while adding enough variation.
   const clusters = 4 + seededRandInt(rand, 0, 2)
   for (let i = 0; i < clusters; i++) {
     const cx = seededRandInt(rand, 3, S - 4)
     const cy = seededRandInt(rand, 3, S - 4)
-    const w = seededRandInt(rand, 2, 4)
-    const h = seededRandInt(rand, 2, 4)
+    const w  = seededRandInt(rand, 2, 4)
+    const h  = seededRandInt(rand, 2, 4)
     for (let x = cx; x < Math.min(S - 1, cx + w); x++) {
       for (let y = cy; y < Math.min(S - 1, cy + h); y++) {
         tiles.set(tileKey(x, y), { g: 'cellar_floor', m: ['cellar_wall'] })
@@ -71,10 +75,14 @@ export function generateCellarRoom(tx: number, ty: number, seed: number): Cellar
     const chestX = seededRandInt(rand, 2, S - 3)
     const chestY = seededRandInt(rand, 2, S - 3)
     if (chestX !== upX || chestY !== upY) {
+      const cItems: Array<{itemId: string; quantity: number}> = []
+      if (rand() < 0.6) cItems.push({ itemId: 'mushroom_item', quantity: seededRandInt(rand, 1, 3) })
+      if (rand() < 0.5) cItems.push({ itemId: 'health_potion', quantity: 1 })
+      if (rand() < 0.3) cItems.push({ itemId: 'antidote',      quantity: 1 })
       tiles.set(tileKey(chestX, chestY), {
         g: 'cellar_floor',
         m: ['cellar_chest'],
-        metadata: { gold: seededRandInt(rand, 8, 35) },
+        metadata: { gold: seededRandInt(rand, 8, 35), items: cItems },
       })
     }
   }
@@ -86,5 +94,39 @@ export function generateCellarRoom(tx: number, ty: number, seed: number): Cellar
     }
   }
 
-  return { roomId, tiles }
+  // Rat infestation — 2 to 4 rats at random free interior positions.
+  const ratCount = 2 + seededRandInt(rand, 0, 2)
+  for (let i = 0; i < ratCount; i++) {
+    // Pick a free floor tile (no middle layer occupied).
+    for (let attempt = 0; attempt < 40; attempt++) {
+      const rx = seededRandInt(rand, 1, S - 2)
+      const ry = seededRandInt(rand, 1, S - 2)
+      const existing = tiles.get(tileKey(rx, ry))
+      if (existing?.g === 'cellar_floor' && !existing.m?.length) {
+        const ratId = `cellar_${pad4(tx)}_${pad4(ty)}_rat_${i}`
+        enemies.push(_makeRat(ratId, roomId, rx, ry))
+        break
+      }
+    }
+  }
+
+  return { roomId, tiles, enemies }
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function _makeRat(id: string, room: string, x: number, y: number): EnemyInstance {
+  let script = 'pass'
+  try { script = EnemyRegistry.get('rat_weak').behaviorScript } catch { /* fallback */ }
+  return {
+    id, templateId: 'rat_weak', baseType: 'rat', variant: 'weak',
+    hp: 12, maxHp: 12, mp: 0, maxMp: 0, power: 2,
+    room, x, y, spawnRoom: room, spawnX: x, spawnY: y,
+    state: 'idle',
+    executingPlayerId: null,
+    lastLogicAt: 0,
+    script,
+    memory: {},
+    carriedGold: 0,
+  }
 }

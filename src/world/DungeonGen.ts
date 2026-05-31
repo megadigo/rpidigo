@@ -147,10 +147,17 @@ function generateFloor(
       const cx = r.x + Math.floor(r.w / 2)
       const cy = r.y + Math.floor(r.h / 2)
       if (!protectedTiles.has(tileKey(cx, cy))) {
+        const dItems: Array<{itemId: string; quantity: number}> = []
+        if (rand() < 0.7) dItems.push({ itemId: 'health_potion', quantity: seededRandInt(rand, 1, 2) })
+        if (rand() < 0.4) dItems.push({ itemId: 'mana_potion',   quantity: 1 })
+        if (rand() < 0.5) dItems.push({ itemId: 'leather',       quantity: seededRandInt(rand, 1, 2) })
         tiles.set(tileKey(cx, cy), {
           g: 'dungeon_floor',
           m: ['dungeon_chest'],
-          metadata: { gold: Math.floor((seededRandInt(rand, 20, 80)) * floorMultiplier) },
+          metadata: {
+            gold: Math.floor(seededRandInt(rand, 20, 80) * floorMultiplier),
+            items: dItems,
+          },
         })
       }
     }

@@ -289,6 +289,12 @@ export class TilemapRenderer {
     }
   }
 
+  /** Flag the renderer to re-evaluate all visible tiles next drawViewport call. */
+  markDirty(): void {
+    this._dirty = true
+    this._lastSX = this._lastSY = this._lastEX = this._lastEY = NaN
+  }
+
   /** Force redraw of a single tile on all layers (e.g. after modification). */
   invalidateTile(tx: number, ty: number): void {
     this._dirty = true

@@ -16,6 +16,38 @@ import patrolPersistent from '../scripts/enemies/patrol_persistent.py?raw'
 //  patrol_persistent — slow to notice (½ aggro_range), but never fully de-aggros (undead)
 
 export const enemies: EnemyDefinition[] = [
+  // ── Vermin (Plains / Village / Cellars) ──────────────────────────────────
+  {
+    // Skittish vermin — runs on sight, bites only when cornered
+    id: 'rat_weak', baseType: 'rat', variant: 'weak', displayName: 'Rat',
+    baseHp: 12, basePower: 2, baseMp: 0, aggroRange: 4, speed: 'fast',
+    levelRange: [1, 2], lootTable: [{ itemId: 'gold_coin', min: 1, max: 3, chance: 0.25 }],
+    behaviorScript: patrolFlee, spriteFrame: 'rat.png',
+  },
+  {
+    // Bold pack rat — ignores lone players, retaliates hard when hit
+    id: 'rat_strong', baseType: 'rat', variant: 'strong', displayName: 'Giant Rat',
+    baseHp: 22, basePower: 4, baseMp: 0, aggroRange: 5, speed: 'fast',
+    levelRange: [2, 4], lootTable: [{ itemId: 'gold_coin', min: 2, max: 5, chance: 0.35 }, { itemId: 'leather', min: 1, max: 1, chance: 0.15 }],
+    behaviorScript: patrolPack, spriteFrame: 'rat.png',
+  },
+
+  // ── River / Coast ─────────────────────────────────────────────────────────
+  {
+    // Shore crab — defensive, guards its territory, attacks only on approach
+    id: 'crab_weak', baseType: 'crab', variant: 'weak', displayName: 'Crab',
+    baseHp: 35, basePower: 5, baseMp: 0, aggroRange: 4, speed: 'normal',
+    levelRange: [1, 4], lootTable: [{ itemId: 'leather', min: 1, max: 1, chance: 0.5 }],
+    behaviorScript: patrolOnly, spriteFrame: 'crab.png',
+  },
+  {
+    // Snapping crab — chases prey, pinches hard
+    id: 'crab_strong', baseType: 'crab', variant: 'strong', displayName: 'Snapping Crab',
+    baseHp: 60, basePower: 8, baseMp: 0, aggroRange: 6, speed: 'normal',
+    levelRange: [4, 8], lootTable: [{ itemId: 'leather', min: 1, max: 2, chance: 0.7 }, { itemId: 'stone', min: 1, max: 2, chance: 0.3 }],
+    behaviorScript: patrolChase, spriteFrame: 'crab.png',
+  },
+
   // ── Plains ────────────────────────────────────────────────────────────────
   {
     // Timid lone wolf — backs away from humans, attacks only if cornered
@@ -96,13 +128,6 @@ export const enemies: EnemyDefinition[] = [
     baseHp: 100, basePower: 13, baseMp: 0, aggroRange: 5, speed: 'slow',
     levelRange: [6, 11], lootTable: [{ itemId: 'stone', min: 2, max: 5, chance: 0.9 }, { itemId: 'iron_ore', min: 1, max: 2, chance: 0.3 }],
     behaviorScript: patrolAggressive, spriteFrame: 'river_troll.png',
-  },
-  {
-    // Ambush predator — waits, then stalks prey with standard chase
-    id: 'crocodile_weak', baseType: 'crocodile', variant: 'weak', displayName: 'Crocodile',
-    baseHp: 50, basePower: 7, baseMp: 0, aggroRange: 5, speed: 'normal',
-    levelRange: [2, 6], lootTable: [{ itemId: 'leather', min: 1, max: 2, chance: 0.8 }],
-    behaviorScript: patrolChase, spriteFrame: 'crocodile.png',
   },
   {
     // Ethereal — avoids direct combat, flees and attacks only when cornered

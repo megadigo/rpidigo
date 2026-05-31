@@ -13,6 +13,8 @@
  *  'merchant' — placeholder dialogue (full ShopScene is Step 14)
  *  'chat'     — shows a random greeting line
  *  'guard'    — shows a patrol warning line
+ *  'dog'      — writes follow_player_id + last_interact_at to NPC memory so
+ *               the dog_follow.py script starts tracking the player
  */
 import Phaser from 'phaser'
 import { ref, get, update } from 'firebase/database'
@@ -22,7 +24,7 @@ import type { PoiLayout } from '../world/types.ts'
 
 // ─── NPC profile data ─────────────────────────────────────────────────────────
 
-type NpcRole = 'chat' | 'heal' | 'gossip' | 'guard' | 'merchant'
+type NpcRole = 'chat' | 'heal' | 'gossip' | 'guard' | 'merchant' | 'dog'
 
 interface NpcProfile {
   displayName: string
@@ -104,6 +106,16 @@ const NPC_PROFILES: Record<string, NpcProfile> = {
     ],
     role: 'guard',
   },
+  dog: {
+    displayName: 'Dog',
+    lines: [
+      'Woof! The dog wags its tail and looks up at you.',
+      'The dog sniffs your hand and tilts its head.',
+      'The dog lets out a happy bark!',
+      'The dog nudges your hand with its nose.',
+    ],
+    role: 'dog',
+  },
 }
 
 // ─── Scene data interface ─────────────────────────────────────────────────────
@@ -112,6 +124,8 @@ export interface DialogSceneData {
   templateId: string
   npcX: number
   npcY: number
+  /** Required for NPCs that need to write to their own Firebase entity (e.g. dog). */
+  npcId?: string
 }
 
 // ─── Scene ────────────────────────────────────────────────────────────────────
@@ -159,6 +173,9 @@ export class DialogScene extends Phaser.Scene {
     } else if (role === 'gossip') {
       bodyText = this._pickLine()
       subText  = await this._fetchGossip()
+    } else if (role === 'dog') {
+      bodyText = this._pickLine()
+      subText  = await this._applyDogFollow()
     } else {
       bodyText = this._pickLine()
     }
@@ -193,6 +210,27 @@ export class DialogScene extends Phaser.Scene {
       return `HP and MP fully restored. (${parts.join(', ')})`
     }
     return 'You are already at full health.'
+  }
+
+  /**
+   * Signal the dog to follow this player by writing follow_player_id and
+   * last_interact_at into the NPC's persisted memory in Firebase.
+   * The dog_follow.py script reads these values on each tick.
+   */
+  private async _applyDogFollow(): Promise<string | null> {
+    const npcId = this._sceneData.npcId
+    if (!npcId) return null
+
+    const player = getLocalPlayer()
+    const now    = Date.now()
+
+    await update(ref(db), {
+      [`entities/npcs/${npcId}/memory/follow_player_id`]: player.id,
+      [`entities/npcs/${npcId}/memory/last_interact_at`]: now,
+      [`entities/npcs/${npcId}/state`]:                   'following',
+    })
+
+    return null
   }
 
   /** Fetch POI data and generate a contextual world tip. */
