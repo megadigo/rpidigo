@@ -61,6 +61,9 @@ export class IntroScene extends Phaser.Scene {
 
     document.getElementById('intro-play-btn')!.addEventListener('click', () => {
       overlay.remove(); style.remove()
+      if (!document.fullscreenElement) {
+        void document.documentElement.requestFullscreen({ navigationUI: 'hide' })
+      }
       this.scene.start('LoginScene')
     })
     document.getElementById('intro-help-btn')!.addEventListener('click', () => {

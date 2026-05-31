@@ -8,7 +8,7 @@ import { ref, onValue, push, remove } from 'firebase/database'
 import { db } from '../firebase.ts'
 import { getLocalPlayer, setLocalPlayer } from '../player/Auth.ts'
 import { xpForLevel } from '../world/utils.ts'
-import { virtualInput, isMobileDevice } from '../input/VirtualInput.ts'
+import { virtualInput } from '../input/VirtualInput.ts'
 import type { PlayerInstance } from '../world/types.ts'
 
 /** Chebyshev tile radius — messages outside this range are hidden. */
@@ -56,6 +56,8 @@ export class HudScene extends Phaser.Scene {
 
   private _dpadWrap:  HTMLDivElement | null = null
   private _dpadStyle: HTMLStyleElement | null = null
+  private _fsBtnEl:   HTMLButtonElement | null = null
+  private _fsBtnStyle: HTMLStyleElement | null = null
 
   /** Bound Enter-key handler so it can be removed on shutdown. */
   private _enterHandler!: (e: KeyboardEvent) => void
@@ -81,7 +83,8 @@ export class HudScene extends Phaser.Scene {
       .setOrigin(1, 1).setDepth(101)
 
     this._buildChatPanel()
-    if (isMobileDevice()) this._buildDpad()
+    this._buildDpad()
+    this._buildFullscreenBtn()
     this._subscribeChat(player.room)
     this._subscribePlayer(player.id)
 
@@ -258,50 +261,57 @@ export class HudScene extends Phaser.Scene {
         z-index: 60; user-select: none; -webkit-user-select: none;
       }
 
-      /* Directional cross — bottom LEFT, raised above the compact chat panel */
+      /* Directional cross — bottom LEFT, above the compact chat panel */
       #dpad-dirs {
-        position: absolute; bottom: 90px; left: 16px;
+        position: absolute;
+        bottom: clamp(80px, 18vh, 150px);
+        left: clamp(8px, 2vw, 20px);
         display: grid;
-        grid-template-columns: repeat(3, 48px);
-        grid-template-rows: repeat(3, 48px);
-        gap: 3px;
+        grid-template-columns: repeat(3, clamp(40px, 10vmin, 58px));
+        grid-template-rows:    repeat(3, clamp(40px, 10vmin, 58px));
+        gap: clamp(2px, 0.4vmin, 5px);
         pointer-events: auto; touch-action: none;
       }
-      .dpad-empty { width: 48px; height: 48px; }
-      #dpad-center { width: 48px; height: 48px; }
+      .dpad-empty { width: clamp(40px, 10vmin, 58px); height: clamp(40px, 10vmin, 58px); }
+      #dpad-center { width: clamp(40px, 10vmin, 58px); height: clamp(40px, 10vmin, 58px); }
 
-      /* Action button — bottom RIGHT, same baseline as directional cross */
-      #dpad-action {
-        position: absolute; bottom: 90px; right: 24px;
-        width: 64px; height: 64px;
-        border-radius: 50%;
-        background: rgba(255,220,80,0.15);
-        border: 2px solid rgba(255,220,80,0.45);
-        color: #ffdd44; font-family: monospace;
-        font-size: 18px; font-weight: bold;
-        display: flex; align-items: center; justify-content: center;
-        cursor: pointer; pointer-events: auto; touch-action: none;
-        transition: background 0.08s;
-      }
-      #dpad-action.pressed { background: rgba(255,220,80,0.4); }
-
-      /* Shared button style for directional buttons */
+      /* Shared directional button style */
       .dpad-btn {
-        width: 48px; height: 48px;
+        width:  clamp(40px, 10vmin, 58px);
+        height: clamp(40px, 10vmin, 58px);
+        font-size: clamp(14px, 3.5vmin, 20px);
         background: rgba(255,255,255,0.08);
         border: 1px solid rgba(255,255,255,0.2);
         border-radius: 8px;
-        color: #fff; font-size: 17px;
+        color: #fff;
         display: flex; align-items: center; justify-content: center;
         cursor: pointer; touch-action: none;
         transition: background 0.08s;
       }
       .dpad-btn.pressed { background: rgba(255,255,255,0.25); }
 
-      /* Compact chat on mobile */
-      #chat-panel.mobile { width: 150px; bottom: 8px; }
-      #chat-panel.mobile #chat-log  { max-height: 44px; font-size: 9px; }
-      #chat-panel.mobile #chat-input { font-size: 9px; padding: 1px 4px; }
+      /* Action button — bottom RIGHT, same baseline */
+      #dpad-action {
+        position: absolute;
+        bottom: clamp(80px, 18vh, 150px);
+        right: clamp(8px, 2vw, 20px);
+        width:  clamp(52px, 13vmin, 70px);
+        height: clamp(52px, 13vmin, 70px);
+        border-radius: 50%;
+        background: rgba(255,220,80,0.15);
+        border: 2px solid rgba(255,220,80,0.45);
+        color: #ffdd44; font-family: monospace;
+        font-size: clamp(16px, 4vmin, 22px); font-weight: bold;
+        display: flex; align-items: center; justify-content: center;
+        cursor: pointer; pointer-events: auto; touch-action: none;
+        transition: background 0.08s;
+      }
+      #dpad-action.pressed { background: rgba(255,220,80,0.4); }
+
+      /* Compact chat — always compact since controls are always visible */
+      #chat-panel { width: clamp(120px, 28vw, 200px) !important; bottom: 8px !important; }
+      #chat-log   { max-height: clamp(36px, 8vh, 60px) !important; font-size: 9px !important; }
+      #chat-input { font-size: 9px !important; padding: 1px 4px !important; }
     `
     document.head.appendChild(this._dpadStyle)
 
@@ -341,8 +351,40 @@ export class HudScene extends Phaser.Scene {
       btn.addEventListener('pointerleave',  release)
     }
 
-    // Compact chat
-    this._chatPanel?.classList.add('mobile')
+    // Chat compactness is driven by the #dpad CSS !important overrides above
+  }
+
+  private _buildFullscreenBtn(): void {
+    this._fsBtnStyle = document.createElement('style')
+    this._fsBtnStyle.textContent = `
+      #hud-fs {
+        position: fixed; top: 2px; right: 2px; z-index: 102;
+        background: transparent; border: 1px solid rgba(255,255,255,0.25);
+        color: rgba(255,255,255,0.5); font-family: monospace;
+        font-size: 11px; padding: 0 5px; line-height: 16px;
+        cursor: pointer; user-select: none;
+      }
+      #hud-fs:hover { border-color: #fff; color: #fff; }
+    `
+    document.head.appendChild(this._fsBtnStyle)
+
+    this._fsBtnEl = document.createElement('button')
+    this._fsBtnEl.id  = 'hud-fs'
+    this._fsBtnEl.textContent = '⛶'
+    this._fsBtnEl.title = 'Toggle fullscreen'
+    document.body.appendChild(this._fsBtnEl)
+
+    const update = () => {
+      this._fsBtnEl!.textContent = document.fullscreenElement ? '⊡' : '⛶'
+    }
+    this._fsBtnEl.addEventListener('click', () => {
+      if (document.fullscreenElement) {
+        void document.exitFullscreen()
+      } else {
+        void document.documentElement.requestFullscreen({ navigationUI: 'hide' })
+      }
+    })
+    document.addEventListener('fullscreenchange', update)
   }
 
   private _teardown(): void {
@@ -353,6 +395,8 @@ export class HudScene extends Phaser.Scene {
     this._chatStyle?.remove()
     this._dpadWrap?.remove()
     this._dpadStyle?.remove()
+    this._fsBtnEl?.remove()
+    this._fsBtnStyle?.remove()
     // Release all virtual inputs so nothing stays stuck after scene teardown
     virtualInput.up = virtualInput.down = virtualInput.left = virtualInput.right = virtualInput.action = false
   }

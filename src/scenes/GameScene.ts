@@ -33,7 +33,6 @@ import type { CraftSceneData } from './CraftScene.ts'
 import type { ShopSceneData } from './ShopScene.ts'
 import type { StorageSceneData } from './StorageScene.ts'
 import type { DeathSceneData } from './DeathScene.ts'
-import { isMobileDevice } from '../input/VirtualInput.ts'
 
 /** Tile bounds of the 1000×1000 overworld in pixels. */
 const WORLD_PIXEL_SIZE = 1000 * TILE_SIZE
@@ -149,18 +148,17 @@ export class GameScene extends Phaser.Scene {
     // Zoom controls (scroll wheel)
     this.input.on('wheel', (_p: unknown, _go: unknown, _dx: number, dy: number) => {
       const cam     = this.cameras.main
-      const minZ    = isMobileDevice() ? 2 : 1
+      const minZ    = Math.min(window.innerWidth, window.innerHeight) < 600 ? 2 : 1
       const step    = dy > 0 ? -1 : 1
       const newZoom = Phaser.Math.Clamp(cam.zoom + step, minZ, 4)
       cam.setZoom(newZoom)
       localStorage.setItem('rpidigo.zoom', String(newZoom))
     })
 
-    const isMobile    = isMobileDevice()
-    const minZoom     = isMobile ? 2 : 1
-    const defaultZoom = isMobile ? 2 : 1
+    const screenMin   = Math.min(window.innerWidth, window.innerHeight)
+    const defaultZoom = screenMin < 600 ? 2 : 1
     const savedZoom   = parseInt(localStorage.getItem('rpidigo.zoom') ?? String(defaultZoom), 10)
-    this.cameras.main.setZoom(Phaser.Math.Clamp(savedZoom, minZoom, 4))
+    this.cameras.main.setZoom(Phaser.Math.Clamp(savedZoom, defaultZoom, 4))
 
     // I key — open inventory (Step 11)
     const iKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.I)
@@ -173,8 +171,8 @@ export class GameScene extends Phaser.Scene {
       })
     }
 
-    // Tap-to-interact on mobile — tapping an adjacent world tile acts like E key
-    if (isMobileDevice()) {
+    // Tap / click to interact — tapping an adjacent world tile acts like the A key
+    {
       this.input.on('pointerup', (p: Phaser.Input.Pointer) => {
         if (this._isDead) return
         // Ignore taps consumed by DOM overlays (dialogs, inventory, etc.)
