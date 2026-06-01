@@ -8,7 +8,7 @@ import type { PlayerInstance } from '../world/types.ts'
 import { sha256 } from '../world/utils.ts'
 import { ensureWorldReady } from '../world/WorldBootstrap.ts'
 import { isPassable } from '../world/CollisionMap.ts'
-import { ensureChunk, setTile } from '../world/ChunkManager.ts'
+import { ensureChunk, setTile, overworldTilePath } from '../world/ChunkManager.ts'
 import { CHUNK_SIZE } from '../world/ChunkGen.ts'
 import { generateHouseRoom } from '../world/HouseGen.ts'
 import type { TileData } from '../world/types.ts'
@@ -70,13 +70,13 @@ export async function register(
   // chunk generation cannot overwrite it afterwards.
   await ensureChunk(Math.floor(housePos.x / CHUNK_SIZE), Math.floor(housePos.y / CHUNK_SIZE))
   const houseTile: TileData = { g: 'grass', m: ['house_hut'] }
-  await set(ref(db, `map/0/${housePos.x}_${housePos.y}`), houseTile)
+  await set(ref(db, overworldTilePath(housePos.x, housePos.y)), houseTile)
   setTile(housePos.x, housePos.y, houseTile)
 
   // Generate and persist the personal house interior (workbench + storage chest)
   const houseRoom = generateHouseRoom(housePos.x, housePos.y, housePos.x * 73856093 ^ housePos.y * 19349663, 'player_house')
   const roomTiles: Record<string, unknown> = {}
-  for (const [k, t] of houseRoom.tiles) roomTiles[`map/${houseRoom.roomId}/${k}`] = JSON.parse(JSON.stringify(t))
+  for (const [k, t] of houseRoom.tiles) roomTiles[`map/${houseRoom.roomId}/${k}`] = t
   if (Object.keys(roomTiles).length) await update(ref(db), roomTiles)
 
   // Write player

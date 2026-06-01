@@ -3,7 +3,7 @@
  * Writes new chunks to Firebase; reads existing chunks from Firebase.
  */
 import { db } from '../firebase.ts'
-import { ref, get, set, update } from 'firebase/database'
+import { ref, get, update } from 'firebase/database'
 import type { ChunkData, TileData, EnemyInstance, PoiLayout } from './types.ts'
 import { generateChunk, CHUNK_SIZE, buildNoise, type NoiseConfig } from './ChunkGen.ts'
 import type { RoadNetwork } from './RoadNetwork.ts'
@@ -102,13 +102,31 @@ function _regenIfExpired(tile: TileData, key: string, room: string): TileData {
   }
 
   // Persist asynchronously so the restored state survives next load
-  void update(ref(db), { [`map/${room}/${key}`]: restored })
+  if (room === '0') {
+    const sep = key.indexOf('_')
+    const tx = parseInt(key.slice(0, sep), 10)
+    const ty = parseInt(key.slice(sep + 1), 10)
+    void update(ref(db), { [overworldTilePath(tx, ty)]: restored })
+  } else {
+    void update(ref(db), { [`map/${room}/${key}`]: restored })
+  }
 
   return restored
 }
 
 /** Returns the currently active room ID, or null when in the overworld. */
 export function getActiveRoom(): string | null { return _activeRoom }
+
+/**
+ * Firebase path for a single overworld tile.
+ * Tiles are stored under map/0/{cx}_{cy}/{x}_{y} so each chunk is an
+ * independent subtree — reads and writes never touch other chunks.
+ */
+export function overworldTilePath(x: number, y: number): string {
+  const cx = Math.floor(x / CHUNK_SIZE)
+  const cy = Math.floor(y / CHUNK_SIZE)
+  return `map/0/${cx}_${cy}/${tileKey(x, y)}`
+}
 
 /**
  * Returns the natural terrain zone at a world tile position using the same
@@ -214,34 +232,21 @@ export async function ensureRadius(cx: number, cy: number, radius: number): Prom
 }
 
 async function _loadOrGenerateChunk(cx: number, cy: number, key: string): Promise<void> {
-  // Check sentinel in Firebase
-  const sentinelRef = ref(db, `map/chunks/${key}`)
-  const snap = await get(sentinelRef)
+  // The chunk subtree map/0/{key} acts as its own sentinel: present = generated.
+  // One round-trip both checks existence and returns all tile data.
+  const snap = await get(ref(db, `map/0/${key}`))
 
   if (snap.exists()) {
-    // Chunk already generated — load tile data from Firebase
-    await _loadChunkFromFirebase(cx, cy)
+    const all = snap.val() as Record<string, TileData>
+    for (const [k, t] of Object.entries(all)) {
+      tileCache.set(k, _regenIfExpired(t, k, '0'))
+    }
   } else {
-    // Generate chunk and persist
     await _generateAndPersistChunk(cx, cy, key)
   }
 
   _trackAccess(key)
   loadedChunks.add(key)
-}
-
-async function _loadChunkFromFirebase(cx: number, cy: number): Promise<void> {
-  const originX = cx * CHUNK_SIZE
-  const originY = cy * CHUNK_SIZE
-  const snap = await get(ref(db, `map/0`))
-  if (!snap.exists()) return
-  const all = snap.val() as Record<string, TileData>
-  for (let lx = 0; lx < CHUNK_SIZE; lx++) {
-    for (let ly = 0; ly < CHUNK_SIZE; ly++) {
-      const k = tileKey(originX + lx, originY + ly)
-      if (all[k]) tileCache.set(k, _regenIfExpired(all[k], k, '0'))
-    }
-  }
 }
 
 async function _generateAndPersistChunk(cx: number, cy: number, key: string): Promise<void> {
@@ -253,10 +258,11 @@ async function _generateAndPersistChunk(cx: number, cy: number, key: string): Pr
     cellarRooms?: Array<ReturnType<typeof generateCellarRoom>>
   }
 
-  // 1. Overworld tiles — single update per chunk (~30KB, under Firebase's 256KB limit)
+  // 1. Overworld tiles — stored under map/0/{cx}_{cy}/{x}_{y} so each chunk
+  //    is an independent subtree; no other chunk's data is touched or read.
   const tileUpdate: Record<string, unknown> = {}
   for (const [k, t] of Object.entries(chunkData.tiles)) {
-    tileUpdate[`map/0/${k}`] = JSON.parse(JSON.stringify(t))
+    tileUpdate[`map/0/${key}/${k}`] = t
     tileCache.set(k, t)
   }
   await update(ref(db), tileUpdate)
@@ -264,7 +270,7 @@ async function _generateAndPersistChunk(cx: number, cy: number, key: string): Pr
   // 2. Enemies + NPCs (small; single write is fine)
   const entityUpdate: Record<string, unknown> = {}
   for (const enemy of chunkData.enemies) {
-    entityUpdate[`entities/enemies/${enemy.id}`] = JSON.parse(JSON.stringify(enemy))
+    entityUpdate[`entities/enemies/${enemy.id}`] = enemy
     entityUpdate[`presence/0/enemies/${enemy.id}`] = {
       x: enemy.x, y: enemy.y,
       templateId: enemy.templateId,
@@ -273,7 +279,7 @@ async function _generateAndPersistChunk(cx: number, cy: number, key: string): Pr
     }
   }
   for (const npc of chunkData.npcs) {
-    entityUpdate[`entities/npcs/${npc.id}`] = JSON.parse(JSON.stringify(npc))
+    entityUpdate[`entities/npcs/${npc.id}`] = npc
     entityUpdate[`presence/0/npcs/${npc.id}`] = {
       x: npc.x, y: npc.y,
       templateId: npc.templateId,
@@ -288,14 +294,13 @@ async function _generateAndPersistChunk(cx: number, cy: number, key: string): Pr
       for (const floor of floors) {
         const floorTileUpdate: Record<string, unknown> = {}
         for (const [k, t] of floor.tiles) {
-          floorTileUpdate[`map/${floor.room}/${k}`] = JSON.parse(JSON.stringify(t))
+          floorTileUpdate[`map/${floor.room}/${k}`] = t
         }
-        // Each dungeon floor is ~48KB at most — single update is fine
         await update(ref(db), floorTileUpdate)
 
         const floorEntityUpdate: Record<string, unknown> = {}
         for (const enemy of floor.enemies) {
-          floorEntityUpdate[`entities/enemies/${enemy.id}`] = JSON.parse(JSON.stringify(enemy))
+          floorEntityUpdate[`entities/enemies/${enemy.id}`] = enemy
           floorEntityUpdate[`presence/${floor.room}/enemies/${enemy.id}`] = {
             x: enemy.x, y: enemy.y,
             templateId: enemy.templateId,
@@ -308,7 +313,7 @@ async function _generateAndPersistChunk(cx: number, cy: number, key: string): Pr
     }
   }
 
-  // 4. House rooms — each room's tiles batched separately (rooms are small, ~144 tiles)
+  // 4. House rooms (small, ~144 tiles each)
   if (chunkData.houseRooms) {
     for (const room of chunkData.houseRooms) {
       await _persistRoomTiles(room.roomId, room.tiles)
@@ -321,7 +326,7 @@ async function _generateAndPersistChunk(cx: number, cy: number, key: string): Pr
       await _persistRoomTiles(room.roomId, room.tiles)
       const cellarEntityUpdate: Record<string, unknown> = {}
       for (const enemy of room.enemies) {
-        cellarEntityUpdate[`entities/enemies/${enemy.id}`] = JSON.parse(JSON.stringify(enemy))
+        cellarEntityUpdate[`entities/enemies/${enemy.id}`] = enemy
         cellarEntityUpdate[`presence/${room.roomId}/enemies/${enemy.id}`] = {
           x: enemy.x, y: enemy.y,
           templateId: enemy.templateId,
@@ -332,15 +337,13 @@ async function _generateAndPersistChunk(cx: number, cy: number, key: string): Pr
       if (Object.keys(cellarEntityUpdate).length > 0) await update(ref(db), cellarEntityUpdate)
     }
   }
-
-  // 5. Sentinel last — signals other clients that tiles are fully written
-  await set(ref(db, `map/chunks/${key}`), true)
+  // No separate sentinel write — the presence of map/0/{key} after step 1 is the sentinel.
 }
 
 async function _persistRoomTiles(roomId: string, tiles: Map<string, TileData>): Promise<void> {
   const roomUpdate: Record<string, unknown> = {}
   for (const [k, t] of tiles) {
-    roomUpdate[`map/${roomId}/${k}`] = JSON.parse(JSON.stringify(t))
+    roomUpdate[`map/${roomId}/${k}`] = t
   }
   await update(ref(db), roomUpdate)
 }

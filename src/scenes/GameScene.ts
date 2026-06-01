@@ -17,7 +17,7 @@ import { TilemapRenderer, TILE_SIZE, isTileRoomExit } from '../renderer/TilemapR
 import type { Direction } from '../renderer/SpriteAnim.ts'
 import { ANIM_FRAMES, FRAME_DURATION_MS, directionFromVelocity, getFrame } from '../renderer/SpriteAnim.ts'
 import { PlayerController } from '../player/PlayerController.ts'
-import { enterRoom, exitRoom, findTileInRoom, findAllTilesInRoom, getTile, setTile, getActiveRoom, getWorldZone, ensureRadius, tileToChunk } from '../world/ChunkManager.ts'
+import { enterRoom, exitRoom, findTileInRoom, findAllTilesInRoom, getTile, setTile, getActiveRoom, getWorldZone, ensureRadius, tileToChunk, overworldTilePath } from '../world/ChunkManager.ts'
 import { getWorldConfig } from '../world/WorldBootstrap.ts'
 import { setRoomLocked } from '../world/RoomState.ts'
 import { HOUSE_ROOM_SIZE } from '../world/HouseGen.ts'
@@ -25,7 +25,7 @@ import { CELLAR_ROOM_SIZE } from '../world/CellarGen.ts'
 import { getLocalPlayer, setLocalPlayer } from '../player/Auth.ts'
 import { remotePlayerTiles, remoteEnemyTiles, isPassable } from '../world/CollisionMap.ts'
 import { xpForLevel, tileKey } from '../world/utils.ts'
-import { EnemyRegistry, TileRegistry } from '../registry/registries.ts'
+import { EnemyRegistry, TileRegistry, ItemRegistry } from '../registry/registries.ts'
 import { ScriptExecutor } from '../world/ScriptExecutor.ts'
 import type { NearbyPlayer } from '../world/ScriptExecutor.ts'
 import type { DialogSceneData } from './DialogScene.ts'
@@ -469,13 +469,16 @@ export class GameScene extends Phaser.Scene {
     this._deathRoom = player.room
 
     const inv = player.inventory ?? []
-    this._deathItemsDropped = inv.length
-    this._dropInventoryAsLoot(player.room)
-    player.inventory = []
+    const keptItems  = inv.filter(s => { try { return ItemRegistry.get(s.itemId).category === 'tool' } catch { return false } })
+    const droppedItems = inv.filter(s => { try { return ItemRegistry.get(s.itemId).category !== 'tool' } catch { return true } })
+
+    this._deathItemsDropped = droppedItems.length
+    this._dropInventoryAsLoot(player.room, droppedItems)
+    player.inventory = keptItems
     setLocalPlayer(player)
     void update(ref(db), {
       [`players/${player.id}/hp`]:        0,
-      [`players/${player.id}/inventory`]: [],
+      [`players/${player.id}/inventory`]: keptItems,
     })
 
     const data: DeathSceneData = {
@@ -498,16 +501,14 @@ export class GameScene extends Phaser.Scene {
    * with only presence-driven enemy sprites visible.
    */
   private async _respawn(): Promise<void> {
-    const player  = getLocalPlayer()
-    const oldRoom = player.room
-    const hx = player.house?.x ?? player.x
-    const hy = player.house?.y ?? player.y
+    const player   = getLocalPlayer()
+    const oldRoom  = player.room
+    const houseTx  = player.house?.x ?? player.x
+    const houseTy  = player.house?.y ?? player.y
 
-    // Restore HP and persist position before any async work
+    // Restore HP
     player.hp   = Math.max(1, Math.floor(player.maxHp * 0.5))
     player.room = '0'
-    player.x    = hx
-    player.y    = hy
     setLocalPlayer(player)
 
     // Exit room if the player died inside one
@@ -518,11 +519,36 @@ export class GameScene extends Phaser.Scene {
       this.playerController.startCameraFollow()
     }
 
-    // Move sprite and camera to house now (still frozen)
-    this.playerController.teleport(hx, hy)
+    // Point camera toward the house while chunks load (sprite position updated below)
+    this.playerController.teleport(houseTx, houseTy)
     this._subscribePresence('0')
 
-    // Persist respawn state to Firebase
+    // Load the chunks around the house before checking passability or unfreezing
+    const ck = tileToChunk(houseTx, houseTy)
+    const [cxStr, cyStr] = ck.split('_')
+    await ensureRadius(parseInt(cxStr, 10), parseInt(cyStr, 10), 2)
+
+    // Find a passable tile to land on — the house building tile itself is
+    // impassable, so prefer the tile just below the door and fall back outward.
+    const candidates: [number, number][] = [
+      [houseTx,     houseTy + 1],
+      [houseTx,     houseTy + 2],
+      [houseTx - 1, houseTy + 1],
+      [houseTx + 1, houseTy + 1],
+      [houseTx - 1, houseTy],
+      [houseTx + 1, houseTy],
+    ]
+    let [hx, hy] = candidates[0]
+    for (const [cx, cy] of candidates) {
+      if (isPassable(cx, cy)) { hx = cx; hy = cy; break }
+    }
+
+    // Snap sprite to the passable spawn tile and persist
+    player.x = hx
+    player.y = hy
+    setLocalPlayer(player)
+    this.playerController.teleport(hx, hy)
+
     const respawnUpdate: Record<string, unknown> = {
       [`players/${player.id}/hp`]:   player.hp,
       [`players/${player.id}/x`]:    hx,
@@ -540,13 +566,6 @@ export class GameScene extends Phaser.Scene {
       respawnUpdate[`presence/${oldRoom}/players/${player.id}`] = null
     }
     void update(ref(db), respawnUpdate)
-
-    // Wait for the overworld chunks around the house to be in the local tile
-    // cache before unfreezing — prevents the player from spawning into a blank
-    // world where only presence-driven enemies are visible.
-    const ck = tileToChunk(hx, hy)
-    const [cxStr, cyStr] = ck.split('_')
-    await ensureRadius(parseInt(cxStr, 10), parseInt(cyStr, 10), 2)
 
     // Chunks are ready — mark the renderer dirty so drawViewport paints them
     // on the very next update() call, then hand control back to the player.
@@ -1287,7 +1306,7 @@ export class GameScene extends Phaser.Scene {
 
     // Persist to Firebase
     await update(ref(db), {
-      [`map/${room}/${tileKey(cx, cy)}`]:  newTileData,
+      [room === '0' ? overworldTilePath(cx, cy) : `map/${room}/${tileKey(cx, cy)}`]: newTileData,
       [`players/${player.id}/inventory`]:  newInv,
       [`players/${player.id}/gold`]:       newGold,
     })
@@ -1322,8 +1341,7 @@ export class GameScene extends Phaser.Scene {
    * (called on death). Gold is kept, not dropped. The chest can be reopened with
    * E by anyone who returns to the spot.
    */
-  private _dropInventoryAsLoot(room: string): void {
-    const inv = getLocalPlayer().inventory ?? []
+  private _dropInventoryAsLoot(room: string, inv: { itemId: string; quantity: number }[]): void {
     if (!inv.length) return
     const tx = Math.floor(this.playerController.px / TILE_SIZE)
     const ty = Math.floor(this.playerController.py / TILE_SIZE)
@@ -1339,7 +1357,7 @@ export class GameScene extends Phaser.Scene {
     }
     setTile(tx, ty, newTile)
     this.tilemapRenderer.invalidateTile(tx, ty)
-    void update(ref(db), { [`map/${room || '0'}/${tileKey(tx, ty)}`]: newTile })
+    void update(ref(db), { [(room || '0') === '0' ? overworldTilePath(tx, ty) : `map/${room}/${tileKey(tx, ty)}`]: newTile })
   }
 
   /**

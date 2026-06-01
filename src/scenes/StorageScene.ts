@@ -16,7 +16,7 @@ import Phaser from 'phaser'
 import { ref, update } from 'firebase/database'
 import { db } from '../firebase.ts'
 import { getLocalPlayer, setLocalPlayer } from '../player/Auth.ts'
-import { getTile, setTile } from '../world/ChunkManager.ts'
+import { getTile, setTile, overworldTilePath } from '../world/ChunkManager.ts'
 import { tileKey } from '../world/utils.ts'
 import { WeaponRegistry, ArmorRegistry, ItemRegistry } from '../registry/registries.ts'
 
@@ -318,7 +318,7 @@ export class StorageScene extends Phaser.Scene {
 
     setTile(this._data.tileX, this._data.tileY, newTile)
     void update(ref(db), {
-      [`map/${this._data.roomId}/${tileKey(this._data.tileX, this._data.tileY)}`]: newTile,
+      [this._data.roomId === '0' ? overworldTilePath(this._data.tileX, this._data.tileY) : `map/${this._data.roomId}/${tileKey(this._data.tileX, this._data.tileY)}`]: newTile,
       [`players/${player.id}/gold`]:      player.gold,
       [`players/${player.id}/inventory`]: player.inventory,
     })

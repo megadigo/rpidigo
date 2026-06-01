@@ -4,7 +4,7 @@
  */
 import Phaser from 'phaser'
 import { ensureWorldReady } from '../world/WorldBootstrap.ts'
-import { ensureRadius, ensureChunk, getTile, setTile } from '../world/ChunkManager.ts'
+import { ensureRadius, ensureChunk, getTile, setTile, overworldTilePath } from '../world/ChunkManager.ts'
 import { getLocalPlayer, setLocalPlayer } from '../player/Auth.ts'
 import type { TileData } from '../world/types.ts'
 import { isPassable } from '../world/CollisionMap.ts'
@@ -132,7 +132,7 @@ export class LoadingScene extends Phaser.Scene {
         if (!hasHut) {
           const houseTile: TileData = { g: 'grass', m: ['house_hut'] }
           setTile(house.x, house.y, houseTile)
-          void update(ref(db), { [`map/0/${house.x}_${house.y}`]: houseTile })
+          void update(ref(db), { [overworldTilePath(house.x, house.y)]: houseTile })
         }
       }
 
