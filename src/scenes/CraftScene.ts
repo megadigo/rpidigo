@@ -257,7 +257,7 @@ export class CraftScene extends Phaser.Scene {
                 : def.category === 'armor'  ? 'Armors'
                 : def.category === 'tool'   ? 'Tools'
                 : 'Items'
-      return `/assets/sprites/${dir}/${def.spriteFrame}`
+      return `assets/sprites/${dir}/${def.spriteFrame}`
     } catch { return '' }
   }
 
