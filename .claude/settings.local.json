@@ -14,7 +14,13 @@
       "Bash(Get-ChildItem -Path \"d:\\\\GitHub\\\\rpidigo\" -Recurse -Directory)",
       "Bash(Select-Object -ExpandProperty FullName)",
       "Bash(Remove-Item \"d:\\\\GitHub\\\\rpidigo\\\\src\\\\scenes\\\\MapScene.ts\")",
-      "Bash(npm run *)"
+      "Bash(npm run *)",
+      "Bash(Get-ChildItem -Path \"d:\\\\GitHub\\\\rpidigo\" -Force)",
+      "Bash(Select-Object Name, PSIsContainer)",
+      "Bash(Format-Table -AutoSize)",
+      "Bash(grep -E \"\\\\.ts$\")",
+      "Bash(Get-ChildItem -Path \"d:\\\\GitHub\\\\rpidigo\\\\public\\\\assets\\\\sprites\" -Recurse -Filter \"*.png\")",
+      "Bash(Sort-Object)"
     ]
   }
 }

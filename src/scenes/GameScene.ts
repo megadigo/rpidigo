@@ -264,8 +264,16 @@ export class GameScene extends Phaser.Scene {
       this._showFloatText(tx, ty, text, '#ff8844')
     })
 
-    // Subscribe to the overworld presence room on startup
-    this._subscribePresence(getLocalPlayer().room)
+    // On startup: if the player logged off inside a room, restore them there;
+    // otherwise subscribe to the overworld presence channel.
+    {
+      const p = getLocalPlayer()
+      if (p.room !== '0') {
+        void this._restoreRoom(p.room, p.x, p.y)
+      } else {
+        this._subscribePresence('0')
+      }
+    }
 
     // Clean up Firebase listeners when the scene shuts down
     this.events.on(Phaser.Scenes.Events.SHUTDOWN, () => {
@@ -549,7 +557,7 @@ export class GameScene extends Phaser.Scene {
     // If the player dropped items, write a direction hint to the chat so they
     // know where to retrieve their belongings.
     if (this._deathItemsDropped > 0) {
-      const hint = this._lootDirectionHint(hx, hy)
+      const hint = this._lootDirectionHint(hx, hy, player.name)
       if (hint) {
         const now = Date.now()
         void update(ref(db), {
@@ -563,7 +571,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   /** Build a proximity-chat hint pointing from (hx,hy) toward the loot chest. */
-  private _lootDirectionHint(hx: number, hy: number): string | null {
+  private _lootDirectionHint(hx: number, hy: number, playerName: string): string | null {
     const room = this._deathRoom
     let targetX: number
     let targetY: number
@@ -572,7 +580,7 @@ export class GameScene extends Phaser.Scene {
     if (room === '0') {
       targetX = this._deathTx
       targetY = this._deathTy
-      prefix  = 'Your belongings lie'
+      prefix  = `${playerName}'s belongings lie`
     } else {
       // Parse the room ID to find the building's overworld tile coordinates
       const houseM   = /^house_(\d{4})_(\d{4})$/.exec(room)
@@ -580,13 +588,13 @@ export class GameScene extends Phaser.Scene {
       const cellarM  = /^cellar_(\d{4})_(\d{4})$/.exec(room)
       if (houseM) {
         targetX = parseInt(houseM[1], 10); targetY = parseInt(houseM[2], 10)
-        prefix  = 'Your belongings are in a house'
+        prefix  = `${playerName}'s belongings are in a house`
       } else if (dungeonM) {
         targetX = parseInt(dungeonM[1], 10); targetY = parseInt(dungeonM[2], 10)
-        prefix  = `Your belongings are in a dungeon (floor ${dungeonM[3]})`
+        prefix  = `${playerName}'s belongings are in a dungeon (floor ${dungeonM[3]})`
       } else if (cellarM) {
         targetX = parseInt(cellarM[1], 10); targetY = parseInt(cellarM[2], 10)
-        prefix  = 'Your belongings are in a cellar'
+        prefix  = `${playerName}'s belongings are in a cellar`
       } else {
         return null
       }
@@ -631,6 +639,28 @@ export class GameScene extends Phaser.Scene {
       return anchor
     }
     return { x: 2, y: 2 }
+  }
+
+  private async _restoreRoom(roomId: string, spawnX: number, spawnY: number): Promise<void> {
+    await enterRoom(roomId)
+    this.tilemapRenderer.reset()
+    this.playerController.teleport(spawnX, spawnY)
+
+    const roomSize = roomId.startsWith('house_')  ? HOUSE_ROOM_SIZE
+                   : roomId.startsWith('cellar_') ? CELLAR_ROOM_SIZE
+                   : 40
+    const roomPixelSize = roomSize * TILE_SIZE
+
+    if (roomId.startsWith('house_')) {
+      this.cameras.main.stopFollow()
+      this.cameras.main.removeBounds()
+      this.cameras.main.centerOn(roomPixelSize / 2, roomPixelSize / 2)
+    } else {
+      this.cameras.main.setBounds(0, 0, roomPixelSize, roomPixelSize)
+      this.playerController.startCameraFollow()
+    }
+
+    this._subscribePresence(roomId)
   }
 
   private async _handleEnterRoom(roomId: string, spawnNear: string): Promise<void> {

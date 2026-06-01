@@ -73,24 +73,15 @@ export class PlayerController {
   create(): void {
     const player = getLocalPlayer()
 
-    // If the player logged out inside a room, return them to the overworld
-    // at their saved return position rather than spawning at room-local coords.
-    if (player.room !== '0') {
-      const rx = player.returnX ?? player.x
-      const ry = player.returnY ?? player.y
-      player.room = '0'
-      player.x = rx
-      player.y = ry
-      setLocalPlayer(player)
-      void update(ref(db), {
-        [`players/${player.id}/room`]: '0',
-        [`players/${player.id}/x`]: rx,
-        [`players/${player.id}/y`]: ry,
-      })
-    }
-
     this.px = player.x * TILE_SIZE + TILE_SIZE / 2
     this.py = player.y * TILE_SIZE + TILE_SIZE / 2
+
+    // Restore the overworld exit-target so the door sends the player back to
+    // the correct tile instead of defaulting to (0,0) after a re-login.
+    if (player.room !== '0') {
+      this._returnX = player.returnX ?? player.x
+      this._returnY = player.returnY ?? player.y
+    }
 
     // Player sprite — champion spritesheet, frame 0 (global sprite convention)
     this.sprite = this.scene.add.sprite(this.px, this.py, player.championId)

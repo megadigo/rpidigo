@@ -117,7 +117,9 @@ export class CraftScene extends Phaser.Scene {
       const locked    = player.level < r.levelRequired
       const craftable = !locked && this._canCraft(r)
       const cls       = locked ? 'craft-row locked' : craftable ? 'craft-row craftable' : 'craft-row'
+      const sprite    = this._spriteUrl(r.produces)
       return `<div class="${cls}" data-id="${r.id}">
+        ${sprite ? `<img class="craft-sprite" src="${sprite}" alt="">` : ''}
         <span class="craft-row-name">${_esc(this._outputName(r))}</span>
         ${locked ? `<span class="craft-row-lvl">Lv.${r.levelRequired}</span>` : ''}
       </div>`
@@ -145,20 +147,26 @@ export class CraftScene extends Phaser.Scene {
     const inv    = player.inventory ?? []
 
     const reqRows = r.requires.map(req => {
-      const have  = inv.find(s => s.itemId === req.itemId)?.quantity ?? 0
-      const color = have >= req.qty ? '#88ffcc' : '#ff8888'
+      const have    = inv.find(s => s.itemId === req.itemId)?.quantity ?? 0
+      const color   = have >= req.qty ? '#88ffcc' : '#ff8888'
+      const reqSprite = this._spriteUrl(req.itemId)
       return `<div class="req-row">
+        ${reqSprite ? `<img class="craft-sprite" src="${reqSprite}" alt="">` : ''}
         <span class="req-name">${_esc(this._itemName(req.itemId))}</span>
         <span class="req-count" style="color:${color}">${have}/${req.qty}</span>
       </div>`
     }).join('')
 
-    const craftable  = this._canCraft(r)
-    const outputName = this._outputName(r)
+    const craftable    = this._canCraft(r)
+    const outputName   = this._outputName(r)
+    const outputSprite = this._spriteUrl(r.produces)
 
     detail.innerHTML = `
       <div class="craft-section-title">Recipe</div>
-      <div id="craft-output-name">${_esc(outputName)}${r.quantity > 1 ? ` ×${r.quantity}` : ''}</div>
+      <div id="craft-output-row">
+        ${outputSprite ? `<img class="craft-sprite-lg" src="${outputSprite}" alt="">` : ''}
+        <div id="craft-output-name">${_esc(outputName)}${r.quantity > 1 ? ` ×${r.quantity}` : ''}</div>
+      </div>
       <div class="craft-section-title" style="margin-top:10px">Requires</div>
       <div id="craft-reqs">${reqRows}</div>
       <button id="craft-btn" ${craftable ? '' : 'disabled'}>Craft</button>
@@ -236,6 +244,21 @@ export class CraftScene extends Phaser.Scene {
       if (ItemRegistry.has(id))   return ItemRegistry.get(id).name
     } catch { /* ignore */ }
     return id.replace(/_/g, ' ')
+  }
+
+  private _spriteUrl(id: string): string {
+    try {
+      let def: { spriteFrame: string; category: string } | undefined
+      if (WeaponRegistry.has(id))     def = WeaponRegistry.get(id)
+      else if (ArmorRegistry.has(id)) def = ArmorRegistry.get(id)
+      else if (ItemRegistry.has(id))  def = ItemRegistry.get(id)
+      if (!def) return ''
+      const dir = def.category === 'weapon' ? 'Weapons'
+                : def.category === 'armor'  ? 'Armors'
+                : def.category === 'tool'   ? 'Tools'
+                : 'Items'
+      return `/assets/sprites/${dir}/${def.spriteFrame}`
+    } catch { return '' }
   }
 
   private _showToast(msg: string): void {
@@ -328,7 +351,7 @@ const CRAFT_CSS = `
   .craft-row {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    gap: 6px;
     padding: 4px 6px;
     border: 1px solid #1e1e1e;
     margin-bottom: 2px;
@@ -336,11 +359,12 @@ const CRAFT_CSS = `
     cursor: pointer;
     font-size: 10px;
   }
+
   .craft-row:not(.locked):hover { border-color: #555; background: #1a1a1a; }
   .craft-row.selected { border-color: #aaa; background: #1e1e22; }
   .craft-row.craftable .craft-row-name { color: #88ffcc; }
   .craft-row.locked { opacity: 0.4; cursor: default; }
-  .craft-row-name { color: #ccc; }
+  .craft-row-name { flex: 1; color: #ccc; }
   .craft-row-lvl  { font-size: 9px; color: #ff8844; }
   .craft-empty { font-size: 11px; color: #444; padding: 6px 0; }
 
@@ -351,20 +375,42 @@ const CRAFT_CSS = `
     flex-direction: column;
     justify-content: space-between;
   }
+  .craft-sprite {
+    width: 16px;
+    height: 16px;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    flex-shrink: 0;
+    object-fit: none;
+    object-position: 0 0;
+  }
+  .craft-sprite-lg {
+    width: 32px;
+    height: 32px;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    flex-shrink: 0;
+  }
+  #craft-output-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 2px;
+  }
   #craft-output-name {
     font-size: 12px;
     color: #fff;
-    margin-bottom: 2px;
   }
   #craft-reqs { margin-top: 4px; }
   .req-row {
     display: flex;
-    justify-content: space-between;
+    align-items: center;
+    gap: 6px;
     font-size: 10px;
     color: #bbb;
     padding: 2px 0;
   }
-  .req-name  { color: #bbb; }
+  .req-name  { color: #bbb; flex: 1; }
   .req-count { font-size: 10px; letter-spacing: 0.04em; }
   #craft-btn {
     margin-top: 14px;

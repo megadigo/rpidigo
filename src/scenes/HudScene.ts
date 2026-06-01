@@ -79,7 +79,7 @@ export class HudScene extends Phaser.Scene {
     this.mpText   = this.add.text(300, 3, '', style).setDepth(101)
     this.goldText = this.add.text(440, 3, '', style).setDepth(101)
     this.xpText   = this.add.text(560, 3, '', { ...style, color: '#aaddff' }).setDepth(101)
-    this.posText  = this.add.text(this.scale.width - 6, this.scale.height - 4, '', { ...style, fontSize: '10px', color: '#aaaaaa' })
+    this.posText  = this.add.text(this.scale.width - 6, this.scale.height - 4, '', { ...style, fontSize: '10px', color: '#777777' })
       .setOrigin(1, 1).setDepth(101)
 
     this._buildChatPanel()
