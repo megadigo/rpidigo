@@ -172,7 +172,6 @@ All sprite paths are relative to `public/assets/sprites/`.
 | `dungeon_stairs_down` | `Dungeon/StairDown.png` |
 | `dungeon_stairs_up` | `Dungeon/StairUp.png` *(step on to exit)* |
 | `dungeon_pillar` | `Dungeon/DungeonPillar.png` |
-| `dungeon_trap` | `Dungeon/DungeonTrap.png` |
 | `dungeon_chest` | `Dungeon/Chest.png` |
 | `dungeon_altar` | `Dungeon/DungeonAltar.png` |
 | `dungeon_tombstones` | `Dungeon/Tombstone.png` |
@@ -185,7 +184,8 @@ All sprite paths are relative to `public/assets/sprites/`.
 | `cellar_wall` | `Cellars/CellarWall.png` |
 | `cellar_stairs_up` | `Cellars/CellarStairsUp.png` *(step on to return to house)* |
 | `cellar_chest` | `Cellars/CellarChest.png` |
-| `cellar_trap` | `Cellars/CellarTrap.png` |
+
+After removing tile IDs from generation/data (for example trap tiles), reset Firebase map data before testing so rooms/chunks regenerate with the current schema.
 
 **Special**
 
@@ -720,7 +720,7 @@ loaded directly from PNG files using the HTML Canvas API (frame 0, 16×16).
 - **Combat**: face enemy + press A; XP and loot on kill; PVP at level 10+
 - **NPCs**: Healer, Merchant, Guard, Dog — each with frame-0 sprite
 - **Gathering & Crafting**: press A on resources; workbench/workshop/dungeon altar
-- **Chests**: shared by all players; personal house chest is private storage
+- **Chests**: shared by all players; personal house chest is private storage; in chest UI, `A` takes all, and pressing `A` on an already-empty chest closes the panel
 - **Death & Respawn**: items drop; respawn at house; compass hint to loot
 - **Multiplayer**: real-time presence; proximity chat
 

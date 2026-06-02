@@ -10,7 +10,6 @@ import { EnemyRegistry } from '../registry/registries.ts'
 
 export const CELLAR_ROOM_SIZE = 20
 const CHEST_SPAWN_PROBABILITY = 0.7
-const TRAP_SPAWN_PROBABILITY  = 0.4
 
 function pad4(n: number): string {
   return String(n).padStart(4, '0')
@@ -70,7 +69,7 @@ export function generateCellarRoom(tx: number, ty: number, seed: number): Cellar
   tiles.set(tileKey(upX + 1, upY), { g: 'cellar_floor' })
   tiles.set(tileKey(upX, upY + 1), { g: 'cellar_floor' })
 
-  // Optional loot/trap details.
+  // Optional loot details.
   if (rand() < CHEST_SPAWN_PROBABILITY) {
     const chestX = seededRandInt(rand, 2, S - 3)
     const chestY = seededRandInt(rand, 2, S - 3)
@@ -86,14 +85,6 @@ export function generateCellarRoom(tx: number, ty: number, seed: number): Cellar
       })
     }
   }
-  if (rand() < TRAP_SPAWN_PROBABILITY) {
-    const trapX = seededRandInt(rand, 2, S - 3)
-    const trapY = seededRandInt(rand, 2, S - 3)
-    if ((trapX !== upX || trapY !== upY) && tiles.get(tileKey(trapX, trapY))?.m?.[0] !== 'cellar_chest') {
-      tiles.set(tileKey(trapX, trapY), { g: 'cellar_trap' })
-    }
-  }
-
   // Rat infestation — 2 to 4 rats at random free interior positions.
   const ratCount = 2 + seededRandInt(rand, 0, 2)
   for (let i = 0; i < ratCount; i++) {

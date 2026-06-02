@@ -126,7 +126,7 @@
 1. ✅ On the interact key adjacent to an NPC, open a `DialogScene` DOM overlay showing the NPC portrait (frame 0) and speech text from its script.
 2. ✅ Healer: write full HP/MP to `/players/{id}`; Gossiper: read `config/pois` for directional tips; Merchant: open `ShopScene` instead.
 3. ✅ Dog NPC: spawns in villages (50% chance), follows the player when interacted with via `A`, loses interest after 5 minutes without re-interaction (`dog_follow.py`).
-4. ✅ **Checkpoint**: Walk up to a healer with reduced HP and press `E`; HP is restored and the HUD updates.
+4. ✅ **Checkpoint**: Walk up to a healer with reduced HP and press `A`; HP is restored and the HUD updates.
 
 ---
 
@@ -184,7 +184,7 @@
    - "Respawn at House" button
 3. ✅ After respawn, overworld chunks around the house are pre-loaded before unfreezing the player (prevents blank-world spawn).
 4. ✅ After respawn, if items were dropped, a system chat message gives the compass direction and tile distance to the loot chest (handles overworld, house, dungeon floor N, and cellar rooms).
-5. ✅ PVP: attack allowed only when both players are ≥ level 10 and in the same room. Facing a remote player with E reads their HP via Firebase, applies attacker's power as damage, writes the new HP back, and shows a float text. Below level 10 shows "PVP: level 10+ only" hint.
+5. ✅ PVP: attack allowed only when both players are ≥ level 10 and in the same room. Facing a remote player with A reads their HP via Firebase, applies attacker's power as damage, writes the new HP back, and shows a float text. Below level 10 shows "PVP: level 10+ only" hint.
 6. ✅ **Checkpoint**: Take enough damage to die; items drop; the death screen shows with killer info and countdown; player respawns at house with half HP; a chat hint points toward the dropped loot.
 
 ---
@@ -199,7 +199,7 @@
 
 1. ✅ `isMobileDevice()` exported from `src/input/VirtualInput.ts` — true when `window.innerWidth < 640`.
 2. ✅ `virtualInput` module-level object (`up/down/left/right/action`) shared between HudScene (writer) and PlayerController (reader). PlayerController ORs virtual flags with keyboard; D-pad action button uses rising-edge detection to fire a single `playerAttack` event per press.
-3. ✅ D-pad rendered by `HudScene._buildDpad()` when mobile: 3×3 CSS grid of 44×44 buttons (bottom-right), pointer capture per button so held movement survives slight finger drift. Centre button = **E** (interact/attack).
+3. ✅ D-pad rendered by `HudScene._buildDpad()` when mobile: 3×3 CSS grid of 44×44 buttons (bottom-right), pointer capture per button so held movement survives slight finger drift. Centre button = **A** (interact/attack).
 4. ✅ Compact chat: `#chat-panel.mobile` CSS class applied on mobile — 150px wide, 44px max-height, 9px font.
 5. ✅ Tap-to-interact in `GameScene`: on `pointerup`, if distance < 12 px (true tap) and the tapped tile is adjacent to the player, calls `_handleInteract` toward that tile. Skipped when any overlay scene is active.
-6. ✅ **Checkpoint**: Narrow the browser to < 640 px; D-pad appears at bottom-right; all four directions and the E button work; tapping adjacent tiles/entities triggers interaction.
+6. ✅ **Checkpoint**: Narrow the browser to < 640 px; D-pad appears at bottom-right; all four directions and the A button work; tapping adjacent tiles/entities triggers interaction.

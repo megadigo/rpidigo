@@ -94,7 +94,7 @@ function generateFloor(
 
   // Pre-compute stair tile positions so decorations and enemies never block them.
   // Protect each stair tile plus all 4 orthogonal neighbours and the spots where
-  // r.x,r.y corner pillars and r.x,r.y+1 traps land for the entrance/exit rooms.
+  // r.x,r.y corner pillars land for the entrance/exit rooms.
   const protectedTiles = new Set<string>()
   const _protectAround = (sx: number, sy: number): void => {
     protectedTiles.add(tileKey(sx,     sy    ))
@@ -103,7 +103,6 @@ function generateFloor(
     protectedTiles.add(tileKey(sx,     sy + 1))
     protectedTiles.add(tileKey(sx,     sy - 1))
     protectedTiles.add(tileKey(sx - 1, sy - 1)) // matches r.x,r.y corner pillar
-    protectedTiles.add(tileKey(sx - 1, sy + 1)) // matches r.x,r.y+1 trap
   }
   if (rooms.length >= 2) {
     const ent = rooms[0]
@@ -140,8 +139,6 @@ function generateFloor(
     // Scatter pillars
     if (rand() < 0.4 && !protectedTiles.has(tileKey(r.x, r.y))) tiles.set(tileKey(r.x, r.y), { g: 'dungeon_floor', m: ['dungeon_pillar'] })
     if (rand() < 0.2 && !protectedTiles.has(tileKey(r.x + 1, r.y + 1))) tiles.set(tileKey(r.x + 1, r.y + 1), { g: 'dungeon_floor', m: ['dungeon_pillar'] })
-    if (rand() < 0.15 && !protectedTiles.has(tileKey(r.x, r.y + 1))) tiles.set(tileKey(r.x, r.y + 1), { g: 'dungeon_trap' })
-
     // Chest in dead-end-ish rooms (small rooms)
     if (r.w <= 6 && r.h <= 6) {
       const cx = r.x + Math.floor(r.w / 2)

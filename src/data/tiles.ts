@@ -119,7 +119,6 @@ export const tiles: TileDefinition[] = [
   { id: 'dungeon_stairs_down', passable: true,  speedMod: 1.0, destructible: false, spriteFrame: 'Dungeon/StairDown.png' },
   { id: 'dungeon_stairs_up',   passable: true,  speedMod: 1.0, destructible: false, spriteFrame: 'Dungeon/StairUp.png' },
   { id: 'dungeon_pillar',      passable: false, speedMod: 0,   destructible: false, spriteFrame: 'Dungeon/DungeonPillar.png' },
-  { id: 'dungeon_trap',        passable: true,  speedMod: 1.0, destructible: false, spriteFrame: 'Dungeon/DungeonTrap.png' },
   { id: 'dungeon_chest',       passable: false, speedMod: 0,   destructible: false, spriteFrame: 'Dungeon/Chest.png' },
   { id: 'dungeon_altar',       passable: true,  speedMod: 1.0, destructible: false, spriteFrame: 'Dungeon/DungeonAltar.png' },
   { id: 'dungeon_tombstones',  passable: false, speedMod: 0,   destructible: false, spriteFrame: 'Dungeon/Tombstone.png' },
@@ -135,6 +134,5 @@ export const tiles: TileDefinition[] = [
   { id: 'cellar_floor',      passable: true,  speedMod: 1.0, destructible: false, spriteFrame: 'Cellars/CellarFloor.png' },
   { id: 'cellar_wall',       passable: false, speedMod: 0,   destructible: false, spriteFrame: 'Cellars/CellarWall.png' },
   { id: 'cellar_chest',      passable: false, speedMod: 0,   destructible: false, spriteFrame: 'Cellars/CellarChest.png' },
-  { id: 'cellar_trap',       passable: true,  speedMod: 1.0, destructible: false, spriteFrame: 'Cellars/CellarTrap.png' },
   { id: 'cellar_stairs_up',  passable: true,  speedMod: 1.0, destructible: false, spriteFrame: 'Cellars/CellarStairsUp.png' },
 ]
