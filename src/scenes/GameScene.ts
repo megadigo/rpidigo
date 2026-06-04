@@ -34,6 +34,7 @@ import type { ShopSceneData } from './ShopScene.ts'
 import type { StorageSceneData } from './StorageScene.ts'
 import type { DeathSceneData } from './DeathScene.ts'
 import { MusicDirector } from '../audio/MusicDirector.ts'
+import patrolAggressive from '../scripts/enemies/patrol_aggressive.py?raw'
 
 /** Tile bounds of the 1000×1000 overworld in pixels. */
 const WORLD_PIXEL_SIZE = 1000 * TILE_SIZE
@@ -1140,6 +1141,9 @@ export class GameScene extends Phaser.Scene {
     // Chest check — facing tile only (Step 13)
     if (this._handleChest(tx + fdx2, ty + fdy2)) return
 
+    // Tombstone smash — spawns a skeleton horde
+    if (this._handleTombstone(tx + fdx2, ty + fdy2)) return
+
     // Gathering check — facing tile only (Step 11)
     if (await this._handleGather(tx + fdx2, ty + fdy2)) return
 
@@ -1277,6 +1281,76 @@ export class GameScene extends Phaser.Scene {
     chop: 'axe',
     mine: 'pickaxe',
     cut:  'scythe',
+  }
+
+  private static readonly _TOMBSTONE_IDS = new Set(['tombstone', 'dungeon_tombstones'])
+
+  /**
+   * If the tile at (cx, cy) contains a tombstone, smash it and spawn a horde of
+   * aggressive skeletons nearby. Returns true when handled so the caller skips
+   * the gather and attack fallbacks.
+   */
+  private _handleTombstone(cx: number, cy: number): boolean {
+    const tile = getTile(cx, cy)
+    if (!tile) return false
+    if (![tile.g, ...(tile.m ?? [])].some(l => GameScene._TOMBSTONE_IDS.has(l))) return false
+
+    // Remove tombstone from tile layers
+    const newM = (tile.m ?? []).filter(l => !GameScene._TOMBSTONE_IDS.has(l))
+    const newG = GameScene._TOMBSTONE_IDS.has(tile.g) ? 'grass' : tile.g
+    const newTile: import('../world/types.ts').TileData = { ...tile, g: newG, m: newM }
+    setTile(cx, cy, newTile)
+    this.tilemapRenderer.invalidateTile(cx, cy)
+
+    const room = getActiveRoom() ?? '0'
+    void update(ref(db), {
+      [room === '0' ? overworldTilePath(cx, cy) : `map/${room}/${tileKey(cx, cy)}`]: newTile,
+    })
+
+    this.sound.play('sfx_swing', { volume: 1.2 })
+    this._showFloatText(cx, cy, 'The dead awaken!', '#aa44ff')
+    this._spawnSkeletonHorde(cx, cy, room)
+    return true
+  }
+
+  /** Spawn 3–5 aggressive skeletons on passable tiles around (tombX, tombY). */
+  private _spawnSkeletonHorde(tombX: number, tombY: number, room: string): void {
+    const def = EnemyRegistry.get('skeleton_weak')
+    const count = 3 + Math.floor(Math.random() * 3) // 3–5
+
+    // Collect passable tiles within a 2-tile radius
+    const candidates: Array<{ x: number; y: number }> = []
+    for (let dy = -2; dy <= 2; dy++) {
+      for (let dx = -2; dx <= 2; dx++) {
+        if (dx === 0 && dy === 0) continue
+        const sx = tombX + dx, sy = tombY + dy
+        if (isPassable(sx, sy)) candidates.push({ x: sx, y: sy })
+      }
+    }
+
+    const now = Date.now()
+    const fbUpdate: Record<string, unknown> = {}
+
+    for (let i = 0; i < Math.min(count, candidates.length); i++) {
+      const { x, y } = candidates[i]
+      const id = `enemy_tomb_${tombX}_${tombY}_${now}_${i}`
+      const enemy: import('../world/types.ts').EnemyInstance = {
+        id, templateId: 'skeleton_weak', baseType: 'skeleton', variant: 'weak',
+        hp: def.baseHp, maxHp: def.baseHp, mp: 0, maxMp: 0, power: def.basePower,
+        room, x, y, spawnRoom: room, spawnX: x, spawnY: y,
+        state: 'charging',
+        executingPlayerId: null, lastLogicAt: 0,
+        script: patrolAggressive,
+        memory: {},
+        carriedGold: 0,
+      }
+      fbUpdate[`entities/enemies/${id}`] = enemy
+      fbUpdate[`presence/${room}/enemies/${id}`] = {
+        x, y, templateId: 'skeleton_weak', state: 'charging', hp: def.baseHp,
+      }
+    }
+
+    if (Object.keys(fbUpdate).length) void update(ref(db), fbUpdate)
   }
 
   /**
