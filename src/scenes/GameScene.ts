@@ -33,6 +33,7 @@ import type { CraftSceneData } from './CraftScene.ts'
 import type { ShopSceneData } from './ShopScene.ts'
 import type { StorageSceneData } from './StorageScene.ts'
 import type { DeathSceneData } from './DeathScene.ts'
+import { MusicDirector } from '../audio/MusicDirector.ts'
 
 /** Tile bounds of the 1000×1000 overworld in pixels. */
 const WORLD_PIXEL_SIZE = 1000 * TILE_SIZE
@@ -125,6 +126,11 @@ export class GameScene extends Phaser.Scene {
   private _lastDamageAt = 0
   /** Minimum milliseconds between consecutive enemy hits (invincibility window). */
   private static readonly _INVINCIBILITY_MS = 600
+
+  /** Adaptive background music controller. */
+  private _musicDirector: MusicDirector | null = null
+  /** Accumulated delta (ms) for the 1 s threat-evaluation tick. */
+  private _threatTimer = 0
 
   /** Accumulated delta (ms) since the last regen tick. Reset whenever the player takes damage. */
   private _healTimer = 0
@@ -275,12 +281,18 @@ export class GameScene extends Phaser.Scene {
       }
     }
 
+    // Adaptive music — start ambient playlist immediately
+    this._musicDirector = new MusicDirector(this)
+    this._musicDirector.requestPlaylist('world_ambient')
+
     // Clean up Firebase listeners when the scene shuts down
     this.events.on(Phaser.Scenes.Events.SHUTDOWN, () => {
       if (this._presenceUnsub) { this._presenceUnsub(); this._presenceUnsub = null }
       if (this._enemyUnsub)    { this._enemyUnsub();    this._enemyUnsub    = null }
       if (this._npcUnsub)      { this._npcUnsub();      this._npcUnsub      = null }
       this._scriptExecutor.destroy()
+      this._musicDirector?.destroy()
+      this._musicDirector = null
       if (this.scene.isActive('DeathScene')) this.scene.stop('DeathScene')
       this.game.events.off('openInventory')
     })
@@ -334,6 +346,40 @@ export class GameScene extends Phaser.Scene {
 
     for (const rec of this._remoteEnemies.values()) this._tickEntityAnim(rec, delta)
     for (const rec of this._remoteNpcs.values()) this._tickEntityAnim(rec, delta)
+
+    // Evaluate threat every 1 s and pick the appropriate overworld playlist
+    if (this._musicDirector) {
+      this._threatTimer += delta
+      if (this._threatTimer >= 1_000) {
+        this._threatTimer = 0
+        this._evaluateMusicThreat()
+      }
+    }
+  }
+
+  /**
+   * Compute local threat score from enemies within 12 tiles and request the
+   * appropriate overworld playlist. Skipped while inside a dungeon room
+   * (dungeon playlist is forced on room entry).
+   */
+  private _evaluateMusicThreat(): void {
+    const player = getLocalPlayer()
+    if (player.room.startsWith('dungeon_')) return   // dungeon overrides threat logic
+
+    const AGGRESSIVE_STATES = new Set(['chasing', 'hunting', 'charging', 'chase', 'attack'])
+    const px = player.x
+    const py = player.y
+    let score = 0
+
+    for (const [, e] of this._enemyData) {
+      const dist = Math.max(Math.abs(e.x - px), Math.abs(e.y - py))
+      if (dist > 12) continue
+      const weight = (e.templateId.includes('boss') || e.templateId.includes('elite')) ? 2 : 1
+      const bonus  = AGGRESSIVE_STATES.has(e.state) ? 1 : 0
+      score += weight + bonus
+    }
+
+    this._musicDirector?.requestPlaylist(score >= 6 ? 'world_action' : 'world_ambient')
   }
 
   private _tickEntityAnim<TEntry extends { x: number; y: number }>(
@@ -680,6 +726,9 @@ export class GameScene extends Phaser.Scene {
     }
 
     this._subscribePresence(roomId)
+    if (roomId.startsWith('dungeon_')) {
+      this._musicDirector?.requestPlaylist('dungeon_dark_ambient', true)
+    }
   }
 
   private async _handleEnterRoom(roomId: string, spawnNear: string): Promise<void> {
@@ -710,6 +759,11 @@ export class GameScene extends Phaser.Scene {
     }
 
     this._subscribePresence(roomId)
+
+    // Force dungeon playlist when entering any dungeon room
+    if (roomId.startsWith('dungeon_')) {
+      this._musicDirector?.requestPlaylist('dungeon_dark_ambient', true)
+    }
   }
 
   private _handleExitRoom(returnX: number, returnY: number): void {
@@ -727,6 +781,8 @@ export class GameScene extends Phaser.Scene {
     this.playerController.startCameraFollow()
 
     this._subscribePresence('0')
+    // Return to overworld playlist; threat re-evaluated on the next 1 s tick
+    this._musicDirector?.requestPlaylist('world_ambient', true)
   }
 
   /**
@@ -1230,6 +1286,8 @@ export class GameScene extends Phaser.Scene {
       }
     }
 
+    this.sound.play('sfx_gather', { volume: 0.6 })
+
     // ── Multi-charge logic ──────────────────────────────────────────────────
     const maxCharges     = tileDef.gatherCharges ?? 1
     const currentCharges = tileData.metadata?.charges ?? maxCharges
@@ -1425,6 +1483,8 @@ export class GameScene extends Phaser.Scene {
     const [dx, dy] = facingOffset[direction]
     const atx = tx + dx
     const aty = ty + dy
+
+    this.sound.play('sfx_swing', { volume: 0.7 })
 
     let targetId: string | null = null
     let targetEntry: EnemyPresenceEntry | null = null

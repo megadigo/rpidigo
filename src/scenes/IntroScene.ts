@@ -6,8 +6,14 @@
 import Phaser from 'phaser'
 
 export class IntroScene extends Phaser.Scene {
+  private _ambientSound: Phaser.Sound.BaseSound | null = null
+
   constructor() {
     super({ key: 'IntroScene' })
+  }
+
+  preload(): void {
+    this.load.audio('intro_ambient', 'assets/music/Ambient 1.mp3')
   }
 
   create(): void {
@@ -61,7 +67,11 @@ export class IntroScene extends Phaser.Scene {
     `
     document.body.appendChild(overlay)
 
+    this._ambientSound = this.sound.add('intro_ambient', { loop: true, volume: 0.4 })
+    this._ambientSound.play()
+
     document.getElementById('intro-play-btn')!.addEventListener('click', () => {
+      this._ambientSound?.stop()
       overlay.remove(); style.remove()
       if (!document.fullscreenElement) {
         void document.documentElement.requestFullscreen({ navigationUI: 'hide' })
@@ -69,6 +79,7 @@ export class IntroScene extends Phaser.Scene {
       this.scene.start('LoginScene')
     })
     document.getElementById('intro-help-btn')!.addEventListener('click', () => {
+      this._ambientSound?.stop()
       overlay.remove(); style.remove()
       this.scene.start('InstructionsScene')
     })

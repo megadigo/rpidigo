@@ -199,7 +199,72 @@
 
 1. ✅ `isMobileDevice()` exported from `src/input/VirtualInput.ts` — true when `window.innerWidth < 640`.
 2. ✅ `virtualInput` module-level object (`up/down/left/right/action`) shared between HudScene (writer) and PlayerController (reader). PlayerController ORs virtual flags with keyboard; D-pad action button uses rising-edge detection to fire a single `playerAttack` event per press.
-3. ✅ D-pad rendered by `HudScene._buildDpad()` when mobile: 3×3 CSS grid of 44×44 buttons (bottom-right), pointer capture per button so held movement survives slight finger drift. Centre button = **A** (interact/attack).
+3. ✅ Virtual joystick rendered by `HudScene._buildDpad()`: circular base (bottom-left) with a draggable knob; pointer capture on the base so held movement survives drift; knob position translated to directional flags with 20% dead zone and 0.3 threshold for 8-directional input. Action (A) and Inventory (I) buttons remain in a right-side column.
 4. ✅ Compact chat: `#chat-panel.mobile` CSS class applied on mobile — 150px wide, 44px max-height, 9px font.
 5. ✅ Tap-to-interact in `GameScene`: on `pointerup`, if distance < 12 px (true tap) and the tapped tile is adjacent to the player, calls `_handleInteract` toward that tile. Skipped when any overlay scene is active.
 6. ✅ **Checkpoint**: Narrow the browser to < 640 px; D-pad appears at bottom-right; all four directions and the A button work; tapping adjacent tiles/entities triggers interaction.
+
+---
+
+## Step 18 — Adaptive Ambience Music ✅
+*Goal: background music adapts to situation and location with smooth transitions and no abrupt restarts.*
+
+1. ✅ `MusicDirector` service (`src/audio/MusicDirector.ts`): manages three playlists (`world_ambient`, `world_action`, `dungeon_dark_ambient`) loaded from `public/assets/music/`; shuffle-bag per playlist; 2.5 s crossfade; 15 s dwell guard; volume/enabled persisted to localStorage; listens to `game.events` for live setting updates.
+2. ✅ `LoadingScene.preload()` loads all 9 tracks (`music_ambient_1–3`, `music_action_1–3`, `music_dark_1–3`).
+3. ✅ `GameScene` evaluates threat every 1 s: Chebyshev radius 12, weight 1 normal / 2 elite+boss / +1 if chasing; selects `world_action` at score ≥ 6, else `world_ambient`.
+4. ✅ Entering a `dungeon_*` room forces `dungeon_dark_ambient` playlist (both `_handleEnterRoom` and `_restoreRoom`); exiting returns to `world_ambient` and threat re-evaluates on the next 1 s tick.
+5. ✅ `HudScene._buildMusicPanel()` adds a ♪ button (top-right toolbar) that opens a settings panel with ON/OFF toggle and volume slider; emits `musicEnabled`/`musicVolume` game events consumed by `MusicDirector`.
+6. ✅ **Checkpoint**: Overworld uses ambient tracks at low threat, swaps to action tracks during heavy combat, dungeons always use dark ambient, and all transitions are smooth.
+
+---
+
+## Step 19 — Ranged Bows & Elemental Magic ⬜
+*Goal: ranged and magic combat uses spawned projectiles with distinct elemental behaviour and shop/crafting integration.*
+
+1. Add a shared `ProjectileSystem` (spawn, movement, collision, lifetime, hit events) for player and scripted entities.
+2. Bow weapons (`type: ranged`) fire physical projectiles with speed/range stats and ammo-less cooldown-based firing.
+3. Define magic schools and spells for `type: magic` weapons:
+   - fire: direct damage + burn DOT,
+   - water: damage + slow,
+   - earth: higher stagger/armor break,
+   - air: fast projectile + chain/knockback utility.
+4. Add MP costs and cast cooldowns per spell; prevent cast when MP is insufficient and surface feedback in HUD.
+5. Extend weapon/item definitions with projectile and elemental metadata (`projectileSprite`, `speed`, `range`, `element`, `statusEffect`).
+6. Shop integration:
+   - merchants sell starter bows and elemental catalysts/tomes,
+   - level-gate stronger bows/spells by existing shop progression tiers.
+7. Crafting integration:
+   - add recipes for elemental staves/wands and advanced bows,
+   - consume elemental materials (for example `mana_crystal`, `sand_crystal`, `ectoplasm`).
+8. Network sync:
+   - projectile spawn and hit resolution are deterministic and mirrored via Firebase presence/events,
+   - include anti-double-hit guard by projectile ID + victim timestamp window.
+9. **Checkpoint**: Player can equip bow and shoot visible projectiles, cast fire/water/earth/air spells with MP consumption, and buy basic ranged/magic gear from shops.
+
+---
+
+## Step 20 — Character Stats & Level-Up Growth ⬜
+*Goal: primary stats (STR/DEX/INT/VIT) meaningfully scale combat and utility as players level up.*
+
+1. Replace/expand player attributes to explicit primary stats:
+   - `str` (melee power and carry bonus)
+   - `dex` (ranged power, attack speed, crit chance)
+   - `int` (magic power, max MP, mana regen)
+   - `vit` (max HP, defense baseline)
+2. Add derived combat formulas (single source in stat utility module):
+   - meleePower = weaponPower + str * 2
+   - rangedPower = weaponPower + dex * 1.8
+   - magicPower = weaponPower + int * 2.2
+   - defense = armorDefense + vit * 0.8
+   - critChance = min(35%, baseCrit + dex * 0.25%)
+3. Level-up rewards:
+   - grant 3 allocatable stat points per level,
+   - every 5 levels grant +1 bonus point,
+   - persist unspent points in player record.
+4. Add `LevelUpScene` stat allocation flow for STR/DEX/INT/VIT with preview of derived changes before confirm.
+5. Rebalance enemy scaling and weapon requirements around new stats (minimum stat requirements for Tier 3/4 gear).
+6. Update HUD to show condensed stat summary and highlight temporary buffs/debuffs affecting core stats.
+7. Migration path:
+   - map existing players from legacy stats to new fields with deterministic defaults,
+   - run one-time migration guard to avoid repeated remaps.
+8. **Checkpoint**: On level-up player allocates points, combat output changes immediately, and STR/DEX/INT/VIT values persist correctly across relog.
