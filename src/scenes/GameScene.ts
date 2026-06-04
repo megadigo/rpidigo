@@ -15,7 +15,7 @@ import { ref, onValue, update, runTransaction, get } from 'firebase/database'
 import { db } from '../firebase.ts'
 import { TilemapRenderer, TILE_SIZE, isTileRoomExit } from '../renderer/TilemapRenderer.ts'
 import type { Direction } from '../renderer/SpriteAnim.ts'
-import { ANIM_FRAMES, FRAME_DURATION_MS, directionFromVelocity, getFrame } from '../renderer/SpriteAnim.ts'
+import { ANIM_FRAMES, FRAME_DURATION_MS, directionFromVelocity, getFrame, getAttackFrame } from '../renderer/SpriteAnim.ts'
 import { PlayerController } from '../player/PlayerController.ts'
 import { enterRoom, exitRoom, findTileInRoom, findAllTilesInRoom, getTile, setTile, getActiveRoom, getWorldZone, ensureRadius, tileToChunk, overworldTilePath } from '../world/ChunkManager.ts'
 import { getWorldConfig } from '../world/WorldBootstrap.ts'
@@ -38,6 +38,8 @@ import { MusicDirector } from '../audio/MusicDirector.ts'
 /** Tile bounds of the 1000×1000 overworld in pixels. */
 const WORLD_PIXEL_SIZE = 1000 * TILE_SIZE
 const ENTITY_MOVE_DURATION_MS = 180
+/** How long (ms) to play the attack animation after an enemy attacks. */
+const ATTACK_ANIM_MS = 500
 
 /** Shape of each entry under /presence/{room}/players/{id}. */
 interface PresenceEntry {
@@ -57,6 +59,8 @@ interface EnemyPresenceEntry {
   templateId: string
   state: string
   hp: number
+  facing?: Direction
+  attackedAt?: number
 }
 
 /** Shape of each entry under /presence/{room}/npcs/{id}. */
@@ -74,6 +78,8 @@ interface AnimatedEntityRecord<TEntry extends { x: number; y: number }> {
   animFrame: number
   animTimer: number
   isMoving: boolean
+  isAttacking: boolean
+  attackTimer: number
 }
 
 export class GameScene extends Phaser.Scene {
@@ -386,6 +392,24 @@ export class GameScene extends Phaser.Scene {
     rec: AnimatedEntityRecord<TEntry>,
     delta: number,
   ): void {
+    if (rec.isAttacking) {
+      rec.attackTimer -= delta
+      if (rec.attackTimer <= 0) {
+        rec.isAttacking = false
+        rec.attackTimer = 0
+        rec.animFrame = 0
+        rec.animTimer = 0
+        rec.sprite.setFrame(getFrame(rec.direction, 0))
+        return
+      }
+      rec.animTimer += delta
+      while (rec.animTimer >= FRAME_DURATION_MS) {
+        rec.animTimer -= FRAME_DURATION_MS
+        rec.animFrame = (rec.animFrame + 1) % ANIM_FRAMES
+      }
+      rec.sprite.setFrame(getAttackFrame(rec.direction, rec.animFrame))
+      return
+    }
     if (!rec.isMoving) {
       if (rec.animFrame !== 0 || rec.animTimer !== 0) {
         rec.animFrame = 0
@@ -906,6 +930,17 @@ export class GameScene extends Phaser.Scene {
             const rec = this._remoteEnemies.get(id)!
             const old = rec.entry
             rec.entry = entry
+            // Trigger attack animation when the server signals a new attack
+            if (entry.attackedAt != null && entry.attackedAt !== old.attackedAt) {
+              rec.isAttacking = true
+              rec.attackTimer = ATTACK_ANIM_MS
+              rec.animFrame = 0
+              rec.animTimer = 0
+            }
+            // Update facing toward player when stationary
+            if (entry.facing && !rec.isMoving) {
+              rec.direction = entry.facing
+            }
             if (entry.x !== old.x || entry.y !== old.y) {
               this.tweens.killTweensOf(rec.sprite)
               rec.direction = directionFromVelocity(px - rec.sprite.x, py - rec.sprite.y, rec.direction)
@@ -940,6 +975,8 @@ export class GameScene extends Phaser.Scene {
               animFrame: 0,
               animTimer: 0,
               isMoving: false,
+              isAttacking: false,
+              attackTimer: 0,
             })
           }
         }
@@ -1027,6 +1064,8 @@ export class GameScene extends Phaser.Scene {
               animFrame: 0,
               animTimer: 0,
               isMoving: false,
+              isAttacking: false,
+              attackTimer: 0,
             })
           }
         }
