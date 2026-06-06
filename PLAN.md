@@ -218,7 +218,15 @@
 
 ---
 
-## Step 19 — Ranged Bows & Elemental Magic ⬜
+## Step 19 — Tombstone Interaction & Skeleton Horde ✅
+*Goal: interacting with a village tombstone spawns a wave of skeleton enemies around it.*
+
+1. ✅ On the interact key (`A`) adjacent to a `tombstone` tile, `GameScene._handleInteract` spawns a configurable wave of `skeleton_weak` enemies at tile positions surrounding the tombstone and writes them to Firebase presence.
+2. ✅ **Checkpoint**: Walk up to a village tombstone and press `A`; a group of skeletons appears around it and immediately engages the player.
+
+---
+
+## Step 20 — Ranged Bows & Elemental Magic ⬜
 *Goal: ranged and magic combat uses spawned projectiles with distinct elemental behaviour and shop/crafting integration.*
 
 1. Add a shared `ProjectileSystem` (spawn, movement, collision, lifetime, hit events) for player and scripted entities.
@@ -243,7 +251,7 @@
 
 ---
 
-## Step 20 — Character Stats & Level-Up Growth ⬜
+## Step 21 — Character Stats & Level-Up Growth ⬜
 *Goal: primary stats (STR/DEX/INT/VIT) meaningfully scale combat and utility as players level up.*
 
 1. Replace/expand player attributes to explicit primary stats:
@@ -262,9 +270,47 @@
    - every 5 levels grant +1 bonus point,
    - persist unspent points in player record.
 4. Add `LevelUpScene` stat allocation flow for STR/DEX/INT/VIT with preview of derived changes before confirm.
-5. Rebalance enemy scaling and weapon requirements around new stats (minimum stat requirements for Tier 3/4 gear).
-6. Update HUD to show condensed stat summary and highlight temporary buffs/debuffs affecting core stats.
-7. Migration path:
+5. Implement `LevelUpScene` DOM overlay:
+   - "Level Up!" banner with new level number,
+   - STR/DEX/INT/VIT allocation buttons; unspent points counter,
+   - live preview panel for derived values (melee/ranged/magic power, defense, crit chance),
+   - new recipe or ability unlocked at this level listed as a brief notification,
+   - **Confirm** button enabled only when all points are spent.
+6. Rebalance enemy scaling and weapon requirements around new stats (minimum stat requirements for Tier 3/4 gear).
+7. Update HUD to show condensed stat summary and highlight temporary buffs/debuffs affecting core stats.
+8. Migration path:
    - map existing players from legacy stats to new fields with deterministic defaults,
    - run one-time migration guard to avoid repeated remaps.
-8. **Checkpoint**: On level-up player allocates points, combat output changes immediately, and STR/DEX/INT/VIT values persist correctly across relog.
+9. **Checkpoint**: On level-up the `LevelUpScene` overlay appears; player allocates points with a live preview; after Confirm, combat output changes immediately and STR/DEX/INT/VIT values persist correctly across relog.
+
+---
+
+## Step 22 — Gold-Stealing Enemies ⬜
+*Goal: thief and bandit enemy variants steal gold from the player on hit and permanently lose it if they escape.*
+
+1. Add `carriedGold` field to enemy instances; populate at spawn from the variant's loot table.
+2. On a successful enemy hit, subtract `min(stealAmount, player.gold)` from the player and add to `enemy.carriedGold`; show a system chat notification (*"Thief stole 12 gold from you!"*).
+3. Profiles: `thief_weak` steals on first hit then immediately flees; `bandit_strong` / `desert_bandit_strong` / `goblin_scout_strong` steal on each hit while fighting.
+4. On enemy death, drop `carriedGold` as a loot pickup at the death tile.
+5. If a fleeing enemy moves beyond 30 tiles from the player, stolen gold is permanently lost.
+6. **Checkpoint**: A thief steals gold, a chat notification appears; killing the thief before escape returns the gold as a loot pickup; letting it flee 30+ tiles loses the gold permanently.
+
+---
+
+## Step 23 — Map Screen ⬜
+*Goal: the player can open a full-screen world map with fog-of-war showing explored zones, POIs, and their position.*
+
+1. `MapScene` DOM overlay: zoomed-out view of the 1000×1000 grid.
+2. Unexplored sectors render as dark fog; explored sectors use zone colour coding (plains green, forest dark-green, desert yellow, river blue).
+3. Icons for: known villages (house), known dungeon entrances (cave), player current position (pin), player house (star).
+4. Persist explored-sector set on the player record in Firebase.
+5. **Checkpoint**: Open the map; explored areas are visible in zone colours; unvisited regions are dark; POI icons appear at discovered locations.
+
+---
+
+## Step 24 — Pause Screen ⬜
+*Goal: the player can pause, adjust settings, and log out cleanly.*
+
+1. `PauseScene` DOM overlay: **Resume**, **Settings** (audio volume, key-binding display), **Log Out** buttons.
+2. **Log Out** writes `online: false` to Firebase, removes presence entry, and navigates to `LoginScene`.
+3. **Checkpoint**: Press the menu button; pause overlay appears; Resume returns to play; Log Out clears presence and navigates to the login screen.

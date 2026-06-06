@@ -138,7 +138,7 @@ All sprite paths are relative to `public/assets/sprites/`.
 | `workshop` | `World/Buildings/Workshops.png` | Blacksmith / crafting — auto-enters on touch |
 | `quest_board` | `World/Buildings/QuestBoard.png` | Notice board *(also in `House/` for barracks interior)* |
 | `street_sign` | `World/Buildings/StreetSign.png` | Path-end marker |
-| `tombstone` | `World/Buildings/Tombstone.png` | Cemetery decoration |
+| `tombstone` | `World/Buildings/Tombstone.png` | Cemetery decoration — press `A` to spawn a skeleton horde |
 | `garden_plot` | `World/Ground/GardenPlot.png` | Wheat field base |
 | `wheat_field` | `World/Nature/Wheatfield.png` | Planted crop |
 
@@ -184,6 +184,14 @@ All sprite paths are relative to `public/assets/sprites/`.
 | `cellar_wall` | `Cellars/CellarWall.png` |
 | `cellar_stairs_up` | `Cellars/CellarStairsUp.png` *(step on to return to house)* |
 | `cellar_chest` | `Cellars/CellarChest.png` |
+
+### Special tile interactions
+
+Some overworld tiles trigger gameplay events when the player presses `A` while adjacent.
+
+| Tile | Interaction |
+|---|---|
+| `tombstone` | Spawns a wave of `skeleton_weak` enemies at tiles surrounding the tombstone; enemies are written to Firebase presence and immediately engage the player. |
 
 After removing tile IDs from generation/data (for example trap tiles), reset Firebase map data before testing so rooms/chunks regenerate with the current schema.
 
@@ -330,6 +338,7 @@ All sprite paths are relative to `public/assets/sprites/`.
 | `healer_standard` | Restores the player's HP and MP to full when the player walks adjacent; no cost | `Characters/Soldiers/Ranged/MageTemplate.png` |
 | `merchant_standard` | Runs the village shop; opens a buy/sell UI when the player interacts; stocks armors, Tier 1–2 weapons, and common materials; prices vary by village zone and per-village seed | `Characters/Workers/FarmerTemplate.png` |
 | `guard_patrol` | Patrols the village entry path; warns players about dangers outside | `Characters/Soldiers/Melee/SwordsmanTemplate.png` |
+| `dog` | Spawns near residential buildings in villages (50% chance per house); follows the player for 5 minutes after being interacted with via `A`; loses interest and returns to its home position after the timer expires without re-interaction | `Animals/Dog.png` |
 
 ### Gossiper knowledge
 
