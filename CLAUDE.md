@@ -2,9 +2,9 @@
 
 ## Firebase Map Reset Requirement
 
-After tile-generation changes that remove tile IDs (for example, removing `dungeon_trap`), you must tell the user to delete/reset Firebase map data before testing.
+After any change that requiment the database schema to change you must tell the user to delete/reset Firebase map data before testing, instead creating scripts to recover old version.
 
-Reason: existing generated map tiles in Firebase may still reference old tile IDs and can cause mismatches with current code/data.
+Reason: existing generated map tiles in Firebase may still reference old tile IDs or fields and can cause mismatches with current code/data.
 
 Expected instruction to user:
 - Delete or reset the `map` data in Firebase Realtime Database.
@@ -13,4 +13,5 @@ Expected instruction to user:
 
 ## Redone SPEC and PLAN
 
-On every prompt review PLAN ans SPEC and update it with the new funcionality 
+On every prompt review PLAN ans SPEC and update it with the new funcionality.
+
