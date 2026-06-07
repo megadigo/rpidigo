@@ -959,6 +959,23 @@ Shown immediately when the player gains a level.
 
 ---
 
+### Character Stats Screen (`StatsScene`) — *overlays `GameScene` + `HudScene`*
+Opened anytime by pressing **`S`** during play (same overlay style as `LevelUpScene`/`PauseScene`).
+
+**Content:**
+- Player name and current level
+- Strength (`STR`), Dexterity (`DEX`), Intelligence (`INT`), Vitality (`VIT`) values
+- Live preview panel for derived combat values (melee/ranged/magic power, defense, crit chance)
+- If the player has unspent stat points (e.g. skipped at a previous level-up): the same +/− allocation, live-preview, and **Confirm** flow as the Level-Up Screen, so banked points are never stranded
+- **Log Out** button (writes `online: false` to Firebase, removes presence entry, returns to `LoginScene`)
+
+**Transitions:**
+- **Confirm** (when allocating) → applies allocation, stays in `GameScene` + `HudScene`
+- ESC or **`S`** → back to `GameScene` + `HudScene`
+- **Log Out** → `LoginScene`
+
+---
+
 ### Pause Screen (`PauseScene`) — *overlays everything*
 Accessible from HUD during play.
 

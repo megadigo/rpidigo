@@ -11,6 +11,7 @@ const KEY_BINDINGS: Array<[string, string]> = [
   ['↑ ↓ ← →', 'Move'],
   ['A',              'Action — attack · interact · open · gather · talk'],
   ['I',              'Open inventory'],
+  ['S',              'Open / close character stats'],
   ['Enter',          'Open / send chat'],
   ['Esc',            'Close overlay / pause menu'],
 ]

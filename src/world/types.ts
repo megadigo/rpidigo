@@ -113,6 +113,8 @@ export interface PlayerInstance {
   mp: number
   maxMp: number
   stats: { strength: number; agility: number; intelligence: number; endurance: number }
+  /** Unspent stat points awaiting allocation in LevelUpScene. */
+  statPoints: number
   power: number
   totalDefense: number
   gold: number

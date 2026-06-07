@@ -251,37 +251,28 @@
 
 ---
 
-## Step 21 — Character Stats & Level-Up Growth ⬜
+## Step 21 — Character Stats & Level-Up Growth ✅
 *Goal: primary stats (STR/DEX/INT/VIT) meaningfully scale combat and utility as players level up.*
 
-1. Replace/expand player attributes to explicit primary stats:
-   - `str` (melee power and carry bonus)
-   - `dex` (ranged power, attack speed, crit chance)
-   - `int` (magic power, max MP, mana regen)
-   - `vit` (max HP, defense baseline)
-2. Add derived combat formulas (single source in stat utility module):
+1. ✅ `PlayerInstance.stats` (already `{ strength, agility, intelligence, endurance }` — STR/DEX/INT/VIT) is now load-bearing and paired with a new `statPoints` field for unspent allocation. `endurance` (VIT) drives maxHp growth and defense baseline; `intelligence` (INT) drives maxMp growth and magic power; `agility` (DEX) drives ranged power and crit chance; `strength` (STR) drives melee power.
+2. ✅ Derived combat formulas centralised in `src/world/playerStats.ts` (single source of truth — `deriveCombatStats`/`applyDerivedCombatStats`/`rollAttackDamage`):
    - meleePower = weaponPower + str * 2
    - rangedPower = weaponPower + dex * 1.8
    - magicPower = weaponPower + int * 2.2
    - defense = armorDefense + vit * 0.8
-   - critChance = min(35%, baseCrit + dex * 0.25%)
-3. Level-up rewards:
-   - grant 3 allocatable stat points per level,
-   - every 5 levels grant +1 bonus point,
-   - persist unspent points in player record.
-4. Add `LevelUpScene` stat allocation flow for STR/DEX/INT/VIT with preview of derived changes before confirm.
-5. Implement `LevelUpScene` DOM overlay:
-   - "Level Up!" banner with new level number,
-   - STR/DEX/INT/VIT allocation buttons; unspent points counter,
-   - live preview panel for derived values (melee/ranged/magic power, defense, crit chance),
-   - new recipe or ability unlocked at this level listed as a brief notification,
-   - **Confirm** button enabled only when all points are spent.
-6. Rebalance enemy scaling and weapon requirements around new stats (minimum stat requirements for Tier 3/4 gear).
-7. Update HUD to show condensed stat summary and highlight temporary buffs/debuffs affecting core stats.
-8. Migration path:
-   - map existing players from legacy stats to new fields with deterministic defaults,
-   - run one-time migration guard to avoid repeated remaps.
-9. **Checkpoint**: On level-up the `LevelUpScene` overlay appears; player allocates points with a live preview; after Confirm, combat output changes immediately and STR/DEX/INT/VIT values persist correctly across relog.
+   - critChance = min(35%, 5% + dex * 0.25%) — rolled on every player/PVP attack; crits deal ×1.5 damage and show a `CRIT!` floating indicator.
+   `player.power`/`totalDefense` are recomputed from gear + stats by `applyDerivedCombatStats` on registration (`Auth.ts`) and on every weapon/armor equip/unequip (`InventoryScene`), so combat code keeps reading the same fields it always has.
+3. ✅ Level-up rewards (`GameScene` enemy-kill handler): 3 allocatable stat points per level, +1 bonus every 5th level, persisted as `players/{id}/statPoints`; maxHp grows from `endurance` and maxMp from `intelligence` each level instead of flat increments.
+4. ✅ `LevelUpScene` stat allocation flow for STR/DEX/INT/VIT with a live preview of melee/ranged/magic power, defense, and crit chance before confirming (`deriveCombatStats` run against the pending allocation).
+5. ✅ `LevelUpScene` DOM overlay (`src/scenes/LevelUpScene.ts`):
+   - "✦ LEVEL UP! ✦" banner with the new level number,
+   - STR/DEX/INT/VIT +/− allocation buttons with an unspent-points counter,
+   - live preview panel showing current → projected melee/ranged/magic power, defense, and crit chance,
+   - newly-unlocked weapons/armors/recipes at this level listed via `findNewUnlocks` (scans `WeaponRegistry`/`ArmorRegistry`/`RecipeRegistry` by `levelRequired`),
+   - **Confirm** enabled only once every point is spent (writes `stats`/`statPoints`/`power`/`totalDefense` to Firebase); `Esc` closes and keeps points for later.
+6. ➖ *Skipped* — rebalancing enemy scaling/Tier 3-4 gear stat requirements is a tuning pass better done once Step 20 (ranged/magic combat) lands; the new formulas already gate weapon/armor use by `levelRequired` as before.
+7. ✅ Pressing **`S`** opens `StatsScene` (`src/scenes/StatsScene.ts`) — a full DOM overlay (same visual language as `LevelUpScene`/`PauseScene`) showing the player's name/level, STR/DEX/INT/VIT, derived melee/ranged/magic power, defense, and crit chance. If the player has unspent points it reuses the same +/− allocation + live-preview + Confirm flow as `LevelUpScene` (so banked points from a level-up the player skipped can still be spent later); a **Log Out** button (`Auth.logout`, same flow as `PauseScene`) is also available here. Replaces the earlier condensed "Σ" HUD toolbar panel, which has been removed (`GameScene._openStats`, registered in `PAUSE_BLOCKING_SCENES`/`main.ts`, key binding documented in `PauseScene`'s reference list). *(No temporary buff/debuff system exists yet, so nothing to highlight there.)*
+8. ✅ **Checkpoint**: On level-up the `LevelUpScene` overlay appears; player allocates points with a live preview; after Confirm, combat output changes immediately (attack damage and incoming defense are derived from `power`/`totalDefense`, recomputed from STR/DEX/INT/VIT + gear) and the values persist correctly across relog (`players/{id}/stats`, `statPoints`, `power`, `totalDefense`).
 
 ---
 

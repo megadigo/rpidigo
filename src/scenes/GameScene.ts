@@ -26,6 +26,7 @@ import { getLocalPlayer, setLocalPlayer } from '../player/Auth.ts'
 import { remotePlayerTiles, remoteEnemyTiles, isPassable } from '../world/CollisionMap.ts'
 import { xpForLevel, tileKey } from '../world/utils.ts'
 import { EnemyRegistry, TileRegistry, ItemRegistry } from '../registry/registries.ts'
+import { rollAttackDamage, findNewUnlocks } from '../world/playerStats.ts'
 import { ScriptExecutor } from '../world/ScriptExecutor.ts'
 import type { NearbyPlayer } from '../world/ScriptExecutor.ts'
 import type { DialogSceneData } from './DialogScene.ts'
@@ -33,6 +34,7 @@ import type { CraftSceneData } from './CraftScene.ts'
 import type { ShopSceneData } from './ShopScene.ts'
 import type { StorageSceneData } from './StorageScene.ts'
 import type { DeathSceneData } from './DeathScene.ts'
+import type { LevelUpSceneData } from './LevelUpScene.ts'
 import { MusicDirector } from '../audio/MusicDirector.ts'
 import patrolAggressive from '../scripts/enemies/patrol_aggressive.py?raw'
 
@@ -44,7 +46,7 @@ const ATTACK_ANIM_MS = 500
 
 /** DOM-overlay scenes that own input (and Esc) while active — block taps and the pause menu. */
 const PAUSE_BLOCKING_SCENES = ['DialogScene', 'InventoryScene', 'CraftScene',
-  'ShopScene', 'StorageScene', 'DeathScene', 'PauseScene']
+  'ShopScene', 'StorageScene', 'DeathScene', 'PauseScene', 'LevelUpScene', 'StatsScene']
 
 /** Shape of each entry under /presence/{room}/players/{id}. */
 interface PresenceEntry {
@@ -185,6 +187,16 @@ export class GameScene extends Phaser.Scene {
         if (this.scene.isActive('DialogScene'))   return
         if (this.scene.isActive('InventoryScene')) return
         this._openInventory()
+      })
+    }
+
+    // S key — open the character stats overlay (Step 21)
+    const sKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.S)
+    if (sKey) {
+      sKey.on('down', () => {
+        if (this._isDead) return
+        if (PAUSE_BLOCKING_SCENES.some(s => this.scene.isActive(s))) return
+        this._openStats()
       })
     }
 
@@ -1249,17 +1261,31 @@ export class GameScene extends Phaser.Scene {
     )
   }
 
+  /**
+   * Freeze the player and open the character stats overlay (Step 21).
+   * Lets the player view derived combat numbers, spend banked stat points,
+   * or log out — same teardown pattern as the other DOM overlays.
+   */
+  private _openStats(): void {
+    this.playerController.freeze()
+    this.scene.launch('StatsScene')
+    this.scene.get('StatsScene').events.once(
+      Phaser.Scenes.Events.SHUTDOWN,
+      () => this.playerController.unfreeze(),
+    )
+  }
+
   /** PVP attack: deals power damage to a remote player. Level 10+ gate enforced. */
   private async _handlePvpAttack(targetId: string, targetSprite: Phaser.GameObjects.Sprite): Promise<void> {
     const player = getLocalPlayer()
-    const damage = Math.max(1, player.power)
+    const { damage, crit } = rollAttackDamage(player)
     const snap   = await get(ref(db, `players/${targetId}/hp`))
     const curHp  = typeof snap.val() === 'number' ? (snap.val() as number) : 1
     const newHp  = Math.max(0, curHp - damage)
     void update(ref(db), { [`players/${targetId}/hp`]: newHp })
     const tx = Math.floor(targetSprite.x / TILE_SIZE)
     const ty = Math.floor(targetSprite.y / TILE_SIZE)
-    this._showFloatText(tx, ty, `-${damage}`, '#ff8888')
+    this._showFloatText(tx, ty, crit ? `CRIT! -${damage}` : `-${damage}`, crit ? '#ffaa33' : '#ff8888')
   }
 
   /**
@@ -1600,14 +1626,14 @@ export class GameScene extends Phaser.Scene {
         this._showFloatText(atx, aty, 'PVP needs Lv.10', '#ff8844')
         return true
       }
-      const dmg = Math.max(1, attacker.power)
+      const { damage: dmg, crit } = rollAttackDamage(attacker)
       void runTransaction(
         ref(db, `players/${id}/hp`),
         (hp: number | null) => (hp == null ? undefined : Math.max(0, hp - dmg)),
       )
       rec.sprite.setTint(0xff4444)
       this.time.delayedCall(150, () => { if (rec.sprite.active) rec.sprite.clearTint() })
-      this._showFloatText(atx, aty, `-${dmg}`, '#ff3333')
+      this._showFloatText(atx, aty, crit ? `CRIT! -${dmg}` : `-${dmg}`, crit ? '#ffaa33' : '#ff3333')
       return true
     }
     return false
@@ -1651,7 +1677,7 @@ export class GameScene extends Phaser.Scene {
     }
 
     const player = getLocalPlayer()
-    const damage  = Math.max(1, player.power)
+    const { damage, crit } = rollAttackDamage(player)
     // Use local HP as authoritative source — never reset by Firebase snapshots
     const currentHp = this._localEnemyHp.has(targetId)
       ? this._localEnemyHp.get(targetId)!
@@ -1666,12 +1692,12 @@ export class GameScene extends Phaser.Scene {
       this.time.delayedCall(150, () => { if (enemyRec.sprite.active) enemyRec.sprite.clearTint() })
     }
 
-    // Floating remaining-HP number
+    // Floating remaining-HP number — crits are called out in a distinct colour
     const dmgText = this.add.text(
       targetEntry.x * TILE_SIZE + TILE_SIZE / 2,
       targetEntry.y * TILE_SIZE,
-      `${Math.max(0, newHp)}`,
-      { fontFamily: 'monospace', fontSize: '7px', color: '#ff3333', stroke: '#000000', strokeThickness: 2 },
+      crit ? `CRIT! ${Math.max(0, newHp)}` : `${Math.max(0, newHp)}`,
+      { fontFamily: 'monospace', fontSize: '7px', color: crit ? '#ffaa33' : '#ff3333', stroke: '#000000', strokeThickness: 2 },
     ).setOrigin(0.5, 1).setDepth(50)
     this.tweens.add({
       targets: dmgText,
@@ -1715,50 +1741,44 @@ export class GameScene extends Phaser.Scene {
       player.inventory = newInventory
 
       // ── Level-up check ───────────────────────────────────────────────
+      // Each level grants 3 allocatable stat points (+1 bonus every 5th level);
+      // maxHp/maxMp grow with the player's current VIT/INT so investing in those
+      // stats compounds over time. Allocation happens in LevelUpScene.
+      const levelBefore  = player.level
       let levelsGained   = 0
-      let totalHpGained  = 0
-      let totalPwrGained = 0
+      let totalPtsGained = 0
       while (player.xp >= xpForLevel(player.level + 1)) {
-        // Gains scale with the level being left behind so each step feels bigger.
-        // maxHp: +11 at Lv2, +15 at Lv6, +20 at Lv11, +30 at Lv21
-        // power: +1 normally, +1 extra every 5 levels (Lv5, 10, 15, 20 …)
-        const hpGain  = 10 + player.level              // pre-increment level
-        const pwrGain = 1 + Math.floor(player.level / 5)
+        const hpGain = 8 + Math.floor(player.stats.endurance * 0.6)
+        const mpGain = 2 + Math.floor(player.stats.intelligence * 0.4)
 
-        player.level  += 1
-        player.maxHp  += hpGain
-        player.hp      = Math.min(player.hp + hpGain, player.maxHp)
-        player.power   += pwrGain
+        player.level += 1
+        player.maxHp += hpGain
+        player.hp     = Math.min(player.hp + hpGain, player.maxHp)
+        player.maxMp += mpGain
+        player.mp     = Math.min(player.mp + mpGain, player.maxMp)
 
-        totalHpGained  += hpGain
-        totalPwrGained += pwrGain
+        let ptGain = 3
+        if (player.level % 5 === 0) ptGain += 1
+        player.statPoints = (player.statPoints ?? 0) + ptGain
+
+        totalPtsGained += ptGain
         levelsGained++
       }
 
       setLocalPlayer(player)
 
-      // Level-up banner — screen-space, shows exact gains
       if (levelsGained > 0) {
-        const cx = this.cameras.main.width  / 2
-        const cy = this.cameras.main.height / 2
-        const gainLine = `+${totalHpGained} HP   +${totalPwrGained} Power`
-        const lvText = this.add.text(
-          cx, cy - 20,
-          `✦ LEVEL UP!  Lv.${player.level} ✦\n${gainLine}`,
-          {
-            fontFamily: 'monospace', fontSize: '16px', color: '#ffff44',
-            stroke: '#000000', strokeThickness: 3,
-            align: 'center',
-          },
-        ).setOrigin(0.5).setScrollFactor(0).setDepth(200)
-        this.tweens.add({
-          targets:  lvText,
-          y:        cy - 80,
-          alpha:    0,
-          duration: 2800,
-          ease:     'Cubic.easeOut',
-          onComplete: () => lvText.destroy(),
-        })
+        const data: LevelUpSceneData = {
+          newLevel:      player.level,
+          pointsGranted: totalPtsGained,
+          unlocks:       findNewUnlocks(levelBefore, player.level),
+        }
+        this.playerController.freeze()
+        this.scene.launch('LevelUpScene', data)
+        this.scene.get('LevelUpScene').events.once(
+          Phaser.Scenes.Events.SHUTDOWN,
+          () => this.playerController.unfreeze(),
+        )
       }
 
       // Remove from ScriptExecutor cache immediately so the next tick
@@ -1773,10 +1793,12 @@ export class GameScene extends Phaser.Scene {
         [`players/${player.id}/gold`]:             newGold,
         [`players/${player.id}/inventory`]:        newInventory,
         ...(levelsGained > 0 && {
-          [`players/${player.id}/level`]:  player.level,
-          [`players/${player.id}/maxHp`]:  player.maxHp,
-          [`players/${player.id}/hp`]:     player.hp,
-          [`players/${player.id}/power`]:  player.power,
+          [`players/${player.id}/level`]:      player.level,
+          [`players/${player.id}/maxHp`]:      player.maxHp,
+          [`players/${player.id}/hp`]:         player.hp,
+          [`players/${player.id}/maxMp`]:      player.maxMp,
+          [`players/${player.id}/mp`]:         player.mp,
+          [`players/${player.id}/statPoints`]: player.statPoints,
         }),
       })
     } else {

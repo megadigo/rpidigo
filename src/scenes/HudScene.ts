@@ -598,6 +598,8 @@ export class HudScene extends Phaser.Scene {
       if (typeof data.level        === 'number') p.level        = data.level
       if (typeof data.power        === 'number') p.power        = data.power
       if (typeof data.totalDefense === 'number') p.totalDefense = data.totalDefense
+      if (typeof data.statPoints   === 'number') p.statPoints   = data.statPoints
+      if (data.stats) p.stats = { ...p.stats, ...data.stats }
       setLocalPlayer(p)
       this._refresh()
     })

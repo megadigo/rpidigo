@@ -38,7 +38,8 @@
       "Bash(npm install *)",
       "Bash(node cleanup.js)",
       "Bash(pkill -f \"vite\")",
-      "Bash(pkill -f \"npm run dev\")"
+      "Bash(pkill -f \"npm run dev\")",
+      "Bash(git checkout *)"
     ]
   }
 }
