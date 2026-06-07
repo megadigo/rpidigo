@@ -42,6 +42,10 @@ const ENTITY_MOVE_DURATION_MS = 180
 /** How long (ms) to play the attack animation after an enemy attacks. */
 const ATTACK_ANIM_MS = 500
 
+/** DOM-overlay scenes that own input (and Esc) while active — block taps and the pause menu. */
+const PAUSE_BLOCKING_SCENES = ['DialogScene', 'InventoryScene', 'CraftScene',
+  'ShopScene', 'StorageScene', 'DeathScene', 'PauseScene']
+
 /** Shape of each entry under /presence/{room}/players/{id}. */
 interface PresenceEntry {
   x: number
@@ -191,6 +195,23 @@ export class GameScene extends Phaser.Scene {
       this._openInventory()
     })
 
+    // Esc key — open the pause menu (Step 24); other overlays own Esc while active
+    const escKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.ESC)
+    if (escKey) {
+      escKey.on('down', () => {
+        if (this._isDead) return
+        if (PAUSE_BLOCKING_SCENES.some(s => this.scene.isActive(s))) return
+        this._openPause()
+      })
+    }
+
+    // On-screen menu button emitted by HudScene
+    this.game.events.on('openPause', () => {
+      if (this._isDead) return
+      if (PAUSE_BLOCKING_SCENES.some(s => this.scene.isActive(s))) return
+      this._openPause()
+    })
+
     // Pinch-to-zoom (two-finger touch)
     let _pinchStartDist = 0
     let _pinchStartZoom = 1
@@ -226,9 +247,7 @@ export class GameScene extends Phaser.Scene {
       this.input.on('pointerup', (p: Phaser.Input.Pointer) => {
         if (this._isDead) return
         // Ignore taps consumed by DOM overlays (dialogs, inventory, etc.)
-        const activeOverlays = ['DialogScene', 'InventoryScene', 'CraftScene',
-          'ShopScene', 'StorageScene', 'DeathScene']
-        if (activeOverlays.some(s => this.scene.isActive(s))) return
+        if (PAUSE_BLOCKING_SCENES.some(s => this.scene.isActive(s))) return
         // Only react to taps, not drags
         if (Phaser.Math.Distance.Between(p.downX, p.downY, p.x, p.y) > 12) return
         const tapTx = Math.floor(p.worldX / TILE_SIZE)
@@ -302,6 +321,7 @@ export class GameScene extends Phaser.Scene {
       this._musicDirector = null
       if (this.scene.isActive('DeathScene')) this.scene.stop('DeathScene')
       this.game.events.off('openInventory')
+      this.game.events.off('openPause')
     })
   }
 
@@ -1210,6 +1230,20 @@ export class GameScene extends Phaser.Scene {
     this.playerController.freeze()
     this.scene.launch('InventoryScene')
     this.scene.get('InventoryScene').events.once(
+      Phaser.Scenes.Events.SHUTDOWN,
+      () => this.playerController.unfreeze(),
+    )
+  }
+
+  /**
+   * Freeze the player and open the pause menu overlay (Step 24).
+   * Resume unfreezes normally; Log Out stops GameScene/HudScene itself, in
+   * which case the SHUTDOWN handler below simply unfreezes a discarded controller.
+   */
+  private _openPause(): void {
+    this.playerController.freeze()
+    this.scene.launch('PauseScene')
+    this.scene.get('PauseScene').events.once(
       Phaser.Scenes.Events.SHUTDOWN,
       () => this.playerController.unfreeze(),
     )

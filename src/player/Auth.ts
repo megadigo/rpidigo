@@ -133,6 +133,17 @@ export async function login(name: string, password: string): Promise<PlayerInsta
   return player
 }
 
+/** Log out the current player: mark offline, clear presence, and forget the session. */
+export async function logout(): Promise<void> {
+  const player = getLocalPlayer()
+  await update(ref(db), {
+    [`players/${player.id}/online`]:                   false,
+    [`players/${player.id}/lastSeen`]:                 serverTimestamp(),
+    [`presence/${player.room}/players/${player.id}`]:  null,
+  })
+  _localPlayer = null
+}
+
 async function findSpawnPoint(): Promise<{ x: number; y: number }> {
   for (let attempt = 0; attempt < 20; attempt++) {
     const x = 50 + Math.floor(Math.random() * 900)

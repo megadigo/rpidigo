@@ -20,7 +20,25 @@
       "Bash(Format-Table -AutoSize)",
       "Bash(grep -E \"\\\\.ts$\")",
       "Bash(Get-ChildItem -Path \"d:\\\\GitHub\\\\rpidigo\\\\public\\\\assets\\\\sprites\" -Recurse -Filter \"*.png\")",
-      "Bash(Sort-Object)"
+      "Bash(Sort-Object)",
+      "Skill(run)",
+      "Skill(run:*)",
+      "Bash(npx --yes chromium-cli --help)",
+      "Read(//d//**)",
+      "Bash(npm ls *)",
+      "Bash(npx --yes playwright --version)",
+      "Bash(node -e \"require\\('playwright'\\)\")",
+      "Read(//tmp/**)",
+      "Bash(npx playwright *)",
+      "Bash(node test_pause.js)",
+      "Bash(node -e \"console.log\\(require\\('os'\\).tmpdir\\(\\)\\)\")",
+      "Bash(find / -iname \"test_pause.js\" 2>/dev/null)",
+      "Bash(node -e \"console.log\\(process.cwd\\(\\)\\)\")",
+      "Bash(pwd -P)",
+      "Bash(npm install *)",
+      "Bash(node cleanup.js)",
+      "Bash(pkill -f \"vite\")",
+      "Bash(pkill -f \"npm run dev\")"
     ]
   }
 }

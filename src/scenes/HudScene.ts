@@ -63,6 +63,9 @@ export class HudScene extends Phaser.Scene {
   private _musicPanelEl: HTMLDivElement    | null = null
   private _musicStyle:   HTMLStyleElement  | null = null
 
+  private _menuBtnEl:    HTMLButtonElement | null = null
+  private _menuStyle:    HTMLStyleElement  | null = null
+
   /** Bound Enter-key handler so it can be removed on shutdown. */
   private _enterHandler!: (e: KeyboardEvent) => void
 
@@ -90,6 +93,7 @@ export class HudScene extends Phaser.Scene {
     this._buildDpad()
     this._buildFullscreenBtn()
     this._buildMusicPanel()
+    this._buildMenuBtn()
     this._subscribeChat(player.room)
     this._subscribePlayer(player.id)
 
@@ -527,6 +531,30 @@ export class HudScene extends Phaser.Scene {
     document.addEventListener('fullscreenchange', update)
   }
 
+  /** Top-toolbar button that opens PauseScene (Step 24) — same row as ⛶ / ♪. */
+  private _buildMenuBtn(): void {
+    this._menuStyle = document.createElement('style')
+    this._menuStyle.textContent = `
+      #hud-menu {
+        position: fixed; top: 2px; right: 46px; z-index: 102;
+        background: transparent; border: 1px solid rgba(255,255,255,0.25);
+        color: rgba(255,255,255,0.5); font-family: monospace;
+        font-size: 11px; padding: 0 5px; line-height: 16px;
+        cursor: pointer; user-select: none;
+      }
+      #hud-menu:hover { border-color: #fff; color: #fff; }
+    `
+    document.head.appendChild(this._menuStyle)
+
+    this._menuBtnEl = document.createElement('button')
+    this._menuBtnEl.id = 'hud-menu'
+    this._menuBtnEl.textContent = '☰'
+    this._menuBtnEl.title = 'Menu (Esc)'
+    document.body.appendChild(this._menuBtnEl)
+
+    this._menuBtnEl.addEventListener('click', () => this.game.events.emit('openPause'))
+  }
+
   private _teardown(): void {
     document.removeEventListener('keydown', this._enterHandler)
     if (this._chatUnsub)   { this._chatUnsub();   this._chatUnsub   = null }
@@ -540,6 +568,8 @@ export class HudScene extends Phaser.Scene {
     this._musicBtnEl?.remove()
     this._musicPanelEl?.remove()
     this._musicStyle?.remove()
+    this._menuBtnEl?.remove()
+    this._menuStyle?.remove()
     // Release all virtual inputs so nothing stays stuck after scene teardown
     virtualInput.up = virtualInput.down = virtualInput.left = virtualInput.right = virtualInput.action = false
   }

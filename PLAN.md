@@ -308,9 +308,9 @@
 
 ---
 
-## Step 24 — Pause Screen ⬜
+## Step 24 — Pause Screen ✅
 *Goal: the player can pause, adjust settings, and log out cleanly.*
 
-1. `PauseScene` DOM overlay: **Resume**, **Settings** (audio volume, key-binding display), **Log Out** buttons.
-2. **Log Out** writes `online: false` to Firebase, removes presence entry, and navigates to `LoginScene`.
-3. **Checkpoint**: Press the menu button; pause overlay appears; Resume returns to play; Log Out clears presence and navigates to the login screen.
+1. ✅ `PauseScene` DOM overlay: **Resume**, **Settings** (collapsible panel with music ON/OFF + volume slider mirroring `HudScene`'s music panel, plus a read-only key-binding reference list), **Log Out** buttons. Opens via `Esc` (when no other overlay owns input) or the new `☰` menu button in the HUD top-right toolbar (`GameScene._openPause`, `HudScene._buildMenuBtn` emitting `openPause`); freezes the player like other overlays and unfreezes on shutdown.
+2. ✅ **Log Out** (`Auth.logout`) writes `players/{id}/online = false` + `lastSeen`, removes the `presence/{room}/players/{id}` entry, clears the local session, then `PauseScene` stops `GameScene`/`HudScene` and starts `LoginScene`.
+3. ✅ **Checkpoint**: Press `Esc` or the menu button; the **PAUSED** overlay appears over the frozen game world; **Settings** reveals music controls and key bindings; **Resume** (button or `Esc`) returns to play; **Log Out** clears presence and navigates to the login screen.
