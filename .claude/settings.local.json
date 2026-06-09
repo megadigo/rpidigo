@@ -40,7 +40,8 @@
       "Bash(pkill -f \"vite\")",
       "Bash(pkill -f \"npm run dev\")",
       "Bash(git checkout *)",
-      "Bash(npx vite *)"
+      "Bash(npx vite *)",
+      "Bash(node scripts/gen-placeholders.cjs)"
     ]
   }
 }

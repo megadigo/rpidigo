@@ -67,6 +67,7 @@ export interface WeaponDefinition extends ItemDefinition {
   // Projectile and elemental stats (Step 20)
   projectileSpeed?: number   // pixels/second; default 150 for ranged, 120 for magic
   projectileRange?: number   // tiles; default 8
+  projectileSprite?: string  // key under Projectiles/ (e.g. 'arrow', 'fire_ball')
   element?: 'fire' | 'water' | 'earth' | 'air'
   statusEffect?: { type: 'burn' | 'slow' | 'stagger' | 'chain'; durationMs: number; value: number }
   cooldownMs?: number        // weapon-specific attack cooldown override (ms); default 500

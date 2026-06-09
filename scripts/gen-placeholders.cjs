@@ -277,21 +277,51 @@ const ITEMS = [
   ['Items/antidote.png',       '#2ECC71'],
   ['Items/cooked_mushroom.png','#E67E22'],
   ['Items/dungeon_key.png',    '#F1C40F'],
+  // Elemental materials (Step 20)
+  ['Items/mana_crystal.png',   '#7D3C98'],
+  ['Items/sand_crystal.png',   '#F0B27A'],
+  ['Items/ectoplasm.png',      '#A9DFBF'],
+  ['Items/dark_crystal.png',   '#1C2833'],
+  ['Items/ancient_wood.png',   '#4A235A'],
 ]
 for (const [p, c] of ITEMS) write(p, icon16(c))
+
+// ── Projectiles — in-flight projectile sprites (16×16) ───────────────────────
+
+console.log('\n=== Projectiles — in-flight sprites (16×16) ===')
+const PROJECTILES = [
+  ['Projectiles/arrow.png',       '#BA8C63', '#000000', '#FFFFFF'],   // physical arrow
+  ['Projectiles/dark_arrow.png',  '#4A235A', '#000000', '#AA88FF'],   // dark bow arrow
+  ['Projectiles/magic_orb.png',   '#1A5276', '#000000', '#7FB3D3'],   // generic magic
+  ['Projectiles/fire_ball.png',   '#C0392B', '#000000', '#F39C12'],   // fire element
+  ['Projectiles/water_orb.png',   '#1A8CB3', '#000000', '#AED6F1'],   // water element
+  ['Projectiles/earth_chunk.png', '#1E8449', '#000000', '#82E0AA'],   // earth element
+  ['Projectiles/air_gust.png',    '#D6EAF8', '#000000', '#FFFFFF'],   // air element
+]
+for (const [p, c, b, d] of PROJECTILES) write(p, icon16(c, b, d))
 
 // ── Weapons — weapon icons (16×16) ────────────────────────────────────────────
 
 console.log('\n=== Weapons — icons (16×16) ===')
 const WEAPONS = [
+  // Melee
   ['Weapons/wooden_sword.png', '#D4AC6E'],
   ['Weapons/iron_sword.png',   '#5D6D7E'],
   ['Weapons/iron_axe.png',     '#5D6D7E'],
   ['Weapons/shadow_blade.png', '#6C3483'],
+  // Ranged
   ['Weapons/wooden_bow.png',   '#BA8C63'],
   ['Weapons/iron_bow.png',     '#5D6D7E'],
+  ['Weapons/dark_bow.png',     '#4A235A'],
+  // Magic — base
   ['Weapons/oak_staff.png',    '#7D6608'],
   ['Weapons/iron_staff.png',   '#1A5276'],
+  // Magic — elemental
+  ['Weapons/air_wand.png',     '#D6EAF8'],
+  ['Weapons/fire_wand.png',    '#E74C3C'],
+  ['Weapons/water_staff.png',  '#1A8CB3'],
+  ['Weapons/earth_staff.png',  '#1E8449'],
+  ['Weapons/soul_staff.png',   '#6C3483'],
 ]
 for (const [p, c] of WEAPONS) write(p, icon16(c))
 

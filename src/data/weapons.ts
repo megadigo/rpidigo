@@ -30,12 +30,14 @@ export const weapons: WeaponDefinition[] = [
     spriteFrame: 'wooden_bow.png', category: 'weapon',
     power: 5, weaponType: 'ranged', levelRequired: 1, animFrame: 'wooden_bow_shoot.png',
     projectileSpeed: 140, projectileRange: 7, cooldownMs: 700,
+    projectileSprite: 'arrow',
   },
   {
     id: 'iron_bow', name: 'Iron Bow', stackable: false, maxStack: 1,
     spriteFrame: 'iron_bow.png', category: 'weapon',
     power: 11, weaponType: 'ranged', levelRequired: 4, animFrame: 'iron_bow_shoot.png',
     projectileSpeed: 170, projectileRange: 10, cooldownMs: 600,
+    projectileSprite: 'arrow',
   },
   {
     id: 'dark_bow', name: 'Dark Bow', stackable: false, maxStack: 1,
@@ -43,6 +45,7 @@ export const weapons: WeaponDefinition[] = [
     power: 22, weaponType: 'ranged', levelRequired: 8, animFrame: 'dark_bow_shoot.png',
     projectileSpeed: 200, projectileRange: 12, cooldownMs: 550,
     specialEffect: 'pierce',
+    projectileSprite: 'dark_arrow',
   },
 
   // ── Magic weapons — base ──────────────────────────────────────────────────
@@ -52,6 +55,7 @@ export const weapons: WeaponDefinition[] = [
     power: 8, weaponType: 'magic', levelRequired: 2, mpCostPerSwing: 5,
     animFrame: 'oak_staff_cast.png',
     projectileSpeed: 120, projectileRange: 6,
+    projectileSprite: 'magic_orb',
   },
   {
     id: 'iron_staff', name: 'Iron Staff', stackable: false, maxStack: 1,
@@ -59,6 +63,7 @@ export const weapons: WeaponDefinition[] = [
     power: 16, weaponType: 'magic', levelRequired: 5, mpCostPerSwing: 8,
     specialEffect: 'area', animFrame: 'iron_staff_cast.png',
     projectileSpeed: 130, projectileRange: 8,
+    projectileSprite: 'magic_orb',
   },
 
   // ── Magic weapons — elemental ─────────────────────────────────────────────
@@ -71,6 +76,7 @@ export const weapons: WeaponDefinition[] = [
     element: 'air',
     statusEffect: { type: 'chain', durationMs: 0, value: 0 },
     cooldownMs: 550,
+    projectileSprite: 'air_gust',
   },
   {
     id: 'fire_wand', name: 'Fire Wand', stackable: false, maxStack: 1,
@@ -81,6 +87,7 @@ export const weapons: WeaponDefinition[] = [
     element: 'fire',
     statusEffect: { type: 'burn', durationMs: 3000, value: 0.33 },
     cooldownMs: 600,
+    projectileSprite: 'fire_ball',
   },
   {
     id: 'water_staff', name: 'Water Staff', stackable: false, maxStack: 1,
@@ -91,6 +98,7 @@ export const weapons: WeaponDefinition[] = [
     element: 'water',
     statusEffect: { type: 'slow', durationMs: 2000, value: 0.25 },
     cooldownMs: 600,
+    projectileSprite: 'water_orb',
   },
   {
     id: 'earth_staff', name: 'Earth Staff', stackable: false, maxStack: 1,
@@ -101,6 +109,7 @@ export const weapons: WeaponDefinition[] = [
     element: 'earth',
     statusEffect: { type: 'stagger', durationMs: 1000, value: 0.3 },
     cooldownMs: 650,
+    projectileSprite: 'earth_chunk',
   },
   {
     id: 'soul_staff', name: 'Soul Staff', stackable: false, maxStack: 1,
@@ -111,5 +120,6 @@ export const weapons: WeaponDefinition[] = [
     element: 'fire',
     statusEffect: { type: 'burn', durationMs: 5000, value: 0.5 },
     cooldownMs: 700,
+    projectileSprite: 'fire_ball',
   },
 ]

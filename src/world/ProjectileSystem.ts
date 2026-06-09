@@ -48,7 +48,7 @@ interface ActiveProjectile {
   element: 'fire' | 'water' | 'earth' | 'air' | null
   statusEffect?: { type: 'burn' | 'slow' | 'stagger' | 'chain'; durationMs: number; value: number }
   hitEnemyIds: Set<string>
-  graphic: Phaser.GameObjects.Arc
+  graphic: Phaser.GameObjects.Image | Phaser.GameObjects.Arc
 }
 
 /** Pixel colour used to tint the projectile graphic per element. */
@@ -84,13 +84,24 @@ export class ProjectileSystem {
     crit: boolean
     element: ActiveProjectile['element']
     statusEffect?: ActiveProjectile['statusEffect']
+    projectileSprite?: string  // Phaser texture key under Projectiles/
   }): string {
     const id = `${opts.ownerId}_${Date.now()}_${this._seq++}`
-    const color = ELEMENT_COLOR[opts.element ?? 'default'] ?? ELEMENT_COLOR['default']
 
-    const graphic = this._scene.add
-      .arc(opts.startPx, opts.startPy, opts.element ? 4 : 3, 0, 360, false, color, 0.95)
-      .setDepth(15)
+    // Use a loaded sprite image when available; fall back to a coloured circle.
+    let graphic: Phaser.GameObjects.Image | Phaser.GameObjects.Arc
+    const spriteKey = opts.projectileSprite ? `Projectiles/${opts.projectileSprite}` : null
+    if (spriteKey && this._scene.textures.exists(spriteKey)) {
+      graphic = this._scene.add
+        .image(opts.startPx, opts.startPy, spriteKey)
+        .setDisplaySize(8, 8)
+        .setDepth(15)
+    } else {
+      const color = ELEMENT_COLOR[opts.element ?? 'default'] ?? ELEMENT_COLOR['default']
+      graphic = this._scene.add
+        .arc(opts.startPx, opts.startPy, opts.element ? 4 : 3, 0, 360, false, color, 0.95)
+        .setDepth(15)
+    }
 
     const proj: ActiveProjectile = {
       id,

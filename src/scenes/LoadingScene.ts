@@ -80,6 +80,16 @@ export class LoadingScene extends Phaser.Scene {
       const key = `Armors/${a.spriteFrame.replace('.png', '')}`
       this.load.image(key, `assets/sprites/Armors/${a.spriteFrame}`)
     }
+    // Projectile sprites — one per distinct projectileSprite value in weapons
+    {
+      const seen = new Set<string>()
+      for (const w of weapons) {
+        if (!w.projectileSprite || seen.has(w.projectileSprite)) continue
+        seen.add(w.projectileSprite)
+        const key = `Projectiles/${w.projectileSprite}`
+        this.load.image(key, `assets/sprites/Projectiles/${w.projectileSprite}.png`)
+      }
+    }
     // Sound effects
     this.load.audio('sfx_swing',  'assets/music/swing.wav')
     this.load.audio('sfx_gather', 'assets/music/wood-small.wav')

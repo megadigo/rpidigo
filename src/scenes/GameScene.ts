@@ -1704,17 +1704,18 @@ export class GameScene extends Phaser.Scene {
       const finalDamage = element === 'earth' ? Math.round(damage * 1.3) : damage
 
       this._projectileSystem.spawn({
-        ownerId:      player.id,
-        startPx:      tx * TILE_SIZE + TILE_SIZE / 2,
-        startPy:      ty * TILE_SIZE + TILE_SIZE / 2,
-        directionDx:  dx,
-        directionDy:  dy,
-        speedPxPerSec: finalSpeed,
-        maxRangeTiles: range,
-        baseDamage:    finalDamage,
+        ownerId:         player.id,
+        startPx:         tx * TILE_SIZE + TILE_SIZE / 2,
+        startPy:         ty * TILE_SIZE + TILE_SIZE / 2,
+        directionDx:     dx,
+        directionDy:     dy,
+        speedPxPerSec:   finalSpeed,
+        maxRangeTiles:   range,
+        baseDamage:      finalDamage,
         crit,
         element,
-        statusEffect: weaponDef?.statusEffect,
+        statusEffect:    weaponDef?.statusEffect,
+        projectileSprite: weaponDef?.projectileSprite,
       })
       return
     }
