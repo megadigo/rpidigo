@@ -116,21 +116,13 @@ export const TILE_DEFS: Record<string, TileDef> = {
   garden_plot:         { sprite: 'World/Ground/GardenPlot',              layer: 'GROUND' },
   wheat_field:         { sprite: 'World/Nature/Wheatfield',              layer: 'MIDDLE', speedMod: 0.8 },
   // ── Dungeon entrance (world-visible) ──────────────────────────────────────
-<<<<<<< HEAD
-  dungeon_entrance:    { sprite: 'World/Buildings/DungeonEntrance',      layer: 'GROUND', entry: 'dungeon' },
-  dungeon_floor:       { sprite: 'Dungeon/DungeonFloor',            layer: 'MIDDLE' },
-=======
   dungeon_entrance:    { sprite: 'World/Buildings/DungeonEntrance',      layer: 'MIDDLE', entry: 'dungeon' },
   dungeon_floor:       { sprite: 'Dungeon/DungeonFloor',            layer: 'GROUND' },
->>>>>>> b3cafe6063bebb5090615fe2ae8d13a103d38582
   dungeon_wall:        { sprite: 'Dungeon/DungeonWall',             layer: 'MIDDLE', impassable: true },
   dungeon_stairs_down: { sprite: 'Dungeon/StairDown',               layer: 'MIDDLE' },
   dungeon_stairs_up:   { sprite: 'Dungeon/StairUp',                 layer: 'MIDDLE', roomExit: true },
   dungeon_pillar:      { sprite: 'Dungeon/DungeonPillar',           layer: 'MIDDLE' },
-<<<<<<< HEAD
   dungeon_trap:        { sprite: 'Dungeon/DungeonTrap',             layer: 'MIDDLE' },
-=======
->>>>>>> b3cafe6063bebb5090615fe2ae8d13a103d38582
   dungeon_chest:       { sprite: 'Dungeon/Chest',                   layer: 'MIDDLE', impassable: true },
   dungeon_altar:       { sprite: 'Dungeon/DungeonAltar',            layer: 'MIDDLE', impassable: true },
   dungeon_tombstones:  { sprite: 'Dungeon/Tombstone',               layer: 'MIDDLE', impassable: true },
