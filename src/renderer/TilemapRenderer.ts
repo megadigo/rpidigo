@@ -127,6 +127,7 @@ export const TILE_DEFS: Record<string, TileDef> = {
   dungeon_stairs_down: { sprite: 'Dungeon/StairDown',               layer: 'MIDDLE' },
   dungeon_stairs_up:   { sprite: 'Dungeon/StairUp',                 layer: 'MIDDLE', roomExit: true },
   dungeon_pillar:      { sprite: 'Dungeon/DungeonPillar',           layer: 'MIDDLE' },
+<<<<<<< HEAD
   dungeon_trap:        { sprite: 'Dungeon/DungeonTrap',             layer: 'MIDDLE' },
 =======
 >>>>>>> b3cafe6063bebb5090615fe2ae8d13a103d38582
@@ -146,7 +147,10 @@ export const TILE_DEFS: Record<string, TileDef> = {
   cellar_floor:        { sprite: 'Cellars/CellarFloor',             layer: 'GROUND' },
   cellar_wall:         { sprite: 'Cellars/CellarWall',              layer: 'MIDDLE', impassable: true },
   cellar_chest:        { sprite: 'Cellars/CellarChest',             layer: 'MIDDLE', impassable: true },
+<<<<<<< HEAD
   cellar_trap:         { sprite: 'Cellars/CellarTrap',              layer: 'MIDDLE' },
+=======
+>>>>>>> b3cafe6063bebb5090615fe2ae8d13a103d38582
   cellar_stairs_up:    { sprite: 'Cellars/CellarStairsUp',          layer: 'MIDDLE', roomExit: true },
 }
 
