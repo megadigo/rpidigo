@@ -117,12 +117,12 @@ export const TILE_DEFS: Record<string, TileDef> = {
   wheat_field:         { sprite: 'World/Nature/Wheatfield',              layer: 'MIDDLE', speedMod: 0.8 },
   // ── Dungeon entrance (world-visible) ──────────────────────────────────────
   dungeon_entrance:    { sprite: 'World/Buildings/DungeonEntrance',      layer: 'GROUND', entry: 'dungeon' },
-  dungeon_floor:       { sprite: 'Dungeon/DungeonFloor',            layer: 'GROUND' },
+  dungeon_floor:       { sprite: 'Dungeon/DungeonFloor',            layer: 'MIDDLE' },
   dungeon_wall:        { sprite: 'Dungeon/DungeonWall',             layer: 'MIDDLE', impassable: true },
-  dungeon_stairs_down: { sprite: 'Dungeon/StairDown',               layer: 'GROUND' },
+  dungeon_stairs_down: { sprite: 'Dungeon/StairDown',               layer: 'MIDDLE' },
   dungeon_stairs_up:   { sprite: 'Dungeon/StairUp',                 layer: 'MIDDLE', roomExit: true },
   dungeon_pillar:      { sprite: 'Dungeon/DungeonPillar',           layer: 'MIDDLE' },
-  dungeon_trap:        { sprite: 'Dungeon/DungeonTrap',             layer: 'GROUND' },
+  dungeon_trap:        { sprite: 'Dungeon/DungeonTrap',             layer: 'MIDDLE' },
   dungeon_chest:       { sprite: 'Dungeon/Chest',                   layer: 'MIDDLE', impassable: true },
   dungeon_altar:       { sprite: 'Dungeon/DungeonAltar',            layer: 'MIDDLE', impassable: true },
   dungeon_tombstones:  { sprite: 'Dungeon/Tombstone',               layer: 'MIDDLE', impassable: true },
@@ -139,7 +139,7 @@ export const TILE_DEFS: Record<string, TileDef> = {
   cellar_floor:        { sprite: 'Cellars/CellarFloor',             layer: 'GROUND' },
   cellar_wall:         { sprite: 'Cellars/CellarWall',              layer: 'MIDDLE', impassable: true },
   cellar_chest:        { sprite: 'Cellars/CellarChest',             layer: 'MIDDLE', impassable: true },
-  cellar_trap:         { sprite: 'Cellars/CellarTrap',              layer: 'GROUND' },
+  cellar_trap:         { sprite: 'Cellars/CellarTrap',              layer: 'MIDDLE' },
   cellar_stairs_up:    { sprite: 'Cellars/CellarStairsUp',          layer: 'MIDDLE', roomExit: true },
 }
 
