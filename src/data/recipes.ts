@@ -28,6 +28,14 @@ export const recipes: RecipeDefinition[] = [
   { id: 'recipe_iron_boots',     produces: 'iron_boots',    quantity: 1, requires: [{ itemId: 'iron_bar', qty: 3 }],                                       station: 'workshop', levelRequired: 4 },
   { id: 'recipe_iron_gloves',    produces: 'iron_gloves',   quantity: 1, requires: [{ itemId: 'iron_bar', qty: 2 }],                                       station: 'workshop', levelRequired: 4 },
 
+  // ── Elemental weapon recipes (Step 20) ───────────────────────────────────
+  { id: 'recipe_air_wand',    produces: 'air_wand',    quantity: 1, requires: [{ itemId: 'wood', qty: 4 }, { itemId: 'mana_crystal', qty: 1 }],                              station: 'workbench', levelRequired: 2 },
+  { id: 'recipe_fire_wand',   produces: 'fire_wand',   quantity: 1, requires: [{ itemId: 'mana_crystal', qty: 2 }, { itemId: 'iron_bar', qty: 1 }],                          station: 'workshop',  levelRequired: 3 },
+  { id: 'recipe_water_staff', produces: 'water_staff', quantity: 1, requires: [{ itemId: 'sand_crystal', qty: 2 }, { itemId: 'wood', qty: 3 }],                              station: 'workbench', levelRequired: 3 },
+  { id: 'recipe_earth_staff', produces: 'earth_staff', quantity: 1, requires: [{ itemId: 'stone', qty: 4 }, { itemId: 'iron_bar', qty: 1 }, { itemId: 'mana_crystal', qty: 1 }], station: 'workshop', levelRequired: 4 },
+  { id: 'recipe_dark_bow',    produces: 'dark_bow',    quantity: 1, requires: [{ itemId: 'iron_bar', qty: 2 }, { itemId: 'dark_crystal', qty: 1 }, { itemId: 'leather', qty: 3 }], station: 'dungeon_altar', levelRequired: 8 },
+  { id: 'recipe_soul_staff',  produces: 'soul_staff',  quantity: 1, requires: [{ itemId: 'ancient_wood', qty: 2 }, { itemId: 'mana_crystal', qty: 3 }, { itemId: 'ectoplasm', qty: 1 }], station: 'dungeon_altar', levelRequired: 10 },
+
   // ── Dungeon altar recipes ─────────────────────────────────────────────────
   { id: 'recipe_shadow_blade',      produces: 'shadow_blade',      quantity: 1, requires: [{ itemId: 'iron_bar', qty: 5 }, { itemId: 'gold_coin', qty: 50 }], station: 'dungeon_altar', levelRequired: 8 },
   { id: 'recipe_shadow_helmet',     produces: 'shadow_helmet',     quantity: 1, requires: [{ itemId: 'iron_bar', qty: 4 }, { itemId: 'gold_coin', qty: 30 }], station: 'dungeon_altar', levelRequired: 8 },

@@ -27,6 +27,14 @@ export const shopStock: ShopStockEntry[] = [
   { itemId: 'iron_bow',      baseBuyPrice: 130, sellMultiplier: 0.4, maxQuantity: 5   },
   { itemId: 'oak_staff',     baseBuyPrice: 50,  sellMultiplier: 0.4, maxQuantity: -1  },
   { itemId: 'iron_staff',    baseBuyPrice: 160, sellMultiplier: 0.4, maxQuantity: 5   },
+  { itemId: 'air_wand',      baseBuyPrice: 55,  sellMultiplier: 0.4, maxQuantity: -1  },
+  { itemId: 'fire_wand',     baseBuyPrice: 90,  sellMultiplier: 0.4, maxQuantity: 5   },
+  { itemId: 'water_staff',   baseBuyPrice: 85,  sellMultiplier: 0.4, maxQuantity: 5   },
+  { itemId: 'earth_staff',   baseBuyPrice: 110, sellMultiplier: 0.4, maxQuantity: 5   },
+
+  // ── Elemental materials (limited stock) ───────────────────────────────────
+  { itemId: 'mana_crystal',  baseBuyPrice: 40,  sellMultiplier: 0.5, maxQuantity: 3   },
+  { itemId: 'sand_crystal',  baseBuyPrice: 35,  sellMultiplier: 0.5, maxQuantity: 3   },
 
   // ── Armor ─────────────────────────────────────────────────────────────────
   { itemId: 'leather_helmet',      baseBuyPrice: 35,  sellMultiplier: 0.4, maxQuantity: -1 },

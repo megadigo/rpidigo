@@ -21,6 +21,13 @@ export const items: ItemDefinition[] = [
   { id: 'pickaxe',name: 'Pickaxe',           stackable: false, maxStack: 1, spriteFrame: 'pickaxe.png',category: 'tool' },
   { id: 'scythe', name: 'Scythe',            stackable: false, maxStack: 1, spriteFrame: 'scythe.png', category: 'tool' },
 
+  // ── Elemental materials (Step 20) ─────────────────────────────────────────
+  { id: 'mana_crystal',  name: 'Mana Crystal',  stackable: true, maxStack: 20, spriteFrame: 'mana_crystal.png',  category: 'material' },
+  { id: 'sand_crystal',  name: 'Sand Crystal',  stackable: true, maxStack: 20, spriteFrame: 'sand_crystal.png',  category: 'material' },
+  { id: 'ectoplasm',     name: 'Ectoplasm',     stackable: true, maxStack: 20, spriteFrame: 'ectoplasm.png',     category: 'material' },
+  { id: 'dark_crystal',  name: 'Dark Crystal',  stackable: true, maxStack: 20, spriteFrame: 'dark_crystal.png',  category: 'material' },
+  { id: 'ancient_wood',  name: 'Ancient Wood',  stackable: true, maxStack: 20, spriteFrame: 'ancient_wood.png',  category: 'material' },
+
   // ── Keys ──────────────────────────────────────────────────────────────────
   { id: 'dungeon_key', name: 'Dungeon Key', stackable: true, maxStack: 5, spriteFrame: 'dungeon_key.png', category: 'key' },
 ]

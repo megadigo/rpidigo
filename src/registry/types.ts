@@ -64,6 +64,12 @@ export interface WeaponDefinition extends ItemDefinition {
   specialEffect?: string
   mpCostPerSwing?: number
   animFrame: string
+  // Projectile and elemental stats (Step 20)
+  projectileSpeed?: number   // pixels/second; default 150 for ranged, 120 for magic
+  projectileRange?: number   // tiles; default 8
+  element?: 'fire' | 'water' | 'earth' | 'air'
+  statusEffect?: { type: 'burn' | 'slow' | 'stagger' | 'chain'; durationMs: number; value: number }
+  cooldownMs?: number        // weapon-specific attack cooldown override (ms); default 500
 }
 
 export interface ArmorDefinition extends ItemDefinition {

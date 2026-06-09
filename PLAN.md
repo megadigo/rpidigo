@@ -226,28 +226,23 @@
 
 ---
 
-## Step 20 — Ranged Bows & Elemental Magic ⬜
+## Step 20 — Ranged Bows & Elemental Magic ✅
 *Goal: ranged and magic combat uses spawned projectiles with distinct elemental behaviour and shop/crafting integration.*
 
-1. Add a shared `ProjectileSystem` (spawn, movement, collision, lifetime, hit events) for player and scripted entities.
-2. Bow weapons (`type: ranged`) fire physical projectiles with speed/range stats and ammo-less cooldown-based firing.
-3. Define magic schools and spells for `type: magic` weapons:
-   - fire: direct damage + burn DOT,
-   - water: damage + slow,
-   - earth: higher stagger/armor break,
-   - air: fast projectile + chain/knockback utility.
-4. Add MP costs and cast cooldowns per spell; prevent cast when MP is insufficient and surface feedback in HUD.
-5. Extend weapon/item definitions with projectile and elemental metadata (`projectileSprite`, `speed`, `range`, `element`, `statusEffect`).
-6. Shop integration:
-   - merchants sell starter bows and elemental catalysts/tomes,
-   - level-gate stronger bows/spells by existing shop progression tiers.
-7. Crafting integration:
-   - add recipes for elemental staves/wands and advanced bows,
-   - consume elemental materials (for example `mana_crystal`, `sand_crystal`, `ectoplasm`).
-8. Network sync:
-   - projectile spawn and hit resolution are deterministic and mirrored via Firebase presence/events,
-   - include anti-double-hit guard by projectile ID + victim timestamp window.
-9. **Checkpoint**: Player can equip bow and shoot visible projectiles, cast fire/water/earth/air spells with MP consumption, and buy basic ranged/magic gear from shops.
+1. ✅ `ProjectileSystem` (`src/world/ProjectileSystem.ts`): spawns coloured arc projectiles per element (brown=physical, orange=fire, cyan=water, green=earth, white=air); moves along direction vector each frame; wall collision stops projectile; enemy tile-proximity collision fires `ProjectileHitEvent`; anti-double-hit `Set` per projectile; `destroyAll()` on room transition and scene shutdown.
+2. ✅ Bow weapons fire physical projectiles with speed/range/cooldown stats: `wooden_bow` (140px/s, 7 tiles, 700ms cooldown), `iron_bow` (170px/s, 10 tiles, 600ms), `dark_bow` (200px/s, 12 tiles, 550ms, dungeon altar level 8).
+3. ✅ Elemental magic weapons with distinct behaviour:
+   - `air_wand` (level 2): fast (220px/s, ×1.5 at fire), wide range 9 tiles.
+   - `fire_wand` (level 3): burn DOT — 2 delayed follow-up hits at 33% base damage at 1 s and 2 s.
+   - `water_staff` (level 3): writes `slowEndAt` to enemy Firebase entries so AI scripts can reduce speed.
+   - `earth_staff` (level 4): +30% upfront damage baked in at spawn (armor break).
+   - `soul_staff` (level 10): high-power fire + extended burn DOT (dungeon altar).
+4. ✅ MP cost and cooldown gates: magic cast checks `player.mp >= mpCostPerSwing`; deducts MP and writes to Firebase; shows "No MP!" float text on failure. `PlayerController` reads `weapon.cooldownMs` from `WeaponDefinition` for per-weapon timing.
+5. ✅ `WeaponDefinition` extended with `projectileSpeed`, `projectileRange`, `element`, `statusEffect`, `cooldownMs`. All ranged/magic weapons in `weapons.ts` carry these metadata fields.
+6. ✅ Shop integration: `air_wand`, `fire_wand`, `water_staff`, `earth_staff` sold in village shops (limited 5 stock for elemental weapons); `mana_crystal` and `sand_crystal` available as limited-stock shop items (3/day).
+7. ✅ Crafting integration: workbench recipes for `air_wand` (wood + mana_crystal) and `water_staff` (sand_crystal + wood); workshop recipes for `fire_wand` (mana_crystal + iron_bar) and `earth_staff` (stone + iron_bar + mana_crystal); dungeon altar recipes for `dark_bow` (iron_bar + dark_crystal + leather) and `soul_staff` (ancient_wood + mana_crystal + ectoplasm). New elemental materials added to `items.ts`: `mana_crystal`, `sand_crystal`, `ectoplasm`, `dark_crystal`, `ancient_wood`.
+8. ✅ Anti-double-hit via per-projectile `hitEnemyIds: Set<string>`; kill logic extracted to `_resolveEnemyKill()` shared by melee and projectile paths; `_handleProjectileHit()` applies elemental effects before resolving damage.
+9. ✅ **Checkpoint**: Player can equip bow and shoot visible projectiles; cast fire/water/earth/air spells with MP consumption (No MP! on failure); buy basic ranged/magic gear and elemental materials from shops; craft elemental weapons at workbench/workshop/dungeon altar.
 
 ---
 

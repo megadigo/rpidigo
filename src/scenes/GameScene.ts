@@ -25,8 +25,10 @@ import { CELLAR_ROOM_SIZE } from '../world/CellarGen.ts'
 import { getLocalPlayer, setLocalPlayer } from '../player/Auth.ts'
 import { remotePlayerTiles, remoteEnemyTiles, isPassable } from '../world/CollisionMap.ts'
 import { xpForLevel, tileKey } from '../world/utils.ts'
-import { EnemyRegistry, TileRegistry, ItemRegistry } from '../registry/registries.ts'
+import { EnemyRegistry, TileRegistry, ItemRegistry, WeaponRegistry } from '../registry/registries.ts'
 import { rollAttackDamage, findNewUnlocks } from '../world/playerStats.ts'
+import { ProjectileSystem } from '../world/ProjectileSystem.ts'
+import type { ProjectileHitEvent, EnemyTarget } from '../world/ProjectileSystem.ts'
 import { ScriptExecutor } from '../world/ScriptExecutor.ts'
 import type { NearbyPlayer } from '../world/ScriptExecutor.ts'
 import type { DialogSceneData } from './DialogScene.ts'
@@ -145,6 +147,9 @@ export class GameScene extends Phaser.Scene {
   /** Accumulated delta (ms) for the 1 s threat-evaluation tick. */
   private _threatTimer = 0
 
+  /** Projectile system for ranged and magic attacks (Step 20). */
+  private _projectileSystem!: ProjectileSystem
+
   /** Accumulated delta (ms) since the last regen tick. Reset whenever the player takes damage. */
   private _healTimer = 0
   /** Milliseconds the player must be out of combat before regen starts ticking. */
@@ -160,6 +165,7 @@ export class GameScene extends Phaser.Scene {
     this.tilemapRenderer = new TilemapRenderer(this)
     this.playerController = new PlayerController(this)
     this.playerController.create()
+    this._projectileSystem = new ProjectileSystem(this)
 
     // Launch HUD as additive scene
     this.scene.launch('HudScene')
@@ -331,6 +337,7 @@ export class GameScene extends Phaser.Scene {
       this._scriptExecutor.destroy()
       this._musicDirector?.destroy()
       this._musicDirector = null
+      this._projectileSystem.destroyAll()
       if (this.scene.isActive('DeathScene')) this.scene.stop('DeathScene')
       this.game.events.off('openInventory')
       this.game.events.off('openPause')
@@ -385,6 +392,11 @@ export class GameScene extends Phaser.Scene {
 
     for (const rec of this._remoteEnemies.values()) this._tickEntityAnim(rec, delta)
     for (const rec of this._remoteNpcs.values()) this._tickEntityAnim(rec, delta)
+
+    // Advance projectiles and resolve hits (Step 20)
+    const enemyTargets: EnemyTarget[] = []
+    for (const [id, entry] of this._enemyData) enemyTargets.push({ id, x: entry.x, y: entry.y })
+    this._projectileSystem.update(delta, enemyTargets, (evt) => { void this._handleProjectileHit(evt) })
 
     // Evaluate threat every 1 s and pick the appropriate overworld playlist
     if (this._musicDirector) {
@@ -794,6 +806,7 @@ export class GameScene extends Phaser.Scene {
     player.room = roomId
     setLocalPlayer(player)
 
+    this._projectileSystem.destroyAll()
     await enterRoom(roomId)
     this.tilemapRenderer.reset()
     const { x: spawnX, y: spawnY } = this._spawnNextTo(spawnNear)
@@ -825,6 +838,7 @@ export class GameScene extends Phaser.Scene {
 
   private _handleExitRoom(returnX: number, returnY: number): void {
     exitRoom()
+    this._projectileSystem.destroyAll()
 
     const player = getLocalPlayer()
     player.room = '0'
@@ -1641,22 +1655,71 @@ export class GameScene extends Phaser.Scene {
 
   /**
    * Handle an attack attempt from the local player.
-   * Scans the 4 cardinal tiles for an enemy (facing direction first).
-   * Deals damage, flashes the sprite red, kills the enemy on HP ≤ 0.
+   * - Melee weapons: instant hit on the facing tile.
+   * - Ranged/magic weapons: spawn a projectile toward the facing direction.
+   *   Magic requires sufficient MP; "No MP!" feedback shown if insufficient.
    */
   private async _handlePlayerAttack(tx: number, ty: number, direction: Direction): Promise<void> {
-    // Only attack the single tile the player is facing
     const facingOffset: Record<Direction, [number, number]> = {
-      down:  [0, 1],
-      up:    [0, -1],
-      left:  [-1, 0],
-      right: [1, 0],
+      down:  [0, 1], up: [0, -1], left: [-1, 0], right: [1, 0],
     }
-
     const [dx, dy] = facingOffset[direction]
     const atx = tx + dx
     const aty = ty + dy
 
+    const player = getLocalPlayer()
+
+    // Determine weapon type to choose attack mode
+    let weaponType: 'melee' | 'ranged' | 'magic' = 'melee'
+    let weaponDef: import('../registry/types.ts').WeaponDefinition | null = null
+    if (player.equippedWeapon) {
+      try {
+        weaponDef = WeaponRegistry.get(player.equippedWeapon)
+        weaponType = weaponDef.weaponType
+      } catch { /* bare-handed melee */ }
+    }
+
+    // ── Ranged / magic: spawn projectile ──────────────────────────────────
+    if (weaponType === 'ranged' || weaponType === 'magic') {
+      if (weaponType === 'magic') {
+        const mpCost = weaponDef?.mpCostPerSwing ?? 5
+        if (player.mp < mpCost) {
+          this._showFloatText(tx, ty, 'No MP!', '#88ccff')
+          return
+        }
+        player.mp = Math.max(0, player.mp - mpCost)
+        setLocalPlayer(player)
+        void update(ref(db), { [`players/${player.id}/mp`]: player.mp })
+      }
+
+      this.sound.play('sfx_swing', { volume: 0.5 })
+
+      const { damage, crit } = rollAttackDamage(player)
+      const speed = weaponDef?.projectileSpeed ?? (weaponType === 'ranged' ? 150 : 120)
+      const range = weaponDef?.projectileRange ?? 8
+      const element = weaponDef?.element ?? null
+
+      // Air projectiles gain +50% speed; earth deals +30% upfront (armor break)
+      const finalSpeed  = element === 'air'   ? speed * 1.5 : speed
+      const finalDamage = element === 'earth' ? Math.round(damage * 1.3) : damage
+
+      this._projectileSystem.spawn({
+        ownerId:      player.id,
+        startPx:      tx * TILE_SIZE + TILE_SIZE / 2,
+        startPy:      ty * TILE_SIZE + TILE_SIZE / 2,
+        directionDx:  dx,
+        directionDy:  dy,
+        speedPxPerSec: finalSpeed,
+        maxRangeTiles: range,
+        baseDamage:    finalDamage,
+        crit,
+        element,
+        statusEffect: weaponDef?.statusEffect,
+      })
+      return
+    }
+
+    // ── Melee: immediate hit on the facing tile ────────────────────────────
     this.sound.play('sfx_swing', { volume: 0.7 })
 
     let targetId: string | null = null
@@ -1671,142 +1734,212 @@ export class GameScene extends Phaser.Scene {
     }
 
     if (!targetId || !targetEntry) {
-      // No enemy on the facing tile — try PVP (same room, both level ≥ 10).
       this._tryAttackPlayer(atx, aty)
       return
     }
 
-    const player = getLocalPlayer()
     const { damage, crit } = rollAttackDamage(player)
-    // Use local HP as authoritative source — never reset by Firebase snapshots
     const currentHp = this._localEnemyHp.has(targetId)
       ? this._localEnemyHp.get(targetId)!
       : targetEntry.hp
     const newHp = currentHp - damage
     this._localEnemyHp.set(targetId, newHp)
 
-    // Flash the enemy sprite red for 150 ms
     const enemyRec = this._remoteEnemies.get(targetId)
     if (enemyRec) {
       enemyRec.sprite.setTint(0xff4444)
       this.time.delayedCall(150, () => { if (enemyRec.sprite.active) enemyRec.sprite.clearTint() })
     }
 
-    // Floating remaining-HP number — crits are called out in a distinct colour
-    const dmgText = this.add.text(
-      targetEntry.x * TILE_SIZE + TILE_SIZE / 2,
-      targetEntry.y * TILE_SIZE,
+    this._showFloatText(
+      targetEntry.x, targetEntry.y,
       crit ? `CRIT! ${Math.max(0, newHp)}` : `${Math.max(0, newHp)}`,
-      { fontFamily: 'monospace', fontSize: '7px', color: crit ? '#ffaa33' : '#ff3333', stroke: '#000000', strokeThickness: 2 },
-    ).setOrigin(0.5, 1).setDepth(50)
-    this.tweens.add({
-      targets: dmgText,
-      y:       dmgText.y - TILE_SIZE * 1.5,
-      alpha:   0,
-      duration: 1400,
-      ease: 'Cubic.easeOut',
-      onComplete: () => dmgText.destroy(),
-    })
-
-    const room = player.room
+      crit ? '#ffaa33' : '#ff3333',
+    )
 
     if (newHp <= 0) {
-      // ── Enemy death ────────────────────────────────────────────────────
-      let template: import('../registry/types.ts').EnemyDefinition | null = null
-      try { template = EnemyRegistry.get(targetEntry.templateId) } catch { /* unknown */ }
-
-      const xpGain = template ? Math.max(1, Math.floor(template.baseHp / 5)) : 1
-
-      // Roll loot table
-      const newInventory = [...(player.inventory ?? [])]
-      let newGold = player.gold ?? 0
-      if (template) {
-        for (const { itemId, min, max, chance } of template.lootTable) {
-          if (Math.random() < chance) {
-            const qty = Math.floor(Math.random() * (max - min + 1)) + min
-            if (itemId === 'gold_coin') {
-              newGold += qty
-            } else {
-              const slot = newInventory.find(s => s.itemId === itemId)
-              if (slot) slot.quantity += qty
-              else newInventory.push({ itemId, quantity: qty, metadata: {} })
-            }
-          }
-        }
-      }
-
-      // Optimistically update local player
-      player.xp        = player.xp + xpGain
-      player.gold      = newGold
-      player.inventory = newInventory
-
-      // ── Level-up check ───────────────────────────────────────────────
-      // Each level grants 3 allocatable stat points (+1 bonus every 5th level);
-      // maxHp/maxMp grow with the player's current VIT/INT so investing in those
-      // stats compounds over time. Allocation happens in LevelUpScene.
-      const levelBefore  = player.level
-      let levelsGained   = 0
-      let totalPtsGained = 0
-      while (player.xp >= xpForLevel(player.level + 1)) {
-        const hpGain = 8 + Math.floor(player.stats.endurance * 0.6)
-        const mpGain = 2 + Math.floor(player.stats.intelligence * 0.4)
-
-        player.level += 1
-        player.maxHp += hpGain
-        player.hp     = Math.min(player.hp + hpGain, player.maxHp)
-        player.maxMp += mpGain
-        player.mp     = Math.min(player.mp + mpGain, player.maxMp)
-
-        let ptGain = 3
-        if (player.level % 5 === 0) ptGain += 1
-        player.statPoints = (player.statPoints ?? 0) + ptGain
-
-        totalPtsGained += ptGain
-        levelsGained++
-      }
-
-      setLocalPlayer(player)
-
-      if (levelsGained > 0) {
-        const data: LevelUpSceneData = {
-          newLevel:      player.level,
-          pointsGranted: totalPtsGained,
-          unlocks:       findNewUnlocks(levelBefore, player.level),
-        }
-        this.playerController.freeze()
-        this.scene.launch('LevelUpScene', data)
-        this.scene.get('LevelUpScene').events.once(
-          Phaser.Scenes.Events.SHUTDOWN,
-          () => this.playerController.unfreeze(),
-        )
-      }
-
-      // Remove from ScriptExecutor cache immediately so the next tick
-      // doesn't re-create the entity in Firebase before the listener fires
-      this._scriptExecutor.removeEnemy(targetId)
-
-      // Atomic Firebase write
-      await update(ref(db), {
-        [`presence/${room}/enemies/${targetId}`]:  null,
-        [`entities/enemies/${targetId}`]:          null,  // remove from ScriptExecutor's feed
-        [`players/${player.id}/xp`]:               player.xp,
-        [`players/${player.id}/gold`]:             newGold,
-        [`players/${player.id}/inventory`]:        newInventory,
-        ...(levelsGained > 0 && {
-          [`players/${player.id}/level`]:      player.level,
-          [`players/${player.id}/maxHp`]:      player.maxHp,
-          [`players/${player.id}/hp`]:         player.hp,
-          [`players/${player.id}/maxMp`]:      player.maxMp,
-          [`players/${player.id}/mp`]:         player.mp,
-          [`players/${player.id}/statPoints`]: player.statPoints,
-        }),
-      })
+      await this._resolveEnemyKill(targetId, targetEntry)
     } else {
-      // ── Damage only ────────────────────────────────────────────────────
+      const room = getLocalPlayer().room
       await update(ref(db), {
         [`presence/${room}/enemies/${targetId}/hp`]: newHp,
         [`entities/enemies/${targetId}/hp`]:        newHp,
       })
     }
+  }
+
+  /**
+   * Resolve a projectile hit: apply damage + elemental effects, then kill or wound.
+   * Fire DOT schedules delayed hits; water writes slowEndAt; earth is baked into
+   * the projectile's baseDamage at spawn time.
+   */
+  private async _handleProjectileHit(evt: ProjectileHitEvent): Promise<void> {
+    const { enemyId, damage, crit, element, statusEffect, px, py } = evt
+
+    const targetEntry = this._enemyData.get(enemyId)
+    if (!targetEntry) return
+
+    const player  = getLocalPlayer()
+    const room    = player.room
+    const hitTx   = Math.floor(px / TILE_SIZE)
+    const hitTy   = Math.floor(py / TILE_SIZE)
+
+    // Flash enemy with element tint
+    const enemyRec = this._remoteEnemies.get(enemyId)
+    if (enemyRec) {
+      const tint = element === 'fire' ? 0xff6600 : element === 'water' ? 0x0099ff
+        : element === 'earth' ? 0x88cc44 : element === 'air' ? 0xccffff : 0xff4444
+      enemyRec.sprite.setTint(tint)
+      this.time.delayedCall(150, () => { if (enemyRec.sprite.active) enemyRec.sprite.clearTint() })
+    }
+
+    const currentHp = this._localEnemyHp.has(enemyId)
+      ? this._localEnemyHp.get(enemyId)!
+      : targetEntry.hp
+    const newHp = currentHp - damage
+    this._localEnemyHp.set(enemyId, newHp)
+
+    const hitColor = crit ? '#ffaa33'
+      : element === 'fire'  ? '#ff6600'
+      : element === 'water' ? '#00ccff'
+      : element === 'earth' ? '#88cc44'
+      : element === 'air'   ? '#aaffaa'
+      : '#ff3333'
+    this._showFloatText(hitTx, hitTy, crit ? `CRIT! ${Math.max(0, newHp)}` : `${Math.max(0, newHp)}`, hitColor)
+
+    // Fire burn DOT: two delayed extra hits at fraction of base damage
+    if (element === 'fire' && statusEffect?.type === 'burn') {
+      const dotDmg = Math.max(1, Math.round(damage * statusEffect.value))
+      const snap1  = { ...targetEntry }
+      this.time.delayedCall(1000, () => {
+        const h2 = (this._localEnemyHp.get(enemyId) ?? snap1.hp) - dotDmg
+        if (h2 >= 0 || (this._localEnemyHp.get(enemyId) ?? 1) > 0) {
+          this._localEnemyHp.set(enemyId, Math.max(0, h2))
+          this._showFloatText(snap1.x, snap1.y, `+${dotDmg}`, '#ff8800')
+          if (h2 <= 0) { void this._resolveEnemyKill(enemyId, snap1) }
+          else { void update(ref(db), { [`presence/${room}/enemies/${enemyId}/hp`]: h2, [`entities/enemies/${enemyId}/hp`]: h2 }) }
+        }
+      })
+      this.time.delayedCall(2000, () => {
+        const h3 = (this._localEnemyHp.get(enemyId) ?? snap1.hp) - dotDmg
+        if (h3 >= 0 || (this._localEnemyHp.get(enemyId) ?? 1) > 0) {
+          this._localEnemyHp.set(enemyId, Math.max(0, h3))
+          this._showFloatText(snap1.x, snap1.y, `+${dotDmg}`, '#ff8800')
+          if (h3 <= 0) { void this._resolveEnemyKill(enemyId, snap1) }
+          else { void update(ref(db), { [`presence/${room}/enemies/${enemyId}/hp`]: h3, [`entities/enemies/${enemyId}/hp`]: h3 }) }
+        }
+      })
+    }
+
+    // Water slow: write slowEndAt so AI scripts can read it
+    if (element === 'water' && statusEffect?.type === 'slow') {
+      void update(ref(db), {
+        [`presence/${room}/enemies/${enemyId}/slowEndAt`]:   Date.now() + statusEffect.durationMs,
+        [`entities/enemies/${enemyId}/slowEndAt`]:           Date.now() + statusEffect.durationMs,
+      })
+    }
+
+    if (newHp <= 0) {
+      await this._resolveEnemyKill(enemyId, targetEntry)
+    } else {
+      await update(ref(db), {
+        [`presence/${room}/enemies/${enemyId}/hp`]: newHp,
+        [`entities/enemies/${enemyId}/hp`]:        newHp,
+      })
+    }
+  }
+
+  /**
+   * Shared kill-resolution logic used by both melee and projectile attack paths.
+   * Grants XP/loot, checks level-up, removes the enemy from Firebase and cache.
+   */
+  private async _resolveEnemyKill(
+    targetId: string,
+    targetEntry: EnemyPresenceEntry,
+  ): Promise<void> {
+    const player = getLocalPlayer()
+    const room   = player.room
+
+    let template: import('../registry/types.ts').EnemyDefinition | null = null
+    try { template = EnemyRegistry.get(targetEntry.templateId) } catch { /* unknown */ }
+
+    const xpGain     = template ? Math.max(1, Math.floor(template.baseHp / 5)) : 1
+    const newInventory = [...(player.inventory ?? [])]
+    let newGold      = player.gold ?? 0
+
+    if (template) {
+      for (const { itemId, min, max, chance } of template.lootTable) {
+        if (Math.random() < chance) {
+          const qty = Math.floor(Math.random() * (max - min + 1)) + min
+          if (itemId === 'gold_coin') {
+            newGold += qty
+          } else {
+            const slot = newInventory.find(s => s.itemId === itemId)
+            if (slot) slot.quantity += qty
+            else newInventory.push({ itemId, quantity: qty, metadata: {} })
+          }
+        }
+      }
+    }
+
+    player.xp        = player.xp + xpGain
+    player.gold      = newGold
+    player.inventory = newInventory
+
+    // Level-up check — each level grants 3 stat points (+1 every 5th level)
+    const levelBefore  = player.level
+    let levelsGained   = 0
+    let totalPtsGained = 0
+    while (player.xp >= xpForLevel(player.level + 1)) {
+      const hpGain = 8 + Math.floor(player.stats.endurance * 0.6)
+      const mpGain = 2 + Math.floor(player.stats.intelligence * 0.4)
+
+      player.level += 1
+      player.maxHp += hpGain
+      player.hp     = Math.min(player.hp + hpGain, player.maxHp)
+      player.maxMp += mpGain
+      player.mp     = Math.min(player.mp + mpGain, player.maxMp)
+
+      let ptGain = 3
+      if (player.level % 5 === 0) ptGain += 1
+      player.statPoints = (player.statPoints ?? 0) + ptGain
+      totalPtsGained += ptGain
+      levelsGained++
+    }
+
+    setLocalPlayer(player)
+
+    if (levelsGained > 0) {
+      const data: LevelUpSceneData = {
+        newLevel:      player.level,
+        pointsGranted: totalPtsGained,
+        unlocks:       findNewUnlocks(levelBefore, player.level),
+      }
+      this.playerController.freeze()
+      this.scene.launch('LevelUpScene', data)
+      this.scene.get('LevelUpScene').events.once(
+        Phaser.Scenes.Events.SHUTDOWN,
+        () => this.playerController.unfreeze(),
+      )
+    }
+
+    this._scriptExecutor.removeEnemy(targetId)
+    this._localEnemyHp.delete(targetId)
+
+    await update(ref(db), {
+      [`presence/${room}/enemies/${targetId}`]:  null,
+      [`entities/enemies/${targetId}`]:          null,
+      [`players/${player.id}/xp`]:               player.xp,
+      [`players/${player.id}/gold`]:             newGold,
+      [`players/${player.id}/inventory`]:        newInventory,
+      ...(levelsGained > 0 && {
+        [`players/${player.id}/level`]:      player.level,
+        [`players/${player.id}/maxHp`]:      player.maxHp,
+        [`players/${player.id}/hp`]:         player.hp,
+        [`players/${player.id}/maxMp`]:      player.maxMp,
+        [`players/${player.id}/mp`]:         player.mp,
+        [`players/${player.id}/statPoints`]: player.statPoints,
+      }),
+    })
   }
 }

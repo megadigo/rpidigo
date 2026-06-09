@@ -13,6 +13,7 @@ import Phaser from 'phaser'
 import { db } from '../firebase.ts'
 import { ref, update } from 'firebase/database'
 import { getLocalPlayer, setLocalPlayer } from './Auth.ts'
+import { WeaponRegistry } from '../registry/registries.ts'
 import { isPassable, isPassableForPlayer, getSpeedMod } from '../world/CollisionMap.ts'
 import { ensureRadius, tileToChunk, getActiveRoom } from '../world/ChunkManager.ts'
 import { TILE_SIZE, getTileEntryType, isTileRoomExit } from '../renderer/TilemapRenderer.ts'
@@ -188,7 +189,13 @@ export class PlayerController {
       const tx = Math.floor(this.px / TILE_SIZE)
       const ty = Math.floor(this.py / TILE_SIZE)
       this.scene.events.emit('playerAttack', { tx, ty, direction: this._direction })
-      this._attackCooldown = 500
+      // Use weapon-specific cooldown when available
+      let cooldown = 500
+      const player = getLocalPlayer()
+      if (player.equippedWeapon) {
+        try { cooldown = WeaponRegistry.get(player.equippedWeapon).cooldownMs ?? 500 } catch { /* unknown */ }
+      }
+      this._attackCooldown = cooldown
       this._attackAnimFrame = 0
       this._attackAnimTimer = 0
     }
