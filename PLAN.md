@@ -126,7 +126,7 @@
 1. ✅ On the interact key adjacent to an NPC, open a `DialogScene` DOM overlay showing the NPC portrait (frame 0) and speech text from its script.
 2. ✅ Healer: write full HP/MP to `/players/{id}`; Gossiper: read `config/pois` for directional tips; Merchant: open `ShopScene` instead.
 3. ✅ Dog NPC: spawns in villages (50% chance), follows the player when interacted with via `A`, loses interest after 5 minutes without re-interaction (`dog_follow.py`).
-4. ✅ **Checkpoint**: Walk up to a healer with reduced HP and press `E`; HP is restored and the HUD updates.
+4. ✅ **Checkpoint**: Walk up to a healer with reduced HP and press `A`; HP is restored and the HUD updates.
 
 ---
 
@@ -184,7 +184,7 @@
    - "Respawn at House" button
 3. ✅ After respawn, overworld chunks around the house are pre-loaded before unfreezing the player (prevents blank-world spawn).
 4. ✅ After respawn, if items were dropped, a system chat message gives the compass direction and tile distance to the loot chest (handles overworld, house, dungeon floor N, and cellar rooms).
-5. ✅ PVP: attack allowed only when both players are ≥ level 10 and in the same room. Facing a remote player with E reads their HP via Firebase, applies attacker's power as damage, writes the new HP back, and shows a float text. Below level 10 shows "PVP: level 10+ only" hint.
+5. ✅ PVP: attack allowed only when both players are ≥ level 10 and in the same room. Facing a remote player with A reads their HP via Firebase, applies attacker's power as damage, writes the new HP back, and shows a float text. Below level 10 shows "PVP: level 10+ only" hint.
 6. ✅ **Checkpoint**: Take enough damage to die; items drop; the death screen shows with killer info and countdown; player respawns at house with half HP; a chat hint points toward the dropped loot.
 
 ---
@@ -199,7 +199,109 @@
 
 1. ✅ `isMobileDevice()` exported from `src/input/VirtualInput.ts` — true when `window.innerWidth < 640`.
 2. ✅ `virtualInput` module-level object (`up/down/left/right/action`) shared between HudScene (writer) and PlayerController (reader). PlayerController ORs virtual flags with keyboard; D-pad action button uses rising-edge detection to fire a single `playerAttack` event per press.
-3. ✅ D-pad rendered by `HudScene._buildDpad()` when mobile: 3×3 CSS grid of 44×44 buttons (bottom-right), pointer capture per button so held movement survives slight finger drift. Centre button = **E** (interact/attack).
+3. ✅ Virtual joystick rendered by `HudScene._buildDpad()`: circular base (bottom-left) with a draggable knob; pointer capture on the base so held movement survives drift; knob position translated to directional flags with 20% dead zone and 0.3 threshold for 8-directional input. Action (A) and Inventory (I) buttons remain in a right-side column.
 4. ✅ Compact chat: `#chat-panel.mobile` CSS class applied on mobile — 150px wide, 44px max-height, 9px font.
 5. ✅ Tap-to-interact in `GameScene`: on `pointerup`, if distance < 12 px (true tap) and the tapped tile is adjacent to the player, calls `_handleInteract` toward that tile. Skipped when any overlay scene is active.
-6. ✅ **Checkpoint**: Narrow the browser to < 640 px; D-pad appears at bottom-right; all four directions and the E button work; tapping adjacent tiles/entities triggers interaction.
+6. ✅ **Checkpoint**: Narrow the browser to < 640 px; D-pad appears at bottom-right; all four directions and the A button work; tapping adjacent tiles/entities triggers interaction.
+
+---
+
+## Step 18 — Adaptive Ambience Music ✅
+*Goal: background music adapts to situation and location with smooth transitions and no abrupt restarts.*
+
+1. ✅ `MusicDirector` service (`src/audio/MusicDirector.ts`): manages three playlists (`world_ambient`, `world_action`, `dungeon_dark_ambient`) loaded from `public/assets/music/`; shuffle-bag per playlist; 2.5 s crossfade; 15 s dwell guard; volume/enabled persisted to localStorage; listens to `game.events` for live setting updates.
+2. ✅ `LoadingScene.preload()` loads all 9 tracks (`music_ambient_1–3`, `music_action_1–3`, `music_dark_1–3`).
+3. ✅ `GameScene` evaluates threat every 1 s: Chebyshev radius 12, weight 1 normal / 2 elite+boss / +1 if chasing; selects `world_action` at score ≥ 6, else `world_ambient`.
+4. ✅ Entering a `dungeon_*` room forces `dungeon_dark_ambient` playlist (both `_handleEnterRoom` and `_restoreRoom`); exiting returns to `world_ambient` and threat re-evaluates on the next 1 s tick.
+5. ✅ `HudScene._buildMusicPanel()` adds a ♪ button (top-right toolbar) that opens a settings panel with ON/OFF toggle and volume slider; emits `musicEnabled`/`musicVolume` game events consumed by `MusicDirector`.
+6. ✅ **Checkpoint**: Overworld uses ambient tracks at low threat, swaps to action tracks during heavy combat, dungeons always use dark ambient, and all transitions are smooth.
+
+---
+
+## Step 19 — Tombstone Interaction & Skeleton Horde ✅
+*Goal: interacting with a village tombstone spawns a wave of skeleton enemies around it.*
+
+1. ✅ On the interact key (`A`) adjacent to a `tombstone` tile, `GameScene._handleInteract` spawns a configurable wave of `skeleton_weak` enemies at tile positions surrounding the tombstone and writes them to Firebase presence.
+2. ✅ **Checkpoint**: Walk up to a village tombstone and press `A`; a group of skeletons appears around it and immediately engages the player.
+
+---
+
+## Step 20 — Ranged Bows & Elemental Magic ⬜
+*Goal: ranged and magic combat uses spawned projectiles with distinct elemental behaviour and shop/crafting integration.*
+
+1. Add a shared `ProjectileSystem` (spawn, movement, collision, lifetime, hit events) for player and scripted entities.
+2. Bow weapons (`type: ranged`) fire physical projectiles with speed/range stats and ammo-less cooldown-based firing.
+3. Define magic schools and spells for `type: magic` weapons:
+   - fire: direct damage + burn DOT,
+   - water: damage + slow,
+   - earth: higher stagger/armor break,
+   - air: fast projectile + chain/knockback utility.
+4. Add MP costs and cast cooldowns per spell; prevent cast when MP is insufficient and surface feedback in HUD.
+5. Extend weapon/item definitions with projectile and elemental metadata (`projectileSprite`, `speed`, `range`, `element`, `statusEffect`).
+6. Shop integration:
+   - merchants sell starter bows and elemental catalysts/tomes,
+   - level-gate stronger bows/spells by existing shop progression tiers.
+7. Crafting integration:
+   - add recipes for elemental staves/wands and advanced bows,
+   - consume elemental materials (for example `mana_crystal`, `sand_crystal`, `ectoplasm`).
+8. Network sync:
+   - projectile spawn and hit resolution are deterministic and mirrored via Firebase presence/events,
+   - include anti-double-hit guard by projectile ID + victim timestamp window.
+9. **Checkpoint**: Player can equip bow and shoot visible projectiles, cast fire/water/earth/air spells with MP consumption, and buy basic ranged/magic gear from shops.
+
+---
+
+## Step 21 — Character Stats & Level-Up Growth ✅
+*Goal: primary stats (STR/DEX/INT/VIT) meaningfully scale combat and utility as players level up.*
+
+1. ✅ `PlayerInstance.stats` (already `{ strength, agility, intelligence, endurance }` — STR/DEX/INT/VIT) is now load-bearing and paired with a new `statPoints` field for unspent allocation. `endurance` (VIT) drives maxHp growth and defense baseline; `intelligence` (INT) drives maxMp growth and magic power; `agility` (DEX) drives ranged power and crit chance; `strength` (STR) drives melee power.
+2. ✅ Derived combat formulas centralised in `src/world/playerStats.ts` (single source of truth — `deriveCombatStats`/`applyDerivedCombatStats`/`rollAttackDamage`):
+   - meleePower = weaponPower + str * 2
+   - rangedPower = weaponPower + dex * 1.8
+   - magicPower = weaponPower + int * 2.2
+   - defense = armorDefense + vit * 0.8
+   - critChance = min(35%, 5% + dex * 0.25%) — rolled on every player/PVP attack; crits deal ×1.5 damage and show a `CRIT!` floating indicator.
+   `player.power`/`totalDefense` are recomputed from gear + stats by `applyDerivedCombatStats` on registration (`Auth.ts`) and on every weapon/armor equip/unequip (`InventoryScene`), so combat code keeps reading the same fields it always has.
+3. ✅ Level-up rewards (`GameScene` enemy-kill handler): 3 allocatable stat points per level, +1 bonus every 5th level, persisted as `players/{id}/statPoints`; maxHp grows from `endurance` and maxMp from `intelligence` each level instead of flat increments.
+4. ✅ `LevelUpScene` stat allocation flow for STR/DEX/INT/VIT with a live preview of melee/ranged/magic power, defense, and crit chance before confirming (`deriveCombatStats` run against the pending allocation).
+5. ✅ `LevelUpScene` DOM overlay (`src/scenes/LevelUpScene.ts`):
+   - "✦ LEVEL UP! ✦" banner with the new level number,
+   - STR/DEX/INT/VIT +/− allocation buttons with an unspent-points counter,
+   - live preview panel showing current → projected melee/ranged/magic power, defense, and crit chance,
+   - newly-unlocked weapons/armors/recipes at this level listed via `findNewUnlocks` (scans `WeaponRegistry`/`ArmorRegistry`/`RecipeRegistry` by `levelRequired`),
+   - **Confirm** enabled only once every point is spent (writes `stats`/`statPoints`/`power`/`totalDefense` to Firebase); `Esc` closes and keeps points for later.
+6. ➖ *Skipped* — rebalancing enemy scaling/Tier 3-4 gear stat requirements is a tuning pass better done once Step 20 (ranged/magic combat) lands; the new formulas already gate weapon/armor use by `levelRequired` as before.
+7. ✅ Pressing **`S`** opens `StatsScene` (`src/scenes/StatsScene.ts`) — a full DOM overlay (same visual language as `LevelUpScene`/`PauseScene`) showing the player's name/level, STR/DEX/INT/VIT, derived melee/ranged/magic power, defense, and crit chance. If the player has unspent points it reuses the same +/− allocation + live-preview + Confirm flow as `LevelUpScene` (so banked points from a level-up the player skipped can still be spent later); a **Log Out** button (`Auth.logout`, same flow as `PauseScene`) is also available here. Replaces the earlier condensed "Σ" HUD toolbar panel, which has been removed (`GameScene._openStats`, registered in `PAUSE_BLOCKING_SCENES`/`main.ts`, key binding documented in `PauseScene`'s reference list). *(No temporary buff/debuff system exists yet, so nothing to highlight there.)*
+8. ✅ **Checkpoint**: On level-up the `LevelUpScene` overlay appears; player allocates points with a live preview; after Confirm, combat output changes immediately (attack damage and incoming defense are derived from `power`/`totalDefense`, recomputed from STR/DEX/INT/VIT + gear) and the values persist correctly across relog (`players/{id}/stats`, `statPoints`, `power`, `totalDefense`).
+
+---
+
+## Step 22 — Gold-Stealing Enemies ⬜
+*Goal: thief and bandit enemy variants steal gold from the player on hit and permanently lose it if they escape.*
+
+1. Add `carriedGold` field to enemy instances; populate at spawn from the variant's loot table.
+2. On a successful enemy hit, subtract `min(stealAmount, player.gold)` from the player and add to `enemy.carriedGold`; show a system chat notification (*"Thief stole 12 gold from you!"*).
+3. Profiles: `thief_weak` steals on first hit then immediately flees; `bandit_strong` / `desert_bandit_strong` / `goblin_scout_strong` steal on each hit while fighting.
+4. On enemy death, drop `carriedGold` as a loot pickup at the death tile.
+5. If a fleeing enemy moves beyond 30 tiles from the player, stolen gold is permanently lost.
+6. **Checkpoint**: A thief steals gold, a chat notification appears; killing the thief before escape returns the gold as a loot pickup; letting it flee 30+ tiles loses the gold permanently.
+
+---
+
+## Step 23 — Map Screen ⬜
+*Goal: the player can open a full-screen world map with fog-of-war showing explored zones, POIs, and their position.*
+
+1. `MapScene` DOM overlay: zoomed-out view of the 1000×1000 grid.
+2. Unexplored sectors render as dark fog; explored sectors use zone colour coding (plains green, forest dark-green, desert yellow, river blue).
+3. Icons for: known villages (house), known dungeon entrances (cave), player current position (pin), player house (star).
+4. Persist explored-sector set on the player record in Firebase.
+5. **Checkpoint**: Open the map; explored areas are visible in zone colours; unvisited regions are dark; POI icons appear at discovered locations.
+
+---
+
+## Step 24 — Pause Screen ✅
+*Goal: the player can pause, adjust settings, and log out cleanly.*
+
+1. ✅ `PauseScene` DOM overlay: **Resume**, **Settings** (collapsible panel with music ON/OFF + volume slider mirroring `HudScene`'s music panel, plus a read-only key-binding reference list), **Log Out** buttons. Opens via `Esc` (when no other overlay owns input) or the new `☰` menu button in the HUD top-right toolbar (`GameScene._openPause`, `HudScene._buildMenuBtn` emitting `openPause`); freezes the player like other overlays and unfreezes on shutdown.
+2. ✅ **Log Out** (`Auth.logout`) writes `players/{id}/online = false` + `lastSeen`, removes the `presence/{room}/players/{id}` entry, clears the local session, then `PauseScene` stops `GameScene`/`HudScene` and starts `LoginScene`.
+3. ✅ **Checkpoint**: Press `Esc` or the menu button; the **PAUSED** overlay appears over the frozen game world; **Settings** reveals music controls and key bindings; **Resume** (button or `Esc`) returns to play; **Log Out** clears presence and navigates to the login screen.

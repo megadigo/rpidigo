@@ -131,7 +131,6 @@ export const zones: ZoneDefinition[] = [
       dungeon_floor:  60,
       dungeon_wall:   20,
       dungeon_pillar: 15,
-      dungeon_trap:    3,
       dungeon_chest:   2,
     },
     spawnTable: [
@@ -152,7 +151,6 @@ export const zones: ZoneDefinition[] = [
       dungeon_floor:  55,
       dungeon_wall:   20,
       dungeon_pillar: 10,
-      dungeon_trap:    5,
       dungeon_chest:   3,
       dungeon_altar:   2,
     },

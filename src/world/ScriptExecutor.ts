@@ -36,6 +36,7 @@ import { isPassable, getSpeedMod } from './CollisionMap.ts'
 import { getLocalPlayer } from '../player/Auth.ts'
 import type { EnemyInstance, NpcInstance } from './types.ts'
 import { EnemyRegistry } from '../registry/registries.ts'
+import { directionFromVelocity } from '../renderer/SpriteAnim.ts'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -434,6 +435,15 @@ export class ScriptExecutor {
         text:      actions.speak,
         timestamp: now,
         system:    true,
+      }
+    }
+
+    if (hasAttack && actions.attack) {
+      const target = nearbyPlayers.find(p => p.id === actions.attack)
+      if (target) {
+        const facing = directionFromVelocity(target.x - entity.x, target.y - entity.y)
+        fbUpdate[`presence/${this._room}/${col}/${id}/facing`]     = facing
+        fbUpdate[`presence/${this._room}/${col}/${id}/attackedAt`] = now
       }
     }
 

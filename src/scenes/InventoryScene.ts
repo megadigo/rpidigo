@@ -18,6 +18,7 @@ import { ref, update } from 'firebase/database'
 import { db } from '../firebase.ts'
 import { getLocalPlayer, setLocalPlayer } from '../player/Auth.ts'
 import { WeaponRegistry, ArmorRegistry, ItemRegistry } from '../registry/registries.ts'
+import { applyDerivedCombatStats } from '../world/playerStats.ts'
 
 // ─── Types & constants ────────────────────────────────────────────────────────
 
@@ -233,21 +234,18 @@ export class InventoryScene extends Phaser.Scene {
 
     // Return old weapon to bag
     if (player.equippedWeapon) {
-      try {
-        const old = WeaponRegistry.get(player.equippedWeapon)
-        player.power -= old.power
-      } catch { /* unknown */ }
       inv.push({ itemId: player.equippedWeapon, quantity: 1, metadata: {} })
     }
 
     player.equippedWeapon = newId
-    player.power         += def.power
     player.inventory      = inv
+    applyDerivedCombatStats(player)
     setLocalPlayer(player)
 
     void update(ref(db), {
       [`players/${player.id}/equippedWeapon`]: newId,
       [`players/${player.id}/power`]:          player.power,
+      [`players/${player.id}/totalDefense`]:   player.totalDefense,
       [`players/${player.id}/inventory`]:      inv,
     })
     this._renderAll()
@@ -257,19 +255,16 @@ export class InventoryScene extends Phaser.Scene {
     const player = getLocalPlayer()
     if (!player.equippedWeapon) return
 
-    try {
-      const old = WeaponRegistry.get(player.equippedWeapon)
-      player.power -= old.power
-    } catch { /* ignore */ }
-
     const inv = [...(player.inventory ?? []), { itemId: player.equippedWeapon, quantity: 1, metadata: {} }]
     player.equippedWeapon = null
     player.inventory      = inv
+    applyDerivedCombatStats(player)
     setLocalPlayer(player)
 
     void update(ref(db), {
       [`players/${player.id}/equippedWeapon`]: null,
       [`players/${player.id}/power`]:          player.power,
+      [`players/${player.id}/totalDefense`]:   player.totalDefense,
       [`players/${player.id}/inventory`]:      inv,
     })
     this._renderAll()
@@ -292,20 +287,17 @@ export class InventoryScene extends Phaser.Scene {
     // Return old armor piece to bag
     const oldId = player.equippedArmor[slot]
     if (oldId) {
-      try {
-        const old = ArmorRegistry.get(oldId)
-        player.totalDefense -= old.defense
-      } catch { /* ignore */ }
       inv.push({ itemId: oldId, quantity: 1, metadata: {} })
     }
 
     player.equippedArmor[slot] = newId
-    player.totalDefense       += def.defense
     player.inventory           = inv
+    applyDerivedCombatStats(player)
     setLocalPlayer(player)
 
     void update(ref(db), {
       [`players/${player.id}/equippedArmor/${slot}`]: newId,
+      [`players/${player.id}/power`]:                 player.power,
       [`players/${player.id}/totalDefense`]:          player.totalDefense,
       [`players/${player.id}/inventory`]:             inv,
     })
@@ -318,18 +310,15 @@ export class InventoryScene extends Phaser.Scene {
     const id     = player.equippedArmor[slot]
     if (!id) return
 
-    try {
-      const def = ArmorRegistry.get(id)
-      player.totalDefense -= def.defense
-    } catch { /* ignore */ }
-
     const inv = [...(player.inventory ?? []), { itemId: id, quantity: 1, metadata: {} }]
     player.equippedArmor[slot] = null
     player.inventory           = inv
+    applyDerivedCombatStats(player)
     setLocalPlayer(player)
 
     void update(ref(db), {
       [`players/${player.id}/equippedArmor/${slot}`]: null,
+      [`players/${player.id}/power`]:                 player.power,
       [`players/${player.id}/totalDefense`]:          player.totalDefense,
       [`players/${player.id}/inventory`]:             inv,
     })

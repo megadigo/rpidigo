@@ -63,8 +63,13 @@ export class StorageScene extends Phaser.Scene {
   create(): void {
     if (this.input.keyboard) {
       this.input.keyboard.once('keydown-ESC', () => this._close())
+      this.input.keyboard.on('keydown-A', this._onTakeAllKey, this)
     }
     this._buildOverlay()
+  }
+
+  private _onTakeAllKey(): void {
+    this._takeAll()
   }
 
   // ── Internal state ────────────────────────────────────────────────────────────
@@ -111,6 +116,7 @@ export class StorageScene extends Phaser.Scene {
           <span id="st-title">${this._chestTypeLabel()}${idx}</span>
           <div style="display:flex;align-items:center;gap:6px">
             ${nav}
+            <span class="st-hint">[A] take all</span>
             <span id="st-hint">[Esc] close</span>
             <button id="st-close">✕</button>
           </div>
@@ -251,6 +257,11 @@ export class StorageScene extends Phaser.Scene {
   }
 
   private _takeAll(): void {
+    if (this._gold <= 0 && this._chest.length === 0) {
+      this._close()
+      return
+    }
+
     const player = getLocalPlayer()
     if (this._gold > 0) {
       player.gold = (player.gold ?? 0) + this._gold
@@ -396,6 +407,7 @@ export class StorageScene extends Phaser.Scene {
   }
 
   shutdown(): void {
+    this.input.keyboard?.off('keydown-A', this._onTakeAllKey, this)
     this._overlay?.remove()
     this._style?.remove()
     this._overlay = null
@@ -436,6 +448,7 @@ const STORAGE_CSS = `
   #st-title { font-size: 13px; color: #ffdd88; letter-spacing: 0.1em; }
   #st-chest-idx { color: #888; font-size: 11px; }
   #st-hint { font-size: 10px; color: #555; }
+  .st-hint { font-size: 10px; color: #555; }
   #st-close {
     background: transparent; border: 1px solid #444;
     color: #888; font-family: monospace; font-size: 10px;

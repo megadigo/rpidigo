@@ -11,6 +11,7 @@ import { isPassable } from '../world/CollisionMap.ts'
 import { ensureChunk, setTile, overworldTilePath } from '../world/ChunkManager.ts'
 import { CHUNK_SIZE } from '../world/ChunkGen.ts'
 import { generateHouseRoom } from '../world/HouseGen.ts'
+import { applyDerivedCombatStats } from '../world/playerStats.ts'
 import type { TileData } from '../world/types.ts'
 
 let _localPlayer: PlayerInstance | null = null
@@ -55,7 +56,8 @@ export async function register(
     hp: 100, maxHp: 100,
     mp: 50, maxMp: 50,
     stats: { strength: 5, agility: 5, intelligence: 5, endurance: 5 },
-    power: 10, totalDefense: 2,
+    statPoints: 0,
+    power: 0, totalDefense: 0,
     gold: 0,
     inventory: [],
     equippedWeapon: null,
@@ -65,6 +67,7 @@ export async function register(
     online: true,
     lastSeen: 0,
   }
+  applyDerivedCombatStats(player)
 
   // Ensure the chunk is generated before placing the house tile so that
   // chunk generation cannot overwrite it afterwards.
@@ -114,6 +117,13 @@ export async function login(name: string, password: string): Promise<PlayerInsta
   if (!found) throw new Error('Incorrect password.')
 
   const player = found as PlayerInstance
+  player.statPoints ??= 0
+
+  // Recompute power/defense from current stats + gear — keeps older records
+  // (saved under the previous flat-power model) in sync with the formula.
+  const prevPower = player.power
+  const prevDef   = player.totalDefense
+  applyDerivedCombatStats(player)
 
   // Mark online
   await set(ref(db, `players/${player.id}/online`), true)
@@ -129,8 +139,27 @@ export async function login(name: string, password: string): Promise<PlayerInsta
   onDisconnect(ref(db, `players/${player.id}/online`)).set(false)
   onDisconnect(ref(db, `players/${player.id}/lastSeen`)).set(serverTimestamp())
 
+  if (player.power !== prevPower || player.totalDefense !== prevDef) {
+    await update(ref(db), {
+      [`players/${player.id}/power`]:        player.power,
+      [`players/${player.id}/totalDefense`]: player.totalDefense,
+      [`players/${player.id}/statPoints`]:   player.statPoints,
+    })
+  }
+
   _localPlayer = player
   return player
+}
+
+/** Log out the current player: mark offline, clear presence, and forget the session. */
+export async function logout(): Promise<void> {
+  const player = getLocalPlayer()
+  await update(ref(db), {
+    [`players/${player.id}/online`]:                   false,
+    [`players/${player.id}/lastSeen`]:                 serverTimestamp(),
+    [`presence/${player.room}/players/${player.id}`]:  null,
+  })
+  _localPlayer = null
 }
 
 async function findSpawnPoint(): Promise<{ x: number; y: number }> {

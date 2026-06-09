@@ -59,6 +59,13 @@ export class HudScene extends Phaser.Scene {
   private _fsBtnEl:   HTMLButtonElement | null = null
   private _fsBtnStyle: HTMLStyleElement | null = null
 
+  private _musicBtnEl:   HTMLButtonElement | null = null
+  private _musicPanelEl: HTMLDivElement    | null = null
+  private _musicStyle:   HTMLStyleElement  | null = null
+
+  private _menuBtnEl:    HTMLButtonElement | null = null
+  private _menuStyle:    HTMLStyleElement  | null = null
+
   /** Bound Enter-key handler so it can be removed on shutdown. */
   private _enterHandler!: (e: KeyboardEvent) => void
 
@@ -85,6 +92,8 @@ export class HudScene extends Phaser.Scene {
     this._buildChatPanel()
     this._buildDpad()
     this._buildFullscreenBtn()
+    this._buildMusicPanel()
+    this._buildMenuBtn()
     this._subscribeChat(player.room)
     this._subscribePlayer(player.id)
 
@@ -249,46 +258,42 @@ export class HudScene extends Phaser.Scene {
     this._chatLog.scrollTop = this._chatLog.scrollHeight
   }
 
-  // ── D-pad (mobile only) ───────────────────────────────────────────────────
+  // ── Joystick (mobile controls) ────────────────────────────────────────────
 
   private _buildDpad(): void {
     this._dpadStyle = document.createElement('style')
     this._dpadStyle.textContent = `
-      /* Full-screen transparent wrapper — children are positioned independently */
       #dpad {
         position: fixed; inset: 0;
         pointer-events: none;
         z-index: 60; user-select: none; -webkit-user-select: none;
       }
 
-      /* Directional cross — bottom LEFT, above the compact chat panel */
-      #dpad-dirs {
+      /* Joystick base — bottom LEFT */
+      #joystick-base {
         position: absolute;
         bottom: clamp(80px, 18vh, 150px);
         left: clamp(8px, 2vw, 20px);
-        display: grid;
-        grid-template-columns: repeat(3, clamp(40px, 10vmin, 58px));
-        grid-template-rows:    repeat(3, clamp(40px, 10vmin, 58px));
-        gap: clamp(2px, 0.4vmin, 5px);
+        width:  clamp(110px, 28vmin, 160px);
+        height: clamp(110px, 28vmin, 160px);
+        border-radius: 50%;
+        background: rgba(255,255,255,0.07);
+        border: 2px solid rgba(255,255,255,0.18);
         pointer-events: auto; touch-action: none;
-      }
-      .dpad-empty { width: clamp(40px, 10vmin, 58px); height: clamp(40px, 10vmin, 58px); }
-      #dpad-center { width: clamp(40px, 10vmin, 58px); height: clamp(40px, 10vmin, 58px); }
-
-      /* Shared directional button style */
-      .dpad-btn {
-        width:  clamp(40px, 10vmin, 58px);
-        height: clamp(40px, 10vmin, 58px);
-        font-size: clamp(14px, 3.5vmin, 20px);
-        background: rgba(255,255,255,0.08);
-        border: 1px solid rgba(255,255,255,0.2);
-        border-radius: 8px;
-        color: #fff;
         display: flex; align-items: center; justify-content: center;
-        cursor: pointer; touch-action: none;
-        transition: background 0.08s;
       }
-      .dpad-btn.pressed { background: rgba(255,255,255,0.25); }
+      #joystick-base.active { border-color: rgba(255,255,255,0.35); }
+      #joystick-knob {
+        width:  clamp(44px, 11vmin, 64px);
+        height: clamp(44px, 11vmin, 64px);
+        border-radius: 50%;
+        background: rgba(255,255,255,0.22);
+        border: 2px solid rgba(255,255,255,0.45);
+        pointer-events: none;
+        will-change: transform;
+        transition: background 0.06s;
+      }
+      #joystick-base.active #joystick-knob { background: rgba(255,255,255,0.38); }
 
       /* Right-side button column — A (action) at bottom, I (inventory) above */
       #dpad-right-col {
@@ -326,7 +331,6 @@ export class HudScene extends Phaser.Scene {
       }
       #dpad-inventory.pressed { background: rgba(100,180,255,0.3); }
 
-      /* Compact chat — always compact since controls are always visible */
       #chat-panel { width: clamp(120px, 28vw, 200px) !important; bottom: 8px !important; }
       #chat-log   { max-height: clamp(36px, 8vh, 60px) !important; font-size: 9px !important; }
       #chat-input { font-size: 9px !important; padding: 1px 4px !important; }
@@ -336,16 +340,8 @@ export class HudScene extends Phaser.Scene {
     this._dpadWrap = document.createElement('div')
     this._dpadWrap.id = 'dpad'
     this._dpadWrap.innerHTML = `
-      <div id="dpad-dirs">
-        <div class="dpad-empty"></div>
-        <button class="dpad-btn" id="dpad-up">▲</button>
-        <div class="dpad-empty"></div>
-        <button class="dpad-btn" id="dpad-left">◄</button>
-        <div id="dpad-center"></div>
-        <button class="dpad-btn" id="dpad-right">►</button>
-        <div class="dpad-empty"></div>
-        <button class="dpad-btn" id="dpad-down">▼</button>
-        <div class="dpad-empty"></div>
+      <div id="joystick-base">
+        <div id="joystick-knob"></div>
       </div>
       <div id="dpad-right-col">
         <button id="dpad-action">A</button>
@@ -353,26 +349,71 @@ export class HudScene extends Phaser.Scene {
       </div>`
     document.body.appendChild(this._dpadWrap)
 
-    // Wire directional + action buttons via virtualInput
-    const bindings: Array<[string, keyof typeof virtualInput]> = [
-      ['dpad-up', 'up'], ['dpad-down', 'down'],
-      ['dpad-left', 'left'], ['dpad-right', 'right'],
-      ['dpad-action', 'action'],
-    ]
-    for (const [id, key] of bindings) {
-      const btn = this._dpadWrap.querySelector(`#${id}`) as HTMLElement
-      btn.addEventListener('pointerdown', (e) => {
-        btn.setPointerCapture(e.pointerId)
-        btn.classList.add('pressed')
-        virtualInput[key] = true
-      })
-      const release = () => { btn.classList.remove('pressed'); virtualInput[key] = false }
-      btn.addEventListener('pointerup',     release)
-      btn.addEventListener('pointercancel', release)
-      btn.addEventListener('pointerleave',  release)
+    // ── Joystick ───────────────────────────────────────────────────────────
+    const base = this._dpadWrap.querySelector('#joystick-base') as HTMLElement
+    const knob = this._dpadWrap.querySelector('#joystick-knob') as HTMLElement
+    let activeId = -1
+    let baseRect: DOMRect
+
+    const updateJoystick = (clientX: number, clientY: number) => {
+      const cx = baseRect.left + baseRect.width  / 2
+      const cy = baseRect.top  + baseRect.height / 2
+      const dx = clientX - cx
+      const dy = clientY - cy
+      const dist = Math.sqrt(dx * dx + dy * dy)
+      const maxR  = (baseRect.width / 2) - knob.offsetWidth / 2
+      const clamped = Math.min(dist, maxR)
+      const angle = Math.atan2(dy, dx)
+      knob.style.transform = `translate(${Math.cos(angle) * clamped}px, ${Math.sin(angle) * clamped}px)`
+
+      if (dist < maxR * 0.2) {
+        virtualInput.up = virtualInput.down = virtualInput.left = virtualInput.right = false
+        return
+      }
+      const nx = dx / dist
+      const ny = dy / dist
+      virtualInput.right = nx >  0.3
+      virtualInput.left  = nx < -0.3
+      virtualInput.down  = ny >  0.3
+      virtualInput.up    = ny < -0.3
     }
 
-    // Inventory button — emits a game event picked up by GameScene
+    const releaseJoystick = (e: PointerEvent) => {
+      if (e.pointerId !== activeId) return
+      activeId = -1
+      base.classList.remove('active')
+      knob.style.transform = 'translate(0, 0)'
+      virtualInput.up = virtualInput.down = virtualInput.left = virtualInput.right = false
+    }
+
+    base.addEventListener('pointerdown', (e) => {
+      if (activeId !== -1) return
+      base.setPointerCapture(e.pointerId)
+      activeId = e.pointerId
+      base.classList.add('active')
+      baseRect = base.getBoundingClientRect()
+      updateJoystick(e.clientX, e.clientY)
+    })
+    base.addEventListener('pointermove', (e) => {
+      if (e.pointerId !== activeId) return
+      updateJoystick(e.clientX, e.clientY)
+    })
+    base.addEventListener('pointerup',     releaseJoystick)
+    base.addEventListener('pointercancel', releaseJoystick)
+
+    // ── Action button ──────────────────────────────────────────────────────
+    const actionBtn = this._dpadWrap.querySelector('#dpad-action') as HTMLElement
+    actionBtn.addEventListener('pointerdown', (e) => {
+      actionBtn.setPointerCapture(e.pointerId)
+      actionBtn.classList.add('pressed')
+      virtualInput.action = true
+    })
+    const releaseAction = () => { actionBtn.classList.remove('pressed'); virtualInput.action = false }
+    actionBtn.addEventListener('pointerup',     releaseAction)
+    actionBtn.addEventListener('pointercancel', releaseAction)
+    actionBtn.addEventListener('pointerleave',  releaseAction)
+
+    // ── Inventory button ───────────────────────────────────────────────────
     const invBtn = this._dpadWrap.querySelector('#dpad-inventory') as HTMLElement
     invBtn.addEventListener('pointerdown', (e) => {
       invBtn.setPointerCapture(e.pointerId)
@@ -383,8 +424,78 @@ export class HudScene extends Phaser.Scene {
       this.game.events.emit('openInventory')
     })
     invBtn.addEventListener('pointercancel', () => invBtn.classList.remove('pressed'))
+  }
 
-    // Chat compactness is driven by the #dpad CSS !important overrides above
+  private _buildMusicPanel(): void {
+    const savedVol = parseFloat(localStorage.getItem('rpidigo.music.volume') ?? '0.5')
+    const savedOn  = (localStorage.getItem('rpidigo.music.enabled') ?? 'true') === 'true'
+
+    this._musicStyle = document.createElement('style')
+    this._musicStyle.textContent = `
+      #hud-music-btn {
+        position: fixed; top: 2px; right: 24px; z-index: 102;
+        background: transparent; border: 1px solid rgba(255,255,255,0.25);
+        color: rgba(255,255,255,0.5); font-family: monospace;
+        font-size: 11px; padding: 0 5px; line-height: 16px;
+        cursor: pointer; user-select: none;
+      }
+      #hud-music-btn:hover, #hud-music-btn.open { border-color: #fff; color: #fff; }
+      #hud-music-panel {
+        position: fixed; top: 20px; right: 2px; z-index: 102;
+        background: rgba(0,0,0,0.75); border: 1px solid rgba(255,255,255,0.2);
+        padding: 6px 8px; display: none; flex-direction: column; gap: 5px;
+        font-family: monospace; font-size: 10px; color: #ccc;
+        min-width: 130px;
+      }
+      #hud-music-panel.open { display: flex; }
+      #hud-music-panel label { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+      #hud-music-toggle {
+        background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.3);
+        color: #ccc; font-family: monospace; font-size: 10px;
+        padding: 1px 6px; cursor: pointer;
+      }
+      #hud-music-toggle.on { border-color: #aaffaa; color: #aaffaa; }
+      #hud-music-vol { width: 80px; accent-color: #ffdd44; cursor: pointer; }
+    `
+    document.head.appendChild(this._musicStyle)
+
+    this._musicBtnEl = document.createElement('button')
+    this._musicBtnEl.id = 'hud-music-btn'
+    this._musicBtnEl.textContent = '♪'
+    this._musicBtnEl.title = 'Music settings'
+    document.body.appendChild(this._musicBtnEl)
+
+    this._musicPanelEl = document.createElement('div')
+    this._musicPanelEl.id = 'hud-music-panel'
+    this._musicPanelEl.innerHTML = `
+      <label>Music
+        <button id="hud-music-toggle" class="${savedOn ? 'on' : ''}">${savedOn ? 'ON' : 'OFF'}</button>
+      </label>
+      <label>Volume
+        <input id="hud-music-vol" type="range" min="0" max="100"
+          value="${Math.round(savedVol * 100)}">
+      </label>`
+    document.body.appendChild(this._musicPanelEl)
+
+    // Toggle panel open/close
+    this._musicBtnEl.addEventListener('click', () => {
+      const open = this._musicPanelEl!.classList.toggle('open')
+      this._musicBtnEl!.classList.toggle('open', open)
+    })
+
+    // ON / OFF toggle
+    const toggleBtn = document.getElementById('hud-music-toggle') as HTMLButtonElement
+    toggleBtn.addEventListener('click', () => {
+      const nowOn = toggleBtn.classList.toggle('on')
+      toggleBtn.textContent = nowOn ? 'ON' : 'OFF'
+      this.game.events.emit('musicEnabled', nowOn)
+    })
+
+    // Volume slider
+    const volSlider = document.getElementById('hud-music-vol') as HTMLInputElement
+    volSlider.addEventListener('input', () => {
+      this.game.events.emit('musicVolume', parseInt(volSlider.value, 10) / 100)
+    })
   }
 
   private _buildFullscreenBtn(): void {
@@ -420,6 +531,30 @@ export class HudScene extends Phaser.Scene {
     document.addEventListener('fullscreenchange', update)
   }
 
+  /** Top-toolbar button that opens PauseScene (Step 24) — same row as ⛶ / ♪. */
+  private _buildMenuBtn(): void {
+    this._menuStyle = document.createElement('style')
+    this._menuStyle.textContent = `
+      #hud-menu {
+        position: fixed; top: 2px; right: 46px; z-index: 102;
+        background: transparent; border: 1px solid rgba(255,255,255,0.25);
+        color: rgba(255,255,255,0.5); font-family: monospace;
+        font-size: 11px; padding: 0 5px; line-height: 16px;
+        cursor: pointer; user-select: none;
+      }
+      #hud-menu:hover { border-color: #fff; color: #fff; }
+    `
+    document.head.appendChild(this._menuStyle)
+
+    this._menuBtnEl = document.createElement('button')
+    this._menuBtnEl.id = 'hud-menu'
+    this._menuBtnEl.textContent = '☰'
+    this._menuBtnEl.title = 'Menu (Esc)'
+    document.body.appendChild(this._menuBtnEl)
+
+    this._menuBtnEl.addEventListener('click', () => this.game.events.emit('openPause'))
+  }
+
   private _teardown(): void {
     document.removeEventListener('keydown', this._enterHandler)
     if (this._chatUnsub)   { this._chatUnsub();   this._chatUnsub   = null }
@@ -430,6 +565,11 @@ export class HudScene extends Phaser.Scene {
     this._dpadStyle?.remove()
     this._fsBtnEl?.remove()
     this._fsBtnStyle?.remove()
+    this._musicBtnEl?.remove()
+    this._musicPanelEl?.remove()
+    this._musicStyle?.remove()
+    this._menuBtnEl?.remove()
+    this._menuStyle?.remove()
     // Release all virtual inputs so nothing stays stuck after scene teardown
     virtualInput.up = virtualInput.down = virtualInput.left = virtualInput.right = virtualInput.action = false
   }
@@ -458,6 +598,8 @@ export class HudScene extends Phaser.Scene {
       if (typeof data.level        === 'number') p.level        = data.level
       if (typeof data.power        === 'number') p.power        = data.power
       if (typeof data.totalDefense === 'number') p.totalDefense = data.totalDefense
+      if (typeof data.statPoints   === 'number') p.statPoints   = data.statPoints
+      if (data.stats) p.stats = { ...p.stats, ...data.stats }
       setLocalPlayer(p)
       this._refresh()
     })

@@ -138,7 +138,7 @@ All sprite paths are relative to `public/assets/sprites/`.
 | `workshop` | `World/Buildings/Workshops.png` | Blacksmith / crafting — auto-enters on touch |
 | `quest_board` | `World/Buildings/QuestBoard.png` | Notice board *(also in `House/` for barracks interior)* |
 | `street_sign` | `World/Buildings/StreetSign.png` | Path-end marker |
-| `tombstone` | `World/Buildings/Tombstone.png` | Cemetery decoration |
+| `tombstone` | `World/Buildings/Tombstone.png` | Cemetery decoration — press `A` to spawn a skeleton horde |
 | `garden_plot` | `World/Ground/GardenPlot.png` | Wheat field base |
 | `wheat_field` | `World/Nature/Wheatfield.png` | Planted crop |
 
@@ -172,7 +172,6 @@ All sprite paths are relative to `public/assets/sprites/`.
 | `dungeon_stairs_down` | `Dungeon/StairDown.png` |
 | `dungeon_stairs_up` | `Dungeon/StairUp.png` *(step on to exit)* |
 | `dungeon_pillar` | `Dungeon/DungeonPillar.png` |
-| `dungeon_trap` | `Dungeon/DungeonTrap.png` |
 | `dungeon_chest` | `Dungeon/Chest.png` |
 | `dungeon_altar` | `Dungeon/DungeonAltar.png` |
 | `dungeon_tombstones` | `Dungeon/Tombstone.png` |
@@ -185,7 +184,16 @@ All sprite paths are relative to `public/assets/sprites/`.
 | `cellar_wall` | `Cellars/CellarWall.png` |
 | `cellar_stairs_up` | `Cellars/CellarStairsUp.png` *(step on to return to house)* |
 | `cellar_chest` | `Cellars/CellarChest.png` |
-| `cellar_trap` | `Cellars/CellarTrap.png` |
+
+### Special tile interactions
+
+Some overworld tiles trigger gameplay events when the player presses `A` while adjacent.
+
+| Tile | Interaction |
+|---|---|
+| `tombstone` | Spawns a wave of `skeleton_weak` enemies at tiles surrounding the tombstone; enemies are written to Firebase presence and immediately engage the player. |
+
+After removing tile IDs from generation/data (for example trap tiles), reset Firebase map data before testing so rooms/chunks regenerate with the current schema.
 
 **Special**
 
@@ -239,9 +247,13 @@ The room ID `house_${tx.padStart(4,'0')}_${ty.padStart(4,'0')}` is derived deter
 - **Level** — increases by gaining XP from killing enemies and collecting treasure.
 - **HP / Max HP** — health points. Player respawns at their house when HP reaches zero.
 - **MP / Max MP** — mana points consumed by magic weapons.
-- **Stats** — Strength, Agility, Intelligence, Endurance. Points are awarded on level-up.
-- **Power** — effective attack value: `base_strength × 2 + equipped_weapon_power`.
-- **Defense** — incoming damage reduction: `endurance × 0.5 + total equipped armor defense`. Minimum 1 damage always applies regardless of defense total.
+- **Stats** — Strength (`STR`), Dexterity (`DEX`), Intelligence (`INT`), Vitality (`VIT`). Points are awarded on level-up and can be allocated by the player.
+- **Power** — effective attack value depends on attack family:
+  - melee power = `equipped_weapon_power + STR × 2.0`
+  - ranged power = `equipped_weapon_power + DEX × 1.8`
+  - magic power = `equipped_weapon_power + INT × 2.2`
+- **Defense** — incoming damage reduction: `VIT × 0.8 + total equipped armor defense`. Minimum 1 damage always applies regardless of defense total.
+- **Critical chance** — `baseCrit + DEX × 0.25%`, capped at 35%.
 - **Inventory** — a list of collected items and quantities.
 - **Equipped weapon** — one weapon slot; determines power and attack type.
 - **Equipped armor** — five independent slots: `helmet`, `chestplate`, `leggings`, `boots`, `gloves`. Each piece adds `defense` and may carry a special effect (speed boost, lifesteal, or flat power bonus).
@@ -326,6 +338,7 @@ All sprite paths are relative to `public/assets/sprites/`.
 | `healer_standard` | Restores the player's HP and MP to full when the player walks adjacent; no cost | `Characters/Soldiers/Ranged/MageTemplate.png` |
 | `merchant_standard` | Runs the village shop; opens a buy/sell UI when the player interacts; stocks armors, Tier 1–2 weapons, and common materials; prices vary by village zone and per-village seed | `Characters/Workers/FarmerTemplate.png` |
 | `guard_patrol` | Patrols the village entry path; warns players about dangers outside | `Characters/Soldiers/Melee/SwordsmanTemplate.png` |
+| `dog` | Spawns near residential buildings in villages (50% chance per house); follows the player for 5 minutes after being interacted with via `A`; loses interest and returns to its home position after the timer expires without re-interaction | `Animals/Dog.png` |
 
 ### Gossiper knowledge
 
@@ -416,6 +429,44 @@ All sprite paths are relative to `public/assets/sprites/`.
 
 ### System notifications
 - Level-up, item found, player death, player entering/leaving range, and other game events appear as system messages in the chat panel.
+
+---
+
+## Audio and ambience music
+
+Music tracks are loaded from `public/assets/music/` and selected by context-aware runtime rules.
+
+### Playlists
+
+| Playlist ID | File naming convention | Usage |
+|---|---|---|
+| `world_ambient` | `ambient_*` | Overworld exploration when local threat is low |
+| `world_action` | `action_*` | Overworld combat pressure with many nearby enemies |
+| `dungeon_dark_ambient` | `dark_ambient_*` | Any dungeon floor, always |
+
+### Selection rules
+
+- Overworld (`room = 0`):
+  - Compute threat score every 1 second using enemies within 12 tiles.
+  - Score contribution per enemy: normal = 1, elite/boss = 2, +1 extra if enemy state is `chase`/`attack` against the local player.
+  - If score >= 6, play `world_action`; otherwise play `world_ambient`.
+- Dungeon rooms (`roomId` starts with `dungeon_`): always play `dungeon_dark_ambient` regardless of enemy count.
+
+### Randomization and soft changes
+
+- Track choice uses a shuffle bag per playlist; a track cannot repeat until all tracks in that playlist have been played.
+- Playlist changes must be soft:
+  - fade out current track over 2.5 s,
+  - start the new track at volume 0 and fade in over 2.5 s,
+  - enforce a minimum dwell time of 15 s before allowing another switch.
+- On scene reload/reconnect, continue the current playlist mood when possible instead of hard-restarting the same song.
+
+### Player controls
+
+- A ♪ button in the HUD top-right toolbar opens a settings panel:
+  - music enabled toggle (ON / OFF),
+  - music volume slider (0–100).
+- Audio preferences persist locally (`localStorage`) and apply immediately.
 
 ---
 
@@ -569,6 +620,25 @@ All weapon sprites are relative to `public/assets/sprites/Objects/`.
 | `necro_staff` | 28 | magic | summons skeleton | `bone` ×5 + `mana_crystal` ×2 + `ectoplasm` ×3 | `FireballProjectile.png` *(necro frame)* |
 | `boss_blade` | 35 | melee | — | `boss_key` ×1 + `iron_ingot` ×6 + `dark_crystal` ×2 | `SwordShort.png` *(boss frame)* |
 
+### Ranged projectiles and elemental magic
+
+- `ranged` and `magic` weapons spawn physical projectile entities with deterministic IDs for multiplayer sync.
+- Projectile core stats: `projectileSpeed`, `projectileRange`, `projectileRadius`, `lifetimeMs`, `cooldownMs`.
+- Bows are cooldown-based and do not require ammo items.
+
+Elemental magic schools:
+
+| Element | Base effect | Secondary effect |
+|---|---|---|
+| `fire` | direct magic damage | burn DOT for 3 s |
+| `water` | direct magic damage | slow (-25% move speed) for 2 s |
+| `earth` | direct magic damage | armor break / stagger |
+| `air` | direct magic damage | fast projectile with light knockback or short chain |
+
+- Every magic cast consumes MP; cast is blocked when MP is insufficient.
+- HUD must show a clear "not enough MP" message when a cast fails.
+- Status effects from elements are applied through a shared combat-status pipeline (player and enemies use the same effect model).
+
 ### Armors
 
 Armor is crafted at stations or bought in village shops. Each piece occupies one of five slots and adds `defense` to the player's damage-reduction total. All armor sprites use frames from `public/assets/sprites/User Interface/Icons-Essentials.png`.
@@ -624,7 +694,7 @@ Each village contains one **shop** operated by a `merchant_standard` NPC at the 
 | Category | Items available |
 |---|---|
 | Armors | Tier 1 (leather) always; Tier 2 (chitin) at level 4+; Tier 3 (iron) at level 8+ |
-| Weapons | All Tier 1; selected Tier 2 weapons (no Tier 3/4 — forge/altar only) |
+| Weapons | All Tier 1; selected Tier 2 weapons (no Tier 3/4 — forge/altar only). Includes starter bows and entry elemental magic weapons/catalysts |
 | Materials | `wood`, `stone`, `fiber`, `hide`, `bone`, `iron_ore`, `chitin`, `mushroom`, `flower` |
 
 Tier 4 items are never sold in shops — dungeon altar crafting only.
@@ -679,7 +749,7 @@ Tier 4 items are never sold in shops — dungeon altar crafting only.
 
 ### Mobile / touch
 - On viewport widths below **640 CSS pixels** the HUD switches to a compact layout: chat panel collapses to a single-line ticker; mini-map shrinks to 64×64; action buttons move to a bottom toolbar.
-- WASD input is replaced by an on-screen **D-pad** (virtual joystick) rendered in `HudScene` on touch devices.
+- WASD input is replaced by an on-screen **virtual joystick** rendered in `HudScene` on touch devices: a circular base (bottom-left) with a draggable knob; supports 8-directional movement including diagonals; knob snaps back to centre on release.
 - Tap on an adjacent tile or entity triggers interaction (equivalent to keyboard interact key).
 
 ### Overlay screens (non-game scenes)
@@ -720,7 +790,7 @@ loaded directly from PNG files using the HTML Canvas API (frame 0, 16×16).
 - **Combat**: face enemy + press A; XP and loot on kill; PVP at level 10+
 - **NPCs**: Healer, Merchant, Guard, Dog — each with frame-0 sprite
 - **Gathering & Crafting**: press A on resources; workbench/workshop/dungeon altar
-- **Chests**: shared by all players; personal house chest is private storage
+- **Chests**: shared by all players; personal house chest is private storage; in chest UI, `A` takes all, and pressing `A` on an already-empty chest closes the panel
 - **Death & Respawn**: items drop; respawn at house; compass hint to loot
 - **Multiplayer**: real-time presence; proximity chat
 
@@ -877,13 +947,32 @@ Shown immediately when the player gains a level.
 
 **Content:**
 - "Level Up!" banner with new level number
-- Stat distribution panel: Strength, Agility, Intelligence, Endurance — each with a **+** button
+- Stat distribution panel: Strength (`STR`), Dexterity (`DEX`), Intelligence (`INT`), Vitality (`VIT`) — each with a **+** button
 - Number of unspent stat points shown; **+** buttons disabled when none remain
+- Level reward rule: 3 points per level, plus +1 bonus point every 5 levels
+- Live preview panel for derived values (melee/ranged/magic power, defense, crit chance)
 - New recipe or ability unlocked at this level (if any), listed as a brief notification
 - **Confirm** button (only enabled when all points are spent)
 
 **Transitions:**
 - **Confirm** → back to `GameScene` + `HudScene`
+
+---
+
+### Character Stats Screen (`StatsScene`) — *overlays `GameScene` + `HudScene`*
+Opened anytime by pressing **`S`** during play (same overlay style as `LevelUpScene`/`PauseScene`).
+
+**Content:**
+- Player name and current level
+- Strength (`STR`), Dexterity (`DEX`), Intelligence (`INT`), Vitality (`VIT`) values
+- Live preview panel for derived combat values (melee/ranged/magic power, defense, crit chance)
+- If the player has unspent stat points (e.g. skipped at a previous level-up): the same +/− allocation, live-preview, and **Confirm** flow as the Level-Up Screen, so banked points are never stranded
+- **Log Out** button (writes `online: false` to Firebase, removes presence entry, returns to `LoginScene`)
+
+**Transitions:**
+- **Confirm** (when allocating) → applies allocation, stays in `GameScene` + `HudScene`
+- ESC or **`S`** → back to `GameScene` + `HudScene`
+- **Log Out** → `LoginScene`
 
 ---
 

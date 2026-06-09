@@ -80,6 +80,24 @@ export class LoadingScene extends Phaser.Scene {
       const key = `Armors/${a.spriteFrame.replace('.png', '')}`
       this.load.image(key, `assets/sprites/Armors/${a.spriteFrame}`)
     }
+    // Sound effects
+    this.load.audio('sfx_swing',  'assets/music/swing.wav')
+    this.load.audio('sfx_gather', 'assets/music/wood-small.wav')
+    // Music tracks — loaded as audio assets for MusicDirector
+    const MUSIC: Array<[string, string]> = [
+      ['music_ambient_1', 'Ambient 1.mp3'],
+      ['music_ambient_2', 'Ambient 2.mp3'],
+      ['music_ambient_3', 'Ambient 3.mp3'],
+      ['music_action_1',  'Action 1.mp3'],
+      ['music_action_2',  'Action 2.mp3'],
+      ['music_action_3',  'Action 3.mp3'],
+      ['music_dark_1',    'Dark Ambient 1.mp3'],
+      ['music_dark_2',    'Dark Ambient 2.mp3'],
+      ['music_dark_3',    'Dark Ambient 3.mp3'],
+    ]
+    for (const [key, file] of MUSIC) {
+      this.load.audio(key, `assets/music/${file}`)
+    }
   }
 
   create(): void {
