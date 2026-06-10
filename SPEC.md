@@ -315,10 +315,10 @@ Some enemies steal gold directly from the player on a successful hit, storing it
 
 | Enemy | Steals per hit | Notes |
 |---|---|---|
-| `thief_weak` | 5–15 gold | Steals on first hit, flees immediately; fast — kill it before it escapes |
-| `bandit_strong` | 10–25 gold | Steals on each hit while fighting; drops stolen gold on death |
-| `desert_bandit_strong` | 15–35 gold | Steals on each hit; drops stolen gold on death |
-| `goblin_scout_strong` | 3–8 gold | Steals while calling allies; drops stolen gold on death |
+| `thief_weak` | 3–12 gold | Steals on first hit, then immediately switches to fleeing; fast — kill it before it escapes |
+| `bandit_strong` | 5–20 gold | Steals on each hit while fighting; drops stolen gold on death |
+| `desert_bandit_strong` | 8–25 gold | Steals on each hit; drops stolen gold on death |
+| `goblin_scout_strong` | 6–18 gold | Steals on repeated hits while fighting; drops stolen gold on death |
 
 - A player can never be reduced below 0 gold — the enemy takes `min(stealAmount, player.gold)`.
 - The chat panel shows a system notification when gold is stolen: *"Thief stole 12 gold from you!"*

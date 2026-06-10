@@ -106,6 +106,14 @@ export const enemies: EnemyDefinition[] = [
     behaviorScript: patrolFlee, spriteFrame: 'goblin_scout_weak.png',
   },
   {
+    // Hardened scout — steals gold while fighting, then keeps distance
+    id: 'goblin_scout_strong', baseType: 'goblin_scout', variant: 'strong', displayName: 'Goblin Raider',
+    baseHp: 44, basePower: 7, baseMp: 0, aggroRange: 8, speed: 'fast',
+    levelRange: [4, 8], lootTable: [{ itemId: 'gold_coin', min: 8, max: 18, chance: 0.9 }],
+    behaviorScript: patrolAggressive, spriteFrame: 'goblin_scout_weak.png',
+    stealGold: [6, 18],
+  },
+  {
     // Ancient guardian — extremely slow, never leaves its grove, attacks only adjacently
     id: 'treant_strong', baseType: 'treant', variant: 'strong', displayName: 'Treant',
     baseHp: 120, basePower: 12, baseMp: 0, aggroRange: 3, speed: 'slow',

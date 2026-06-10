@@ -4,7 +4,7 @@
  * Writes dungeon rooms to Firebase under `map/dungeon_{tx}_{ty}_floor_1` etc. separately.
  */
 import type { TileData, EnemyInstance } from './types.ts'
-import { mulberry32, seededRandInt, tileKey } from './utils.ts'
+import { mulberry32, seededRandInt, tileKey, rollEnemyInitialCarriedGold } from './utils.ts'
 import { EnemyRegistry } from '../registry/registries.ts'
 
 /** Canonical dungeon room ID derived from the entrance tile's world coordinates. */
@@ -217,9 +217,11 @@ function makeEnemy(
   power: number,
 ): EnemyInstance {
   let script = 'pass'
+  let carriedGold = 0
   try {
     const def = EnemyRegistry.get(templateId)
     script = def.behaviorScript
+    carriedGold = rollEnemyInitialCarriedGold(def.lootTable)
   } catch { /* fallback */ }
 
   return {
@@ -232,6 +234,6 @@ function makeEnemy(
     lastLogicAt: 0,
     script,
     memory: {},
-    carriedGold: 0,
+    carriedGold,
   }
 }

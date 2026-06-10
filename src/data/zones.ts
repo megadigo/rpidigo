@@ -44,6 +44,7 @@ export const zones: ZoneDefinition[] = [
       { id: 'wolf_strong',        weight: 20, levelRange: [3, 7] },
       { id: 'giant_spider_weak',  weight: 20, levelRange: [2, 6] },
       { id: 'goblin_scout_weak',  weight: 10, levelRange: [1, 4] },
+      { id: 'goblin_scout_strong', weight: 6, levelRange: [4, 8] },
       { id: 'treant_strong',      weight:  5, levelRange: [7, 12] },
       { id: 'giant_spider_venomous', weight: 5, levelRange: [5, 9] },
     ],

@@ -182,7 +182,7 @@ export class ScriptExecutor {
     playerX: number,
     playerY: number,
     nearbyPlayers: NearbyPlayer[],
-    onAttack?: (targetPlayerId: string, damage: number, killerTemplateId: string) => void,
+    onAttack?: (attackerId: string, targetPlayerId: string, damage: number, killerTemplateId: string) => void,
   ): void {
     if (!_pyodide || !this._room) return
 
@@ -305,7 +305,7 @@ export class ScriptExecutor {
     entity:        EnemyInstance | NpcInstance,
     now:           number,
     nearbyPlayers: NearbyPlayer[],
-    onAttack?:     (targetPlayerId: string, damage: number, killerTemplateId: string) => void,
+    onAttack?:     (attackerId: string, targetPlayerId: string, damage: number, killerTemplateId: string) => void,
   ): void {
     const py = _pyodide!
 
@@ -452,7 +452,7 @@ export class ScriptExecutor {
     // ── Apply attack action ──────────────────────────────────────────────
     if (hasAttack && onAttack && actions.attack) {
       try {
-        onAttack(actions.attack, power, (entity as EnemyInstance).templateId ?? entity.baseType)
+        onAttack(id, actions.attack, power, (entity as EnemyInstance).templateId ?? entity.baseType)
       } catch (err) {
         console.error('[ScriptExecutor] attack callback threw:', err)
       }

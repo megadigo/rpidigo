@@ -274,15 +274,15 @@
 
 ---
 
-## Step 22 — Gold-Stealing Enemies ⬜
+## Step 22 — Gold-Stealing Enemies ✅
 *Goal: thief and bandit enemy variants steal gold from the player on hit and permanently lose it if they escape.*
 
-1. Add `carriedGold` field to enemy instances; populate at spawn from the variant's loot table.
-2. On a successful enemy hit, subtract `min(stealAmount, player.gold)` from the player and add to `enemy.carriedGold`; show a system chat notification (*"Thief stole 12 gold from you!"*).
-3. Profiles: `thief_weak` steals on first hit then immediately flees; `bandit_strong` / `desert_bandit_strong` / `goblin_scout_strong` steal on each hit while fighting.
-4. On enemy death, drop `carriedGold` as a loot pickup at the death tile.
-5. If a fleeing enemy moves beyond 30 tiles from the player, stolen gold is permanently lost.
-6. **Checkpoint**: A thief steals gold, a chat notification appears; killing the thief before escape returns the gold as a loot pickup; letting it flee 30+ tiles loses the gold permanently.
+1. ✅ `carriedGold` is now populated at spawn from each enemy template's `gold_coin` loot entries (`rollEnemyInitialCarriedGold`) in overworld chunks, dungeons, and cellars.
+2. ✅ Successful enemy hits now run gold-steal resolution in `GameScene`: subtract `min(stealAmount, player.gold)`, add to `entities/enemies/{id}/carriedGold`, and emit a system chat message (for example: *"Thief stole 12 gold from you!"*).
+3. ✅ Profiles implemented: `thief_weak` steals once then is forced into `fleeing`; `bandit_strong`, `desert_bandit_strong`, and `goblin_scout_strong` can steal on repeated hits while fighting.
+4. ✅ On enemy death, `carriedGold` is dropped as reclaimable chest gold at the death tile instead of being auto-added directly to the player's wallet.
+5. ✅ If a fleeing thief reaches >30 tiles, tracked stolen gold is removed from `carriedGold` (lost permanently) and a system chat notice is posted.
+6. ✅ **Checkpoint**: thieves/bandits now steal gold on hit with chat feedback; killing them drops reclaimed gold at the death tile; allowing fleeing thieves to escape beyond 30 tiles burns the stolen amount.
 
 ---
 

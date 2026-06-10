@@ -150,6 +150,9 @@ export class GameScene extends Phaser.Scene {
   /** Projectile system for ranged and magic attacks (Step 20). */
   private _projectileSystem!: ProjectileSystem
 
+  /** Tracks how much local-player gold each enemy has stolen and can still lose on escape. */
+  private _stolenByEnemy = new Map<string, number>()
+
   /** Accumulated delta (ms) since the last regen tick. Reset whenever the player takes damage. */
   private _healTimer = 0
   /** Milliseconds the player must be out of combat before regen starts ticking. */
@@ -375,11 +378,13 @@ export class GameScene extends Phaser.Scene {
     // Run entity AI scripts (time-sliced: at most BUDGET_MS wall-clock per frame)
     const tx = Math.floor(this.playerController.px / TILE_SIZE)
     const ty = Math.floor(this.playerController.py / TILE_SIZE)
-    this._scriptExecutor.tick(tx, ty, this._buildNearbyPlayers(), (targetPlayerId, damage, killerTemplateId) => {
+    this._scriptExecutor.tick(tx, ty, this._buildNearbyPlayers(), (attackerId, targetPlayerId, damage, killerTemplateId) => {
       if (targetPlayerId === getLocalPlayer().id) {
-        this._applyEnemyDamage(damage, killerTemplateId)
+        this._applyEnemyDamage(attackerId, damage, killerTemplateId)
       }
     })
+
+    this._processEscapedGoldThieves(tx, ty)
 
     const cam = this.cameras.main
     const v = cam.worldView
@@ -494,7 +499,7 @@ export class GameScene extends Phaser.Scene {
    * Apply damage from an enemy attack to the local player.
    * Subtracts defense, flashes sprite, writes HP to Firebase, triggers death if HP <= 0.
    */
-  private _applyEnemyDamage(rawDamage: number, killerTemplateId?: string): void {
+  private _applyEnemyDamage(attackerEnemyId: string, rawDamage: number, killerTemplateId?: string): void {
     if (this._isDead) return
     const now = performance.now()
     if (now - this._lastDamageAt < GameScene._INVINCIBILITY_MS) return
@@ -526,11 +531,115 @@ export class GameScene extends Phaser.Scene {
 
     void update(ref(db), { [`players/${player.id}/hp`]: newHp })
 
+    void this._maybeStealGold(attackerEnemyId)
+
     if (killerTemplateId) {
       try { this._lastKillerName = EnemyRegistry.get(killerTemplateId).displayName }
       catch { this._lastKillerName = killerTemplateId.replace(/_/g, ' ') }
     }
     if (newHp <= 0) this._triggerDeath()
+  }
+
+  /**
+   * Gold-steal resolution (Step 22): on a successful enemy hit, transfer gold
+   * from the local player to the enemy's carriedGold pool and broadcast a
+   * system chat notification.
+   */
+  private async _maybeStealGold(attackerEnemyId: string): Promise<void> {
+    const entry = this._enemyData.get(attackerEnemyId)
+    if (!entry) return
+
+    let def: import('../registry/types.ts').EnemyDefinition
+    try { def = EnemyRegistry.get(entry.templateId) } catch { return }
+    if (!def.stealGold) return
+
+    const player = getLocalPlayer()
+    const currentGold = player.gold ?? 0
+    if (currentGold <= 0) return
+
+    const [minSteal, maxSteal] = def.stealGold
+    const rolled = minSteal + Math.floor(Math.random() * (maxSteal - minSteal + 1))
+    const stealAmount = Math.max(0, Math.min(rolled, currentGold))
+    if (stealAmount <= 0) return
+
+    const enemyPath = `entities/enemies/${attackerEnemyId}`
+    const enemySnap = await get(ref(db, enemyPath))
+    const enemyVal = enemySnap.val() as { carriedGold?: number; memory?: Record<string, unknown> } | null
+    if (!enemyVal) return
+
+    // Thieves steal only once, then immediately flee.
+    if (entry.templateId === 'thief_weak' && enemyVal.memory?.stoleGoldOnce === true) {
+      return
+    }
+
+    const newGold = currentGold - stealAmount
+    player.gold = newGold
+    setLocalPlayer(player)
+
+    this._stolenByEnemy.set(attackerEnemyId, (this._stolenByEnemy.get(attackerEnemyId) ?? 0) + stealAmount)
+
+    const room = player.room
+    const now = Date.now()
+    const isThief = entry.templateId === 'thief_weak'
+    await update(ref(db), {
+      [`players/${player.id}/gold`]: newGold,
+      [`${enemyPath}/carriedGold`]: (enemyVal.carriedGold ?? 0) + stealAmount,
+      ...(isThief && {
+        [`${enemyPath}/state`]: 'fleeing',
+        [`${enemyPath}/memory/stoleGoldOnce`]: true,
+        [`presence/${room}/enemies/${attackerEnemyId}/state`]: 'fleeing',
+      }),
+      [`chat/${room}/_steal_${attackerEnemyId}_${now}`]: {
+        sender: 'System',
+        x: entry.x,
+        y: entry.y,
+        text: `${def.displayName} stole ${stealAmount} gold from you!`,
+        timestamp: now,
+        system: true,
+      },
+    })
+
+    this._showFloatText(entry.x, entry.y, `-${stealAmount} gold`, '#ffbb66')
+  }
+
+  /**
+   * If a fleeing thief escapes beyond 30 tiles, their stolen local gold is
+   * removed permanently from the enemy carriedGold pool.
+   */
+  private _processEscapedGoldThieves(playerTx: number, playerTy: number): void {
+    for (const [enemyId, localStolen] of this._stolenByEnemy.entries()) {
+      if (localStolen <= 0) {
+        this._stolenByEnemy.delete(enemyId)
+        continue
+      }
+      const entry = this._enemyData.get(enemyId)
+      if (!entry) {
+        this._stolenByEnemy.delete(enemyId)
+        continue
+      }
+      if (entry.state !== 'fleeing') continue
+
+      const dist = Math.max(Math.abs(entry.x - playerTx), Math.abs(entry.y - playerTy))
+      if (dist <= 30) continue
+
+      this._stolenByEnemy.delete(enemyId)
+      const room = getLocalPlayer().room
+      const now = Date.now()
+      void update(ref(db), {
+        [`chat/${room}/_stolen_lost_${enemyId}_${now}`]: {
+          sender: 'System',
+          x: entry.x,
+          y: entry.y,
+          text: `The fleeing ${entry.templateId.replace(/_/g, ' ')} escaped. Stolen gold is lost.`,
+          timestamp: now,
+          system: true,
+        },
+      })
+      void runTransaction(ref(db, `entities/enemies/${enemyId}/carriedGold`), (val: number | null) => {
+        const current = typeof val === 'number' ? val : 0
+        return Math.max(0, current - localStolen)
+      })
+    }
   }
 
   /**
@@ -880,6 +989,7 @@ export class GameScene extends Phaser.Scene {
     this._remoteEnemies.clear()
     this._enemyData.clear()
     this._localEnemyHp.clear()
+    this._stolenByEnemy.clear()
     remoteEnemyTiles.clear()
 
     for (const { sprite } of this._remoteNpcs.values()) {
@@ -1605,6 +1715,34 @@ export class GameScene extends Phaser.Scene {
     void update(ref(db), { [(room || '0') === '0' ? overworldTilePath(tx, ty) : `map/${room}/${tileKey(tx, ty)}`]: newTile })
   }
 
+  /** Drop carried enemy gold into a loot chest at the enemy death tile. */
+  private _dropEnemyCarriedGold(room: string, tx: number, ty: number, gold: number): void {
+    if (gold <= 0) return
+    const existing = getTile(tx, ty)
+    if (!existing) return
+
+    const existingGold = existing.metadata?.gold ?? 0
+    const newTile: import('../world/types.ts').TileData = {
+      g: existing.g,
+      m: [...(existing.m ?? []).filter(m => m !== 'chest'), 'chest'],
+      ...(existing.t ? { t: existing.t } : {}),
+      metadata: {
+        ...(existing.metadata ?? {}),
+        dropped: true,
+        opened: false,
+        gold: existingGold + gold,
+        items: existing.metadata?.items ?? [],
+      },
+    }
+
+    setTile(tx, ty, newTile)
+    this.tilemapRenderer.invalidateTile(tx, ty)
+    void update(ref(db), {
+      [(room || '0') === '0' ? overworldTilePath(tx, ty) : `map/${room}/${tileKey(tx, ty)}`]: newTile,
+    })
+    this._showFloatText(tx, ty, `+${gold} reclaimed`, '#ffdd88')
+  }
+
   /**
    * Show a short floating label above a tile position (same style as damage/regen floats).
    */
@@ -1883,6 +2021,12 @@ export class GameScene extends Phaser.Scene {
       }
     }
 
+    let carriedGold = 0
+    try {
+      const snap = await get(ref(db, `entities/enemies/${targetId}/carriedGold`))
+      carriedGold = Math.max(0, Number(snap.val() ?? 0))
+    } catch { /* ignore */ }
+
     player.xp        = player.xp + xpGain
     player.gold      = newGold
     player.inventory = newInventory
@@ -1926,6 +2070,11 @@ export class GameScene extends Phaser.Scene {
 
     this._scriptExecutor.removeEnemy(targetId)
     this._localEnemyHp.delete(targetId)
+    this._stolenByEnemy.delete(targetId)
+
+    if (carriedGold > 0) {
+      this._dropEnemyCarriedGold(room, targetEntry.x, targetEntry.y, carriedGold)
+    }
 
     await update(ref(db), {
       [`presence/${room}/enemies/${targetId}`]:  null,

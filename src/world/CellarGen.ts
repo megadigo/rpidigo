@@ -5,7 +5,7 @@
  * Each cellar is infested with 2–4 rats.
  */
 import type { TileData, EnemyInstance } from './types.ts'
-import { mulberry32, seededRandInt, tileKey } from './utils.ts'
+import { mulberry32, seededRandInt, tileKey, rollEnemyInitialCarriedGold } from './utils.ts'
 import { EnemyRegistry } from '../registry/registries.ts'
 
 export const CELLAR_ROOM_SIZE = 20
@@ -108,7 +108,9 @@ export function generateCellarRoom(tx: number, ty: number, seed: number): Cellar
 
 function _makeRat(id: string, room: string, x: number, y: number): EnemyInstance {
   let script = 'pass'
+  let carriedGold = 0
   try { script = EnemyRegistry.get('rat_weak').behaviorScript } catch { /* fallback */ }
+  try { carriedGold = rollEnemyInitialCarriedGold(EnemyRegistry.get('rat_weak').lootTable) } catch { /* fallback */ }
   return {
     id, templateId: 'rat_weak', baseType: 'rat', variant: 'weak',
     hp: 12, maxHp: 12, mp: 0, maxMp: 0, power: 2,
@@ -118,6 +120,6 @@ function _makeRat(id: string, room: string, x: number, y: number): EnemyInstance
     lastLogicAt: 0,
     script,
     memory: {},
-    carriedGold: 0,
+    carriedGold,
   }
 }

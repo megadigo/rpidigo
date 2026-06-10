@@ -17,6 +17,26 @@ export function seededRandInt(rand: () => number, min: number, max: number): num
   return min + Math.floor(rand() * (max - min + 1))
 }
 
+/**
+ * Roll starting carried gold from an enemy loot table.
+ *
+ * Uses the same chance/min/max semantics as regular loot drops, but only
+ * consumes `gold_coin` entries.
+ */
+export function rollEnemyInitialCarriedGold(
+  lootTable: Array<{ itemId: string; min: number; max: number; chance: number }>,
+  rand: () => number = Math.random,
+): number {
+  let total = 0
+  for (const drop of lootTable) {
+    if (drop.itemId !== 'gold_coin') continue
+    if (rand() >= drop.chance) continue
+    const qty = drop.min + Math.floor(rand() * (drop.max - drop.min + 1))
+    total += Math.max(0, qty)
+  }
+  return total
+}
+
 /** SHA-256 hex of a string.
  *  Uses the Web Crypto API when available (HTTPS / localhost).
  *  Falls back to a pure-JS implementation so the game works over plain HTTP. */
