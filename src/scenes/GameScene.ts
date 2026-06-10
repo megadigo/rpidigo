@@ -1721,14 +1721,18 @@ export class GameScene extends Phaser.Scene {
     const existing = getTile(tx, ty)
     if (!existing) return
 
+    const layers = [existing.g, ...(existing.m ?? [])]
+    const hasChest = layers.some(l => GameScene._CHEST_TILES.has(l))
     const existingGold = existing.metadata?.gold ?? 0
     const newTile: import('../world/types.ts').TileData = {
       g: existing.g,
-      m: [...(existing.m ?? []).filter(m => m !== 'chest'), 'chest'],
+      ...(existing.m || !hasChest
+        ? { m: hasChest ? (existing.m ?? []) : [...(existing.m ?? []), 'chest'] }
+        : {}),
       ...(existing.t ? { t: existing.t } : {}),
       metadata: {
         ...(existing.metadata ?? {}),
-        dropped: true,
+        dropped: hasChest ? (existing.metadata?.dropped ?? false) : true,
         opened: false,
         gold: existingGold + gold,
         items: existing.metadata?.items ?? [],

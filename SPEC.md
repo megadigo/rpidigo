@@ -860,11 +860,10 @@ Persistent overlay drawn above the game world at all times during play.
 - Equipped weapon icon (bottom-right quick-slot)
 - Mini-map (top-right corner) showing explored tiles and nearby POI icons
 - Chat panel (bottom-left): proximity messages, NPC speech, system notifications
-- Action buttons: **Inventory**, **Map**, **Menu**
+- Action buttons: **Inventory**, **Menu**
 
 **Transitions:**
 - **Inventory** button → `InventoryScene` overlays
-- **Map** button → `MapScene` overlays
 - **Menu** button → `PauseScene` overlays
 - Level-up event → `LevelUpScene` overlays
 
@@ -930,20 +929,6 @@ Opens when a non-merchant NPC speaks (villager, healer, guard, gossiper).
 **Transitions:**
 - **[Close]** / ESC → back to `GameScene` + `HudScene`
 - Merchant NPC → `ShopScene` instead of `DialogScene`
-
----
-
-### Map Screen (`MapScene`) — *overlays `GameScene` + `HudScene`*
-Full-screen world map with fog-of-war.
-
-**Content:**
-- Zoomed-out view of the 1000×1000 grid; unexplored sectors rendered as dark fog
-- Icons for: known villages (house icon), known dungeon entrances (cave icon), player's current position (pin), player's house position (star)
-- Zone colour coding (plains green, forest dark-green, desert yellow, river blue)
-- **Close** button
-
-**Transitions:**
-- **Close** / ESC → back to `GameScene` + `HudScene`
 
 ---
 
@@ -1023,7 +1008,6 @@ IntroScene
                     │     └─► CraftScene ────────────────►┤
                     ├─► ShopScene ───────────────────────►┤
                     ├─► DialogScene ─────────────────────►┤
-                    ├─► MapScene ────────────────────────►┤
                     ├─► LevelUpScene ────────────────────►┤
                     ├─► PauseScene ──────────────────────►┤
                     │     └─► LoginScene (log out)         │
