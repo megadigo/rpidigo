@@ -100,6 +100,42 @@ export interface ChunkData {
   npcs: NpcInstance[]
 }
 
+/** Quest categories — one quest per category can be active at a time. */
+export type QuestCategory = 'combat' | 'exploration' | 'gathering' | 'crafting' | 'social' | 'economy'
+
+/** Static quest definition (lives in data/quests.ts). */
+export interface QuestTemplate {
+  id: string
+  category: QuestCategory
+  /** Ascending order within the category; determines progression sequence. */
+  order: number
+  title: string
+  description: string
+  objectives: QuestObjective[]
+  rewardXp: number
+  rewardGold?: number
+}
+
+/** A single measurable condition within a quest. */
+export interface QuestObjective {
+  /** Counter key path; use dot-notation for map sub-keys (e.g. 'killsByEnemyId.wolf'). */
+  counterKey: string
+  goal: number
+  label: string
+}
+
+/** An accepted, in-progress quest stored on the player. Keyed by category in Firebase. */
+export interface ActiveQuest {
+  id: string
+  category: QuestCategory
+  title: string
+  description: string
+  objectives: QuestObjective[]
+  rewardXp: number
+  rewardGold?: number
+  acceptedAt: number
+}
+
 export interface PlayerInstance {
   id: string
   name: string
@@ -130,4 +166,24 @@ export interface PlayerInstance {
   house: { room: string; x: number; y: number }
   online: boolean
   lastSeen: number
+  /** Cumulative gameplay counters used to track quest progress. */
+  progressCounters: {
+    enemiesKilledTotal?: number
+    killsByEnemyId?: Record<string, number>
+    houseEntered?: number
+    dungeonsVisited?: number
+    villagesVisited?: number
+    chatMessagesSent?: number
+    craftsDone?: number
+    craftedByItemId?: Record<string, number>
+    goldCollectedTotal?: number
+    collectedByItemId?: Record<string, number>
+    deaths?: number
+    distanceTraveled?: number
+  }
+  /** Per-player quest state. */
+  quests: {
+    active?: Record<string, ActiveQuest>
+    completed?: Record<string, { completedAt: number }>
+  }
 }

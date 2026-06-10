@@ -13,7 +13,7 @@ import { CHUNK_SIZE } from '../world/ChunkGen.ts'
 import { generateHouseRoom } from '../world/HouseGen.ts'
 import { applyDerivedCombatStats } from '../world/playerStats.ts'
 import type { TileData } from '../world/types.ts'
-
+import { getFirstQuestsByCategory } from '../data/quests.ts'
 let _localPlayer: PlayerInstance | null = null
 
 export function getLocalPlayer(): PlayerInstance {
@@ -48,6 +48,12 @@ export async function register(
   // Place house tile near spawn
   const housePos = findHousePosition(x, y)
 
+  // Build initial tutorial quests — first quest in each category
+  const now = Date.now()
+  const initialActive = getFirstQuestsByCategory()
+  // Ensure acceptedAt is current (getFirstQuestsByCategory already sets it)
+  void now  // suppress lint
+
   const player: PlayerInstance = {
     id, name, email,
     passwordHash: hash,
@@ -66,6 +72,8 @@ export async function register(
     house: { room: '0', x: housePos.x, y: housePos.y },
     online: true,
     lastSeen: 0,
+    progressCounters: {},
+    quests: { active: initialActive },
   }
   applyDerivedCombatStats(player)
 
@@ -118,6 +126,8 @@ export async function login(name: string, password: string): Promise<PlayerInsta
 
   const player = found as PlayerInstance
   player.statPoints ??= 0
+  player.progressCounters ??= {}
+  player.quests ??= {}
 
   // Recompute power/defense from current stats + gear — keeps older records
   // (saved under the previous flat-power model) in sync with the formula.

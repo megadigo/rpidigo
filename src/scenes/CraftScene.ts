@@ -24,6 +24,7 @@ import { db } from '../firebase.ts'
 import { getLocalPlayer, setLocalPlayer } from '../player/Auth.ts'
 import { RecipeRegistry, ItemRegistry, WeaponRegistry, ArmorRegistry } from '../registry/registries.ts'
 import type { RecipeDefinition } from '../registry/types.ts'
+import { checkAndAdvanceQuestsLocally } from '../world/questUtils.ts'
 
 // ─── Scene data ───────────────────────────────────────────────────────────────
 
@@ -214,7 +215,33 @@ export class CraftScene extends Phaser.Scene {
     player.inventory = cleanInv
     setLocalPlayer(player)
 
-    void update(ref(db), { [`players/${player.id}/inventory`]: cleanInv })
+    // ── Progress counters ─────────────────────────────────────────────────────
+    const pc = player.progressCounters ??= {}
+    pc.craftsDone = (pc.craftsDone ?? 0) + 1
+    const cbi = pc.craftedByItemId ??= {}
+    cbi[r.produces] = (cbi[r.produces] ?? 0) + r.quantity
+    setLocalPlayer(player)
+    const questResult = checkAndAdvanceQuestsLocally(player)
+
+    void update(ref(db), {
+      [`players/${player.id}/inventory`]: cleanInv,
+      [`players/${player.id}/progressCounters/craftsDone`]: pc.craftsDone,
+      [`players/${player.id}/progressCounters/craftedByItemId/${r.produces}`]: cbi[r.produces],
+      ...questResult.updates,
+    })
+
+    for (const title of questResult.completedTitles) {
+      this._showToast(`Quest complete: ${title}`)
+    }
+
+    // Quest reward level-up — let GameScene handle the overlay via a game event
+    if (questResult.levelsGained > 0) {
+      this.game.events.emit('questLevelUp', {
+        newLevel:          getLocalPlayer().level,
+        levelBefore:       questResult.levelBefore,
+        statPointsGranted: questResult.statPointsGranted,
+      })
+    }
 
     this._showToast(`Crafted: ${this._outputName(r)}${r.quantity > 1 ? ` ×${r.quantity}` : ''}`)
     this._renderList()

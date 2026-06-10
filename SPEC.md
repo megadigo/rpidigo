@@ -262,6 +262,17 @@ The room ID `house_${tx.padStart(4,'0')}_${ty.padStart(4,'0')}` is derived deter
 - **Equipped weapon** — one weapon slot; determines power and attack type.
 - **Equipped armor** — five independent slots: `helmet`, `chestplate`, `leggings`, `boots`, `gloves`. Each piece adds `defense` and may carry a special effect (speed boost, lifesteal, or flat power bonus).
 - **Gold** — currency stored as a dedicated counter separate from inventory. Gained from enemy drops, treasure chests, and selling items. Used to purchase items at village shops.
+- **Quest progression counters** — persistent lifetime counters used by quest objectives, at minimum:
+  - `killsByEnemyId` (map enemy template -> kill count),
+  - `villagesVisited`,
+  - `dungeonsVisited`,
+  - `goldCollectedTotal`,
+  - `craftActionsCompleted`.
+  Recommended additional counters for richer quests:
+  - `craftedByItemId`, `collectedByItemId`,
+  - `dungeonFloorsEntered`, `dungeonFloorsCleared`,
+  - `questsAccepted`, `questsCompleted`, `questsFailed`,
+  - `distanceTravelledTiles`, `deaths`.
 
 ### Spawn and house
 - On first login the player is placed at a **random reachable passable position** within the world grid (with a 50-tile margin from world edges).
@@ -359,6 +370,86 @@ The healer uses `actions.heal(playerId, hp, mp)` in its Python script to write t
 ### New NPC profiles
 
 Adding a new NPC profile requires only a new `NpcDefinition` with a Python script — no engine changes. Any behaviour achievable in Python (trade, quest-giving, mini-game, escort) can be expressed as a new profile.
+
+---
+
+## Quests
+
+Quests are structured objective chains offered by three source types:
+- **Quest boards** (`quest_board` tile interactions in villages/barracks)
+- **Tavern quest-givers** (innkeeper or tavern villagers)
+- **Any villager profile** (`villager_*`) marked as a quest giver
+
+### Quest categories
+
+| Category | Examples |
+|---|---|
+| Kill | Kill `wolf_weak` × 10; kill any bandit × 8 |
+| Delivery | Bring item to another village NPC/board |
+| Exploration | Visit a new village; enter dungeon floor 2 |
+| Crafting | Craft `wooden_sword` × 2; craft any potion × 5 |
+| Collection | Gather wood/ore/leather counts |
+| Hybrid | Kill + collect + deliver in one quest |
+
+### Objective model
+
+- A quest contains one or more objective groups.
+- Groups support **AND** / **OR** composition.
+- Each objective references one or more progression counters and a target value.
+- Optional constraints:
+  - required zone / village / dungeon,
+  - item or enemy tag filters,
+  - expiration time (daily/weekly/event),
+  - minimum player level.
+
+### Progress counters (quest runtime source of truth)
+
+All quest progress is computed from persistent player counters rather than ad-hoc per-quest custom logic.
+
+Minimum counters required by design:
+- `killsByEnemyId.{enemyTemplateId}`
+- `villagesVisited`
+- `dungeonsVisited`
+- `goldCollectedTotal`
+- `craftActionsCompleted`
+
+Recommended counters to support future quest variety:
+- `craftedByItemId.{itemId}`
+- `collectedByItemId.{itemId}`
+- `dungeonFloorsEntered`
+- `dungeonFloorsCleared`
+- `distanceTravelledTiles`
+- `deaths`
+
+### Firebase layout (design)
+
+- `players/{id}/progressCounters/*` — canonical counter state per player
+- `quests/templates/{questId}` — static quest definitions and objective schema
+- `quests/boards/{villageId}` — rotating board offers for each village
+- `players/{id}/quests/{active|completed|failed}` — per-player quest state and history
+
+### Rewards
+
+Quest rewards may grant one or more of:
+- XP
+- gold
+- items/materials
+- reputation/favor (future system)
+- unlock tokens (for recipes/dialog branches)
+
+### Acceptance and completion flow
+
+1. Player interacts with board/tavern/villager quest giver.
+2. Offer list filtered by level, prerequisites, and repeatability window.
+3. On accept, quest instance is created under `players/{id}/quests/active`.
+4. Progress updates passively from counters and objective evaluator.
+5. When complete, player claims reward from giver or quest log.
+
+### Anti-abuse rules (design)
+
+- Repeatable quests have cooldown windows (`daily`, `weekly`, or custom seconds).
+- Delivery quests verify destination village/NPC before completion.
+- Server-trust model remains Firebase-client based, so objective evaluation should be deterministic and auditable from counters.
 
 ---
 
@@ -502,6 +593,10 @@ Game state is split across purpose-built Firebase Realtime Database collections.
 | `/presence/{room}` | Lightweight render snapshot (x, y, sprite, state) for all entities in a room | Written on every move; Phaser subscribes here |
 | `/chat/{room}` | Proximity chat messages | Append-only; pruned after 5 minutes |
 | `/shops/{villageId}` | Per-village limited stock counters and restock timestamp | Written on each purchase of a limited item |
+| `/players/{id}/progressCounters/*` | Quest progression counters (kills, visits, gold collected, crafts, etc.) | Written on relevant gameplay events |
+| `/quests/templates/{questId}` | Static quest definitions | Rare writes; mostly read-only |
+| `/quests/boards/{villageId}` | Village-specific quest board offers | Rotating writes (time/event based) |
+| `/players/{id}/quests/{active|completed|failed}` | Per-player quest state and history | Written on accept/progress/claim/fail |
 
 **Separation of canonical state from render state:** `/players/{id}` and `/entities/` hold full data. `/presence/{room}` holds only what the renderer needs (position, sprite, HP bar value, state label). A player move writes only the coordinates to both paths — no full-document copy or delete is needed.
 
@@ -932,6 +1027,51 @@ Opens when a non-merchant NPC speaks (villager, healer, guard, gossiper).
 
 ---
 
+### Quest Log Screen (`QuestScene`) — *overlays `GameScene` + `HudScene`*
+Opened anytime by pressing **`Q`** or tapping the **Q** HUD toolbar button (top-right, left of ☰).
+
+**Two-tab layout:**
+
+**Quests tab** (default)
+- Six category cards displayed in order: ⚔ Combat, 🧭 Exploration, 🪵 Gathering, 🔨 Crafting, 💬 Social, 💰 Economy.
+- Each card shows:
+  - Category label + `X / N quests completed` (or "All N complete!" when done).
+  - Current active quest title and description.
+  - Per-objective progress bar with `current / goal` fraction.
+  - Reward line: `Reward: XP [+ Gold]`.
+- One quest per category is active at a time; completing it auto-advances to the next (higher `order`) quest in that category.
+- New players start with the easiest quest in every category automatically.
+- There is no limit on total quests — categories are unlimited chains.
+
+**Counters tab**
+- Reads `players/{id}/progressCounters` from Firebase on open.
+- Renders every present key with a human-readable label; unknown keys display the raw key name.
+- Map-type counters (`killsByEnemyId`, `craftedByItemId`, `collectedByItemId`) expand as sorted `id: count` sub-lists.
+
+| Counter key | Label | Written by |
+|---|---|---|
+| `enemiesKilledTotal` | Enemies defeated | Enemy kill |
+| `killsByEnemyId` | Kills by enemy type | Enemy kill |
+| `goldCollectedTotal` | Total gold collected | Enemy kill |
+| `collectedByItemId` | Items collected | Enemy loot drop |
+| `houseEntered` | House entries | Room entry |
+| `dungeonsVisited` | Dungeons entered | Room entry |
+| `craftsDone` | Crafts completed | Craft action |
+| `craftedByItemId` | Crafted items | Craft action |
+| `chatMessagesSent` | Chat messages sent | Chat send |
+| `deaths` | Deaths | Player death |
+| `distanceTraveled` | Distance traveled (tiles) | Movement (flushed every 30 s) |
+
+**Controls:**
+- **[Quests]** / **[Counters]** tab buttons
+- **[Close]** button
+- `Q` or `Esc` keyboard shortcut
+
+**Transitions:**
+- **Close** / `Q` / `Esc` → back to `GameScene` + `HudScene`
+
+---
+
 ### Level-Up Screen (`LevelUpScene`) — *overlays `GameScene` + `HudScene`*
 Shown immediately when the player gains a level.
 
@@ -1008,6 +1148,7 @@ IntroScene
                     │     └─► CraftScene ────────────────►┤
                     ├─► ShopScene ───────────────────────►┤
                     ├─► DialogScene ─────────────────────►┤
+                    ├─► QuestScene ──────────────────────►┤
                     ├─► LevelUpScene ────────────────────►┤
                     ├─► PauseScene ──────────────────────►┤
                     │     └─► LoginScene (log out)         │

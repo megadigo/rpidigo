@@ -4,12 +4,13 @@
  * Step 7: proximity chat panel — press Enter to focus input, Enter to send, Esc to close.
  */
 import Phaser from 'phaser'
-import { ref, onValue, push, remove } from 'firebase/database'
+import { ref, onValue, push, remove, update } from 'firebase/database'
 import { db } from '../firebase.ts'
 import { getLocalPlayer, setLocalPlayer } from '../player/Auth.ts'
 import { xpForLevel } from '../world/utils.ts'
 import { virtualInput } from '../input/VirtualInput.ts'
 import type { PlayerInstance } from '../world/types.ts'
+import { checkAndAdvanceQuestsLocally } from '../world/questUtils.ts'
 
 /** Chebyshev tile radius — messages outside this range are hidden. */
 const CHAT_RANGE  = 15
@@ -66,6 +67,9 @@ export class HudScene extends Phaser.Scene {
   private _menuBtnEl:    HTMLButtonElement | null = null
   private _menuStyle:    HTMLStyleElement  | null = null
 
+  private _questBtnEl:   HTMLButtonElement | null = null
+  private _questBtnStyle: HTMLStyleElement | null = null
+
   /** Bound Enter-key handler so it can be removed on shutdown. */
   private _enterHandler!: (e: KeyboardEvent) => void
 
@@ -94,6 +98,7 @@ export class HudScene extends Phaser.Scene {
     this._buildFullscreenBtn()
     this._buildMusicPanel()
     this._buildMenuBtn()
+    this._buildQuestBtn()
     this._subscribeChat(player.room)
     this._subscribePlayer(player.id)
 
@@ -241,6 +246,16 @@ export class HudScene extends Phaser.Scene {
       y: p.y,
       text,
       timestamp: Date.now(),
+    })
+
+    // Progress counter
+    const pc = p.progressCounters ??= {}
+    pc.chatMessagesSent = (pc.chatMessagesSent ?? 0) + 1
+    setLocalPlayer(p)
+    const questResult = checkAndAdvanceQuestsLocally(p)
+    void update(ref(db, '/'), {
+      [`players/${p.id}/progressCounters/chatMessagesSent`]: pc.chatMessagesSent,
+      ...questResult.updates,
     })
   }
 
@@ -555,6 +570,30 @@ export class HudScene extends Phaser.Scene {
     this._menuBtnEl.addEventListener('click', () => this.game.events.emit('openPause'))
   }
 
+  /** Top-toolbar quest button — opens QuestScene (Step 24). Placed left of ☰. */
+  private _buildQuestBtn(): void {
+    this._questBtnStyle = document.createElement('style')
+    this._questBtnStyle.textContent = `
+      #hud-quest {
+        position: fixed; top: 2px; right: 70px; z-index: 102;
+        background: transparent; border: 1px solid rgba(255,255,255,0.25);
+        color: rgba(255,255,255,0.5); font-family: monospace;
+        font-size: 11px; padding: 0 5px; line-height: 16px;
+        cursor: pointer; user-select: none;
+      }
+      #hud-quest:hover { border-color: #fff; color: #fff; }
+    `
+    document.head.appendChild(this._questBtnStyle)
+
+    this._questBtnEl = document.createElement('button')
+    this._questBtnEl.id = 'hud-quest'
+    this._questBtnEl.textContent = 'Q'
+    this._questBtnEl.title = 'Quest Log (Q)'
+    document.body.appendChild(this._questBtnEl)
+
+    this._questBtnEl.addEventListener('click', () => this.game.events.emit('openQuests'))
+  }
+
   private _teardown(): void {
     document.removeEventListener('keydown', this._enterHandler)
     if (this._chatUnsub)   { this._chatUnsub();   this._chatUnsub   = null }
@@ -570,6 +609,8 @@ export class HudScene extends Phaser.Scene {
     this._musicStyle?.remove()
     this._menuBtnEl?.remove()
     this._menuStyle?.remove()
+    this._questBtnEl?.remove()
+    this._questBtnStyle?.remove()
     // Release all virtual inputs so nothing stays stuck after scene teardown
     virtualInput.up = virtualInput.down = virtualInput.left = virtualInput.right = virtualInput.action = false
   }
@@ -600,6 +641,21 @@ export class HudScene extends Phaser.Scene {
       if (typeof data.totalDefense === 'number') p.totalDefense = data.totalDefense
       if (typeof data.statPoints   === 'number') p.statPoints   = data.statPoints
       if (data.stats) p.stats = { ...p.stats, ...data.stats }
+      if (data.progressCounters && typeof data.progressCounters === 'object') {
+        const local  = p.progressCounters ??= {}
+        const remote = data.progressCounters as Record<string, unknown>
+        for (const [k, v] of Object.entries(remote)) {
+          if (typeof v === 'number') {
+            const lv = (local as Record<string, unknown>)[k]
+            ;(local as Record<string, unknown>)[k] = typeof lv === 'number' ? Math.max(lv, v) : v
+          } else if (v && typeof v === 'object') {
+            const lm  = ((local as Record<string, unknown>)[k] ?? {}) as Record<string, number>
+            const rm  = v as Record<string, number>
+            for (const [mk, mv] of Object.entries(rm)) lm[mk] = Math.max(lm[mk] ?? 0, mv)
+            ;(local as Record<string, unknown>)[k] = lm
+          }
+        }
+      }
       setLocalPlayer(p)
       this._refresh()
     })

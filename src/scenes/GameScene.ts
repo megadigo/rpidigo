@@ -20,7 +20,7 @@ import { PlayerController } from '../player/PlayerController.ts'
 import { enterRoom, exitRoom, findTileInRoom, findAllTilesInRoom, getTile, setTile, getActiveRoom, getWorldZone, ensureRadius, tileToChunk, overworldTilePath } from '../world/ChunkManager.ts'
 import { getWorldConfig } from '../world/WorldBootstrap.ts'
 import { setRoomLocked } from '../world/RoomState.ts'
-import { HOUSE_ROOM_SIZE } from '../world/HouseGen.ts'
+import { HOUSE_ROOM_SIZE, houseRoomId } from '../world/HouseGen.ts'
 import { CELLAR_ROOM_SIZE } from '../world/CellarGen.ts'
 import { getLocalPlayer, setLocalPlayer } from '../player/Auth.ts'
 import { remotePlayerTiles, remoteEnemyTiles, isPassable } from '../world/CollisionMap.ts'
@@ -38,6 +38,7 @@ import type { StorageSceneData } from './StorageScene.ts'
 import type { DeathSceneData } from './DeathScene.ts'
 import type { LevelUpSceneData } from './LevelUpScene.ts'
 import { MusicDirector } from '../audio/MusicDirector.ts'
+import { checkAndAdvanceQuestsLocally } from '../world/questUtils.ts'
 import patrolAggressive from '../scripts/enemies/patrol_aggressive.py?raw'
 
 /** Tile bounds of the 1000×1000 overworld in pixels. */
@@ -48,7 +49,7 @@ const ATTACK_ANIM_MS = 500
 
 /** DOM-overlay scenes that own input (and Esc) while active — block taps and the pause menu. */
 const PAUSE_BLOCKING_SCENES = ['DialogScene', 'InventoryScene', 'CraftScene',
-  'ShopScene', 'StorageScene', 'DeathScene', 'PauseScene', 'LevelUpScene', 'StatsScene']
+  'ShopScene', 'StorageScene', 'DeathScene', 'PauseScene', 'LevelUpScene', 'StatsScene', 'QuestScene']
 
 /** Shape of each entry under /presence/{room}/players/{id}. */
 interface PresenceEntry {
@@ -160,6 +161,15 @@ export class GameScene extends Phaser.Scene {
   /** Milliseconds between regen ticks once out of combat. */
   private static readonly _HEAL_INTERVAL_MS  = 5_000
 
+  /** Tile distance accumulated locally since the last Firebase flush. */
+  private _distAccum     = 0
+  /** Timer (ms) counting toward the next distanceTraveled flush. */
+  private _distFlushTimer = 0
+  /** Last known tile X used for distance delta. */
+  private _prevTileX     = -1
+  /** Last known tile Y used for distance delta. */
+  private _prevTileY     = -1
+
   constructor() {
     super({ key: 'GameScene' })
   }
@@ -231,6 +241,40 @@ export class GameScene extends Phaser.Scene {
       if (this._isDead) return
       if (PAUSE_BLOCKING_SCENES.some(s => this.scene.isActive(s))) return
       this._openPause()
+    })
+
+    // Q key — open quest log (Step 24)
+    const qKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.Q)
+    if (qKey) {
+      qKey.on('down', () => {
+        if (this._isDead) return
+        if (PAUSE_BLOCKING_SCENES.some(s => this.scene.isActive(s))) return
+        this._openQuests()
+      })
+    }
+
+    // On-screen quest button emitted by HudScene
+    this.game.events.on('openQuests', () => {
+      if (this._isDead) return
+      if (PAUSE_BLOCKING_SCENES.some(s => this.scene.isActive(s))) return
+      this._openQuests()
+    })
+
+    // Quest reward level-up — emitted by overlay scenes (CraftScene, etc.) that
+    // can't launch LevelUpScene directly without breaking the scene stack.
+    this.game.events.on('questLevelUp', (data: { newLevel: number; levelBefore: number; statPointsGranted: number }) => {
+      if (this.scene.isActive('LevelUpScene')) return
+      const luData: LevelUpSceneData = {
+        newLevel:      data.newLevel,
+        pointsGranted: data.statPointsGranted,
+        unlocks:       findNewUnlocks(data.levelBefore, data.newLevel),
+      }
+      this.playerController.freeze()
+      this.scene.launch('LevelUpScene', luData)
+      this.scene.get('LevelUpScene').events.once(
+        Phaser.Scenes.Events.SHUTDOWN,
+        () => this.playerController.unfreeze(),
+      )
     })
 
     // Pinch-to-zoom (two-finger touch)
@@ -344,6 +388,9 @@ export class GameScene extends Phaser.Scene {
       if (this.scene.isActive('DeathScene')) this.scene.stop('DeathScene')
       this.game.events.off('openInventory')
       this.game.events.off('openPause')
+      this.game.events.off('openQuests')
+      this.game.events.off('questLevelUp')
+      this._flushDistanceTraveled()
     })
   }
 
@@ -378,6 +425,21 @@ export class GameScene extends Phaser.Scene {
     // Run entity AI scripts (time-sliced: at most BUDGET_MS wall-clock per frame)
     const tx = Math.floor(this.playerController.px / TILE_SIZE)
     const ty = Math.floor(this.playerController.py / TILE_SIZE)
+
+    // ── Distance traveled counter ──────────────────────────────────────────
+    if (!this._isDead) {
+      if (this._prevTileX >= 0 && (tx !== this._prevTileX || ty !== this._prevTileY)) {
+        this._distAccum += Math.abs(tx - this._prevTileX) + Math.abs(ty - this._prevTileY)
+      }
+      this._prevTileX = tx
+      this._prevTileY = ty
+      this._distFlushTimer += delta
+      if (this._distFlushTimer >= 30_000 && this._distAccum > 0) {
+        this._distFlushTimer = 0
+        this._flushDistanceTraveled()
+      }
+    }
+
     this._scriptExecutor.tick(tx, ty, this._buildNearbyPlayers(), (attackerId, targetPlayerId, damage, killerTemplateId) => {
       if (targetPlayerId === getLocalPlayer().id) {
         this._applyEnemyDamage(attackerId, damage, killerTemplateId)
@@ -700,9 +762,18 @@ export class GameScene extends Phaser.Scene {
     this._dropInventoryAsLoot(player.room, droppedItems)
     player.inventory = keptItems
     setLocalPlayer(player)
+
+    // ── Deaths counter ────────────────────────────────────────────────────────
+    const pc = player.progressCounters ??= {}
+    pc.deaths = (pc.deaths ?? 0) + 1
+    setLocalPlayer(player)
+    const questResult = checkAndAdvanceQuestsLocally(player)
+
     void update(ref(db), {
       [`players/${player.id}/hp`]:        0,
       [`players/${player.id}/inventory`]: keptItems,
+      [`players/${player.id}/progressCounters/deaths`]: pc.deaths,
+      ...questResult.updates,
     })
 
     const data: DeathSceneData = {
@@ -914,6 +985,24 @@ export class GameScene extends Phaser.Scene {
     const player = getLocalPlayer()
     player.room = roomId
     setLocalPlayer(player)
+
+    // ── Room-entry counters ───────────────────────────────────────────────────
+    {
+      const pc = player.progressCounters ??= {}
+      const counterUpdate: Record<string, unknown> = {}
+      if (roomId === houseRoomId(player.house.x, player.house.y)) {
+        pc.houseEntered = (pc.houseEntered ?? 0) + 1
+        counterUpdate[`players/${player.id}/progressCounters/houseEntered`] = pc.houseEntered
+      } else if (roomId.startsWith('dungeon_')) {
+        pc.dungeonsVisited = (pc.dungeonsVisited ?? 0) + 1
+        counterUpdate[`players/${player.id}/progressCounters/dungeonsVisited`] = pc.dungeonsVisited
+      }
+      if (Object.keys(counterUpdate).length) {
+        setLocalPlayer(player)
+        const questResult = checkAndAdvanceQuestsLocally(player)
+        void update(ref(db), { ...counterUpdate, ...questResult.updates })
+      }
+    }
 
     this._projectileSystem.destroyAll()
     await enterRoom(roomId)
@@ -2009,13 +2098,15 @@ export class GameScene extends Phaser.Scene {
     const xpGain     = template ? Math.max(1, Math.floor(template.baseHp / 5)) : 1
     const newInventory = [...(player.inventory ?? [])]
     let newGold      = player.gold ?? 0
+    let goldGained   = 0
 
     if (template) {
       for (const { itemId, min, max, chance } of template.lootTable) {
         if (Math.random() < chance) {
           const qty = Math.floor(Math.random() * (max - min + 1)) + min
           if (itemId === 'gold_coin') {
-            newGold += qty
+            newGold    += qty
+            goldGained += qty
           } else {
             const slot = newInventory.find(s => s.itemId === itemId)
             if (slot) slot.quantity += qty
@@ -2080,12 +2171,44 @@ export class GameScene extends Phaser.Scene {
       this._dropEnemyCarriedGold(room, targetEntry.x, targetEntry.y, carriedGold)
     }
 
+    // ── Progress counters ─────────────────────────────────────────────────────
+    const pc        = player.progressCounters ??= {}
+    pc.enemiesKilledTotal = (pc.enemiesKilledTotal ?? 0) + 1
+    const killMap   = pc.killsByEnemyId ??= {}
+    const baseType  = template?.baseType ?? 'unknown'
+    killMap[baseType] = (killMap[baseType] ?? 0) + 1
+    if (goldGained > 0) {
+      pc.goldCollectedTotal = (pc.goldCollectedTotal ?? 0) + goldGained
+    }
+    // Track non-gold items received from enemy loot (leather, crystals, etc.)
+    if (template) {
+      const cbi = pc.collectedByItemId ??= {}
+      for (const slot of newInventory) {
+        const orig = [...(player.inventory ?? [])].find(s => s.itemId === slot.itemId)?.quantity ?? 0
+        const gained = slot.quantity - orig
+        if (gained > 0) cbi[slot.itemId] = (cbi[slot.itemId] ?? 0) + gained
+      }
+    }
+    setLocalPlayer(player)
+
+    // ── Quest advancement ──────────────────────────────────────────────────────
+    const questResult = checkAndAdvanceQuestsLocally(player)
+
     await update(ref(db), {
       [`presence/${room}/enemies/${targetId}`]:  null,
       [`entities/enemies/${targetId}`]:          null,
       [`players/${player.id}/xp`]:               player.xp,
-      [`players/${player.id}/gold`]:             newGold,
+      [`players/${player.id}/gold`]:             player.gold,
       [`players/${player.id}/inventory`]:        newInventory,
+      [`players/${player.id}/progressCounters/enemiesKilledTotal`]: pc.enemiesKilledTotal,
+      [`players/${player.id}/progressCounters/killsByEnemyId/${baseType}`]: killMap[baseType],
+      ...(goldGained > 0 && {
+        [`players/${player.id}/progressCounters/goldCollectedTotal`]: pc.goldCollectedTotal,
+      }),
+      ...(pc.collectedByItemId && {
+        [`players/${player.id}/progressCounters/collectedByItemId`]: pc.collectedByItemId,
+      }),
+      ...questResult.updates,
       ...(levelsGained > 0 && {
         [`players/${player.id}/level`]:      player.level,
         [`players/${player.id}/maxHp`]:      player.maxHp,
@@ -2095,5 +2218,55 @@ export class GameScene extends Phaser.Scene {
         [`players/${player.id}/statPoints`]: player.statPoints,
       }),
     })
+
+    // Quest reward level-up
+    if (questResult.levelsGained > 0) {
+      const luData: LevelUpSceneData = {
+        newLevel:      player.level,
+        pointsGranted: questResult.statPointsGranted,
+        unlocks:       findNewUnlocks(questResult.levelBefore, player.level),
+      }
+      if (!this.scene.isActive('LevelUpScene')) {
+        this.playerController.freeze()
+        this.scene.launch('LevelUpScene', luData)
+        this.scene.get('LevelUpScene').events.once(
+          Phaser.Scenes.Events.SHUTDOWN,
+          () => this.playerController.unfreeze(),
+        )
+      }
+    }
+
+    // Notify quest completions
+    const tx = Math.floor(this.playerController.px / TILE_SIZE)
+    const ty = Math.floor(this.playerController.py / TILE_SIZE)
+    for (const title of questResult.completedTitles) {
+      this._showFloatText(tx, ty, `Quest: ${title}`, '#ffdd44')
+    }
+  }
+
+  /** Flush locally accumulated tile distance to Firebase and reset the buffer. */
+  private _flushDistanceTraveled(): void {
+    if (this._distAccum === 0) return
+    const player = getLocalPlayer()
+    const pc = player.progressCounters ??= {}
+    pc.distanceTraveled = (pc.distanceTraveled ?? 0) + this._distAccum
+    this._distAccum = 0
+    setLocalPlayer(player)
+    const questResult = checkAndAdvanceQuestsLocally(player)
+    void update(ref(db), {
+      [`players/${player.id}/progressCounters/distanceTraveled`]: pc.distanceTraveled,
+      ...questResult.updates,
+    })
+  }
+
+  /** Freeze the player and open the quest log overlay (Step 24). */
+  private _openQuests(): void {
+    this.playerController.freeze()
+    this.scene.launch('QuestScene')
+    this.scene.get('QuestScene').events.once(
+      Phaser.Scenes.Events.SHUTDOWN,
+      () => this.playerController.unfreeze(),
+    )
   }
 }
+

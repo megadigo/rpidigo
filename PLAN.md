@@ -286,20 +286,49 @@
 
 ---
 
-## Step 23 — Map Screen ⬜
-*Goal: the player can open a full-screen world map with fog-of-war showing explored zones, POIs, and their position.*
-
-1. `MapScene` DOM overlay: zoomed-out view of the 1000×1000 grid.
-2. Unexplored sectors render as dark fog; explored sectors use zone colour coding (plains green, forest dark-green, desert yellow, river blue).
-3. Icons for: known villages (house), known dungeon entrances (cave), player current position (pin), player house (star).
-4. Persist explored-sector set on the player record in Firebase.
-5. **Checkpoint**: Open the map; explored areas are visible in zone colours; unvisited regions are dark; POI icons appear at discovered locations.
-
----
-
-## Step 24 — Pause Screen ✅
+## Step 23 — Pause Screen ✅
 *Goal: the player can pause, adjust settings, and log out cleanly.*
 
 1. ✅ `PauseScene` DOM overlay: **Resume**, **Settings** (collapsible panel with music ON/OFF + volume slider mirroring `HudScene`'s music panel, plus a read-only key-binding reference list), **Log Out** buttons. Opens via `Esc` (when no other overlay owns input) or the new `☰` menu button in the HUD top-right toolbar (`GameScene._openPause`, `HudScene._buildMenuBtn` emitting `openPause`); freezes the player like other overlays and unfreezes on shutdown.
 2. ✅ **Log Out** (`Auth.logout`) writes `players/{id}/online = false` + `lastSeen`, removes the `presence/{room}/players/{id}` entry, clears the local session, then `PauseScene` stops `GameScene`/`HudScene` and starts `LoginScene`.
 3. ✅ **Checkpoint**: Press `Esc` or the menu button; the **PAUSED** overlay appears over the frozen game world; **Settings** reveals music controls and key bindings; **Resume** (button or `Esc`) returns to play; **Log Out** clears presence and navigates to the login screen.
+
+---
+
+## Step 24 — Quest Log, Player Counters & Category Progression ✅
+*Goal: persistent per-category quests with automatic progression, a quest-log overlay, and lifetime counter tracking.*
+
+1. ✅ Add `QuestCategory`, `QuestTemplate`, `QuestObjective`, `ActiveQuest` to `types.ts`; add `progressCounters` (12 counter fields incl. maps) and `quests` (`active` keyed by category, `completed` keyed by quest id) to `PlayerInstance`.
+2. ✅ Create `src/data/quests.ts` — **33 quest templates** across 6 categories, ordered by difficulty. New players receive the first quest in every category automatically.
+
+   | Category | Quests | Example objectives |
+   |---|---|---|
+   | ⚔ Combat | 7 | Kill 1 / 5 / 25 / 60 / 150 enemies; kill 3 wolves; kill 10 bandits |
+   | 🧭 Exploration | 8 | Walk 100 / 500 / 2 000 / 10 000 tiles; enter 1 / 3 / 10 dungeons; enter house |
+   | 🪵 Gathering | 7 | Collect 5 leather; 10/30/80 wood; 10/30/80 stone; 15 iron ore |
+   | 🔨 Crafting | 5 | Complete 1 / 5 / 15 / 30 / 60 crafts |
+   | 💬 Social | 3 | Send 1 / 10 / 50 chat messages |
+   | 💰 Economy | 4 | Collect 50 / 200 / 500 / 2 000 gold total |
+
+3. ✅ Create `src/world/questUtils.ts` — `checkAndAdvanceQuestsLocally()`:
+   - Checks all active quests against current `progressCounters`.
+   - Marks completed quests, applies reward XP + gold to the player in-place.
+   - Advances each completed category to its next quest (by `order`), or removes the category slot if all quests are done.
+   - Returns a ready-to-merge Firebase update map + list of completed quest titles for in-game notifications.
+4. ✅ Create `src/scenes/QuestScene.ts` — DOM overlay (same pattern as `StatsScene`):
+   - **Quests tab**: categories shown as expandable cards with current quest title, description, per-objective progress bar, and `done / total` category counter.
+   - **Counters tab**: reads `players/{id}/progressCounters`; every key rendered with human-readable label; map sub-keys expand as sorted sub-lists.
+   - `Q` / `Esc` shortcut + **Close** button.
+5. ✅ Register `QuestScene` in `src/main.ts`; add to `PAUSE_BLOCKING_SCENES` in `GameScene`.
+6. ✅ Wire `Q` key + `game.events.on('openQuests')` in `GameScene.create` → `_openQuests()`. Distance flushed on SHUTDOWN.
+7. ✅ `checkAndAdvanceQuestsLocally` called after every counter write — `_resolveEnemyKill`, `_triggerDeath`, `_handleEnterRoom`, `_flushDistanceTraveled`.
+8. ✅ Counter increments wired:
+   - `enemiesKilledTotal` + `killsByEnemyId[baseType]` + `goldCollectedTotal` + `collectedByItemId[itemId]` — `_resolveEnemyKill`.
+   - `deaths` — `_triggerDeath`.
+   - `houseEntered` / `dungeonsVisited` — `_handleEnterRoom`.
+   - `distanceTraveled` — per-tile accumulator, flushed every 30 s + on SHUTDOWN.
+   - `craftsDone` + `craftedByItemId[itemId]` — `CraftScene._craft`.
+   - `chatMessagesSent` — `HudScene._sendMessage`.
+9. ✅ `HudScene`: `_buildQuestBtn()` adds `Q` toolbar button (left of ☰); `_subscribePlayer` merges `progressCounters` from Firebase.
+10. ✅ Add `Q — Open quest log` to key-binding table in `PauseScene`.
+11. ✅ **Checkpoint**: press `Q` or tap **Q** toolbar button → overlay with 6 category cards (active quest + progress bars) and a Counters tab. Quest completion triggers float text and auto-advances to next quest in the same category. All counters written to Firebase and merged back on login.

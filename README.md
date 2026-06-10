@@ -28,6 +28,7 @@
     - [Shop](#shop)
     - [Storage (Personal Chest)](#storage-personal-chest)
     - [Experience & Progression](#experience--progression)
+    - [Quests](#quests)
 12. [Multiplayer & Sync](#multiplayer--sync)
 13. [Entity AI](#entity-ai)
 14. [Interior Rooms](#interior-rooms)
@@ -79,10 +80,10 @@ npm run build
 
 ```
 index.html
-  └─ main.ts          ← Phaser bootstrap, 640×360, all 12 scenes registered
+  └─ main.ts          ← Phaser bootstrap, 640×360, all 16 scenes registered
        ├─ firebase.ts  ← Firebase Realtime Database init
        ├─ Auth.ts      ← SHA-256 login/register, spawn generation, house creation
-       └─ Scenes (12)
+       └─ Scenes (16)
             ├─ IntroScene
             ├─ InstructionsScene
             ├─ LoginScene
@@ -94,7 +95,11 @@ index.html
             ├─ CraftScene
             ├─ ShopScene
             ├─ StorageScene
-            └─ DeathScene
+            ├─ DeathScene
+            ├─ PauseScene
+            ├─ LevelUpScene
+            ├─ StatsScene
+            └─ QuestScene
 ```
 
 Game-loop entities live in `GameScene` and are driven by `PlayerController`, `TilemapRenderer`, `SpriteAnim`, and `ScriptExecutor`. Firebase listeners keep remote players, enemies, and NPCs in sync at ≤100 ms latency.
@@ -172,10 +177,20 @@ Opened via merchant NPC dialogue. Two tabs:
 - **Buy** — zone-adjusted prices with ±15 % per-village seed jitter; limited daily stock tracked in Firebase per village
 - **Sell** — sell any inventory item for fallback price
 
-### StorageScene
-Opened by clicking the personal storage chest inside the player's house. Drag or click items between the **inventory grid** and the **chest grid**. Chest contents are stored in Firebase at `/players/{id}/chest`.
+### QuestScene
+Opened with **Q** or the **Q** toolbar button (HUD top-right). Two tabs:
 
-### DeathScene
+- **Quests** — six category cards (Combat, Exploration, Gathering, Crafting, Social, Economy). Each card shows the current active quest, per-objective progress bars, and `X / N quests completed` for that category. Completing a quest automatically unlocks the next one in the chain; rewards (XP + optional gold) are applied immediately.
+- **Counters** — all lifetime progress counters from `players/{id}/progressCounters`, with human-readable labels. Map counters (kills-by-enemy, crafted-by-item, collected-by-item) expand as sorted sub-lists.
+
+### StatsScene
+Opened with **S**. Shows primary stats (STR / DEX / INT / VIT), derived combat values (power, defense, crit chance), and allows spending banked stat points. Also includes a **Log Out** button.
+
+### PauseScene
+Opened with **Esc** or the **☰** HUD button. Resume, Settings (audio volume + key-binding reference), Log Out.
+
+### LevelUpScene
+Auto-triggered on level-up. Allocate the newly earned stat points (3 per level, +1 every 5 levels) before returning to play.
 Full-screen overlay on player death:
 - Shows killer name, gold retained, items lost list
 - 10-second auto-respawn countdown with manual **Respawn** button
@@ -620,6 +635,23 @@ House Interior (8×8 tiles)
 
 ---
 
+### Quests
+
+**33 quests** across **6 categories**. One quest per category is active at a time; completing it automatically activates the next (harder) quest in the same chain.
+
+| Category | Chain length | What it tracks |
+|---|---|---|
+| ⚔ Combat | 7 quests | Total kills, kills by enemy type |
+| 🧭 Exploration | 8 quests | Distance walked, dungeons entered, house entered |
+| 🪵 Gathering | 7 quests | Items collected from enemy drops (leather, wood, stone, iron ore) |
+| 🔨 Crafting | 5 quests | Total crafts completed |
+| 💬 Social | 3 quests | Proximity chat messages sent |
+| 💰 Economy | 4 quests | Total gold collected from enemies |
+
+Quest state is stored in Firebase at `players/{id}/quests/active` (keyed by category) and `players/{id}/quests/completed`. All progress counters live at `players/{id}/progressCounters` and are checked locally after every event — no extra round-trip needed. Completing a quest shows a float-text notification in the game world and applies the XP (and optional gold) reward immediately.
+
+---
+
 ## Multiplayer & Sync
 
 | Data | Firebase Path | Update Rate |
@@ -744,13 +776,18 @@ sprites/
 | **Arrow keys** | Move |
 | **A** | Attack enemy / interact with NPC / open crafting station / open chest |
 | **I** | Open / close Inventory |
+| **S** | Open / close Character Stats |
+| **Q** | Open / close Quest Log |
 | **C** / **Esc** | Close Crafting overlay |
-| **Esc** | Close any active overlay / unfocus chat |
+| **Esc** | Close any active overlay / pause menu |
 | **Enter** | Focus proximity chat input / send message |
 | **Scroll wheel** | Zoom camera in/out |
 | **Tap adjacent tile** (touch) | Interact (equivalent to A key) |
 | **Pinch** (touch) | Zoom camera in/out |
 | **Mobile D-pad** | Move + action button (auto-shown on screen < 640 px wide) |
+| **Q button** (HUD) | Open Quest Log |
+| **☰ button** (HUD) | Open Pause menu |
+| **♪ button** (HUD) | Music settings panel |
 | **Fullscreen button** | Toggle fullscreen (HUD, top-right) |
 
 ---
@@ -769,9 +806,21 @@ sprites/
   x, y, room, direction
   hp, mp, gold, xp, level
   stats: { strength, agility, intelligence, endurance }
+  statPoints
+  power, totalDefense
   inventory: { ... }
   equipment: { weapon, helmet, chestplate, leggings, boots, gloves }
   chest: { ... }
+  house: { room, x, y }
+  progressCounters:
+    enemiesKilledTotal, killsByEnemyId/{baseType}
+    goldCollectedTotal, collectedByItemId/{itemId}
+    houseEntered, dungeonsVisited, villagesVisited
+    craftsDone, craftedByItemId/{itemId}
+    chatMessagesSent, deaths, distanceTraveled
+  quests:
+    active/{category}    ← { id, title, objectives[], rewardXp, acceptedAt }
+    completed/{questId}  ← { completedAt }
 
 /presence/{room}
   /players/{id}      ← name, level, sprite, x, y, direction, state
@@ -795,33 +844,11 @@ rpidigo/
 ├── vite.config.ts
 ├── database.rules.json
 ├── src/
-│   ├── main.ts                  ← Phaser bootstrap
+│   ├── main.ts                  ← Phaser bootstrap (16 scenes)
 │   ├── firebase.ts              ← Firebase init
-│   ├── Auth.ts                  ← Login / register
-│   ├── scenes/
-│   │   ├── IntroScene.ts
-│   │   ├── InstructionsScene.ts
-│   │   ├── LoginScene.ts
-│   │   ├── LoadingScene.ts
-│   │   ├── GameScene.ts
-│   │   ├── HudScene.ts
-│   │   ├── DialogScene.ts
-│   │   ├── InventoryScene.ts
-│   │   ├── CraftScene.ts
-│   │   ├── ShopScene.ts
-│   │   ├── StorageScene.ts
-│   │   └── DeathScene.ts
-│   ├── world/
-│   │   ├── ChunkGen.ts          ← Deterministic tile generation
-│   │   ├── VillageGen.ts        ← Village stamp algorithm
-│   │   ├── DungeonGen.ts        ← BSP dungeon floors
-│   │   ├── CellarGen.ts
-│   │   ├── HouseGen.ts
-│   │   ├── RoadNetwork.ts       ← Pre-computed dirt-path routes
-│   │   ├── bootstrap.ts         ← WorldBootstrap (seed + POIs)
-│   │   ├── registries.ts        ← Tile key → sprite mappings
-│   │   ├── types.ts
-│   │   └── utils.ts             ← Seeded RNG, SHA-256, tile helpers
+│   ├── style.css
+│   ├── audio/
+│   │   └── MusicDirector.ts     ← Adaptive playlist controller
 │   ├── data/
 │   │   ├── items.ts
 │   │   ├── weapons.ts
@@ -829,14 +856,54 @@ rpidigo/
 │   │   ├── enemies.ts
 │   │   ├── recipes.ts
 │   │   ├── zones.ts
-│   │   └── shop.ts
-│   └── game/
-│       ├── PlayerController.ts  ← Input, movement, collision
-│       ├── TilemapRenderer.ts   ← Pooled sprite renderer
-│       ├── SpriteAnim.ts        ← Walk/attack animation FSM
+│   │   ├── shop.ts
+│   │   └── quests.ts            ← 33 quest templates across 6 categories
+│   ├── input/
+│   │   └── VirtualInput.ts      ← Mobile D-pad virtual input
+│   ├── player/
+│   │   ├── Auth.ts              ← Login / register, initial quest assignment
+│   │   └── PlayerController.ts  ← Input, movement, collision, attacks
+│   ├── registry/
+│   │   ├── bootstrap.ts
+│   │   ├── registries.ts
+│   │   └── types.ts
+│   ├── renderer/
+│   │   ├── TilemapRenderer.ts   ← Pooled sprite renderer
+│   │   └── SpriteAnim.ts        ← Walk/attack animation FSM
+│   ├── scenes/
+│   │   ├── IntroScene.ts
+│   │   ├── InstructionsScene.ts
+│   │   ├── LoginScene.ts
+│   │   ├── LoadingScene.ts
+│   │   ├── GameScene.ts         ← Main game loop + counter writes
+│   │   ├── HudScene.ts          ← Persistent overlay (HP/MP/gold/chat/D-pad)
+│   │   ├── DialogScene.ts
+│   │   ├── InventoryScene.ts
+│   │   ├── CraftScene.ts        ← craftsDone + craftedByItemId counters
+│   │   ├── ShopScene.ts
+│   │   ├── StorageScene.ts
+│   │   ├── DeathScene.ts
+│   │   ├── PauseScene.ts
+│   │   ├── LevelUpScene.ts
+│   │   ├── StatsScene.ts
+│   │   └── QuestScene.ts        ← Quest log + counters overlay
+│   └── world/
+│       ├── ChunkGen.ts          ← Deterministic tile generation
 │       ├── ChunkManager.ts      ← Lazy chunk load/cache
+│       ├── VillageGen.ts        ← Village stamp algorithm
+│       ├── DungeonGen.ts        ← BSP dungeon floors
+│       ├── CellarGen.ts
+│       ├── HouseGen.ts
+│       ├── RoadNetwork.ts       ← Pre-computed dirt-path routes
+│       ├── CollisionMap.ts
+│       ├── ProjectileSystem.ts
 │       ├── ScriptExecutor.ts    ← Pyodide AI runner
-│       └── VirtualInput.ts      ← Mobile D-pad
+│       ├── WorldBootstrap.ts    ← Seed + POI generation
+│       ├── playerStats.ts
+│       ├── questUtils.ts        ← checkAndAdvanceQuestsLocally()
+│       ├── RoomState.ts
+│       ├── types.ts             ← PlayerInstance, QuestTemplate, ActiveQuest …
+│       └── utils.ts             ← Seeded RNG, SHA-256, tile helpers
 └── public/
     └── assets/
         └── sprites/             ← All 145+ PNG spritesheets
