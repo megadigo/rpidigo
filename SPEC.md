@@ -13,6 +13,7 @@ All sprite sheets are **16×16-pixel grids** of animation frames.
 - **In Phaser** (tiles, entities, HUD): load each sheet with `frameWidth: 16, frameHeight: 16`.
 - Tiles always render frame 0.
 - Players, enemies, and NPCs use directional walk rows (5 frames per direction): `down`, `up`, `right`, `left`.
+- Projectile sprites use 4 directional frames in a single row (left-to-right): `down`, `up`, `right`, `left`.
 - While an entity is idle, render frame 0 of its current facing direction.
 - **In DOM UI** (login character selection): use a `<canvas>` element and draw the source rect `(0, 0, 16, 16)` scaled to the desired display size (e.g. 32×32) with `ctx.drawImage(img, 0, 0, 16, 16, 0, 0, 32, 32)`.
 
@@ -64,12 +65,15 @@ All sprites live under `public/assets/sprites/`. The directories are:
 | `Enemies/` | Enemy spritesheets (80×128) |
 | `NPCs/` | NPC spritesheets (80×128) |
 | `Items/` | Consumable items, materials, keys (16×16 icons) |
+| `Projectiles/` | Projectile spritesheets (64×16, 4 directional frames: down/up/right/left) |
 | `Weapons/` | Weapon icons (16×16) |
 | `Armors/` | Armor icons (16×16) |
 | `Tools/` | Tool icons (16×16) |
 | `Dungeon/` | Dungeon **interior**: floor, walls, stairs, props (16×16) |
 | `House/` | House **interior**: floor, door, furniture (16×16) |
 | `Cellars/` | Cellar **interior**: floor, walls, stairs, props (16×16) |
+
+Placeholder generation supports overwrite flags: `node scripts/gen-placeholders.cjs --overwrite-projectiles` refreshes only projectile sheets, while `--overwrite` refreshes all placeholders.
 
 ### Tiles by zone
 
@@ -623,6 +627,7 @@ All weapon sprites are relative to `public/assets/sprites/Objects/`.
 ### Ranged projectiles and elemental magic
 
 - `ranged` and `magic` weapons spawn physical projectile entities with deterministic IDs for multiplayer sync.
+- Projectile sprite frame mapping follows movement direction: `down=0`, `up=1`, `right=2`, `left=3`.
 - Projectile core stats: `projectileSpeed`, `projectileRange`, `projectileRadius`, `lifetimeMs`, `cooldownMs`.
 - Bows are cooldown-based and do not require ammo items.
 

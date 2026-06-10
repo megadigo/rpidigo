@@ -80,14 +80,17 @@ export class LoadingScene extends Phaser.Scene {
       const key = `Armors/${a.spriteFrame.replace('.png', '')}`
       this.load.image(key, `assets/sprites/Armors/${a.spriteFrame}`)
     }
-    // Projectile sprites — one per distinct projectileSprite value in weapons
+    // Projectile spritesheets (4 directional frames: down/up/right/left).
     {
       const seen = new Set<string>()
       for (const w of weapons) {
         if (!w.projectileSprite || seen.has(w.projectileSprite)) continue
         seen.add(w.projectileSprite)
         const key = `Projectiles/${w.projectileSprite}`
-        this.load.image(key, `assets/sprites/Projectiles/${w.projectileSprite}.png`)
+        this.load.spritesheet(key, `assets/sprites/Projectiles/${w.projectileSprite}.png`, {
+          frameWidth: 16,
+          frameHeight: 16,
+        })
       }
     }
     // Sound effects

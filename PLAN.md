@@ -4,6 +4,7 @@
 > - In Phaser: `this.load.spritesheet(key, path, { frameWidth: 16, frameHeight: 16 })`.
 > - Tiles use frame 0.
 > - Players, enemies, and NPCs use directional walk animation (5 frames per direction: down/up/right/left) and face movement direction.
+> - Projectile sheets use 4 directional frames in a single row: down/up/right/left.
 > - In DOM UI (login screen): `ctx.drawImage(img, 0, 0, 16, 16, 0, 0, 32, 32)` on a `<canvas>`.
 > Login portraits use frame 0.
 
@@ -20,6 +21,7 @@
    ├── Enemies/        enemy spritesheets (80×128)
    ├── NPCs/           NPC spritesheets (80×128)
    ├── Items/          consumables, materials, keys (16×16 icons)
+   ├── Projectiles/    projectile spritesheets (64×16, 4 directional frames)
    ├── Weapons/        weapon icons (16×16)
    ├── Armors/         armor icons (16×16)
    ├── Tools/          tool icons (16×16)
@@ -27,6 +29,7 @@
    ├── House/          village buildings, house interior, furniture (16×16)
    └── Cellars/        cellar floor, walls, stairs, props (16×16)
    ```
+   To force-refresh projectile sheets, run `node scripts/gen-placeholders.cjs --overwrite-projectiles`.
    All sprites are committed to the repository. This step only applies when regenerating missing placeholders on a fresh clone.
 3. ✅ Publish `database.rules.json` via `firebase deploy --only database`. Rules cover `/config`, `/map`, `/players`, `/entities`, `/presence`, `/chat`, `/shops`.
 4. ✅ `firebase.ts` and `registry/bootstrap.ts` are already correct — no changes needed.

@@ -48,7 +48,7 @@ interface ActiveProjectile {
   element: 'fire' | 'water' | 'earth' | 'air' | null
   statusEffect?: { type: 'burn' | 'slow' | 'stagger' | 'chain'; durationMs: number; value: number }
   hitEnemyIds: Set<string>
-  graphic: Phaser.GameObjects.Image | Phaser.GameObjects.Arc
+  graphic: Phaser.GameObjects.Sprite | Phaser.GameObjects.Arc
 }
 
 /** Pixel colour used to tint the projectile graphic per element. */
@@ -62,6 +62,21 @@ const ELEMENT_COLOR: Record<string, number> = {
 
 /** Pixel radius of the hit-test circle around an enemy's tile centre. */
 const HIT_RADIUS_PX = TILE_SIZE * 0.65
+
+/** Directional frame order for projectile sheets: down, up, right, left. */
+const PROJECTILE_FRAME_BY_DIR = {
+  down: 0,
+  up: 1,
+  right: 2,
+  left: 3,
+} as const
+
+function projectileFrameFromVector(dx: number, dy: number): number {
+  if (Math.abs(dy) >= Math.abs(dx)) {
+    return dy >= 0 ? PROJECTILE_FRAME_BY_DIR.down : PROJECTILE_FRAME_BY_DIR.up
+  }
+  return dx >= 0 ? PROJECTILE_FRAME_BY_DIR.right : PROJECTILE_FRAME_BY_DIR.left
+}
 
 export class ProjectileSystem {
   private _scene: Phaser.Scene
@@ -88,14 +103,18 @@ export class ProjectileSystem {
   }): string {
     const id = `${opts.ownerId}_${Date.now()}_${this._seq++}`
 
-    // Use a loaded sprite image when available; fall back to a coloured circle.
-    let graphic: Phaser.GameObjects.Image | Phaser.GameObjects.Arc
+    // Use a loaded projectile sheet when available; fall back to a coloured circle.
+    let graphic: Phaser.GameObjects.Sprite | Phaser.GameObjects.Arc
     const spriteKey = opts.projectileSprite ? `Projectiles/${opts.projectileSprite}` : null
     if (spriteKey && this._scene.textures.exists(spriteKey)) {
-      graphic = this._scene.add
-        .image(opts.startPx, opts.startPy, spriteKey)
+      const frame = projectileFrameFromVector(opts.directionDx, opts.directionDy)
+      const sprite = this._scene.add
+        .sprite(opts.startPx, opts.startPy, spriteKey)
         .setDisplaySize(8, 8)
         .setDepth(15)
+      const names = this._scene.textures.get(spriteKey).getFrameNames()
+      if (names.length > 1) sprite.setFrame(frame)
+      graphic = sprite
     } else {
       const color = ELEMENT_COLOR[opts.element ?? 'default'] ?? ELEMENT_COLOR['default']
       graphic = this._scene.add

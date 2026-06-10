@@ -4,6 +4,8 @@
  * that is either missing or not yet replaced with real art.
  *
  * Run once:  node scripts/gen-placeholders.cjs
+ * Overwrite projectile sheets only: node scripts/gen-placeholders.cjs --overwrite-projectiles
+ * Overwrite every placeholder type: node scripts/gen-placeholders.cjs --overwrite
  *
  * Sprite directory layout (public/assets/sprites/):
  *   World/Ground/    — terrain tiles (16×16)
@@ -13,6 +15,7 @@
  *   Enemies/         — enemy spritesheets (80×128)
  *   NPCs/            — NPC spritesheets (80×128)
  *   Items/           — consumables, materials, keys (16×16)
+ *   Projectiles/     — projectile spritesheets (64×16, 4 directions)
  *   Weapons/         — weapon icons (16×16)
  *   Armors/          — armor icons (16×16)
  *   Tools/           — tool icons (16×16)
@@ -32,6 +35,9 @@ const fs   = require('fs')
 const path = require('path')
 
 const SPRITES = path.join(__dirname, '..', 'public', 'assets', 'sprites')
+const ARGS = new Set(process.argv.slice(2))
+const OVERWRITE_ALL = ARGS.has('--overwrite')
+const OVERWRITE_PROJECTILES = OVERWRITE_ALL || ARGS.has('--overwrite-projectiles')
 
 // ── PNG helpers ──────────────────────────────────────────────────────────────
 
@@ -98,6 +104,35 @@ function icon16(bgHex, borderHex = '#000000', dotHex = '#ffffff') {
 }
 
 /**
+ * 64×16 projectile sheet placeholder (4 frames × 16×16).
+ * Frame order: down, up, right, left.
+ */
+function projectileSheet4(bgHex, borderHex = '#000000', dotHex = '#ffffff') {
+  const [br, bg_, bb] = hex(bgHex)
+  const [or, og, ob]  = hex(borderHex)
+  const [dr, dg, db]  = hex(dotHex)
+  const anchors = [
+    [7, 11], // down
+    [7, 4],  // up
+    [11, 7], // right
+    [4, 7],  // left
+  ]
+
+  return makePNG(64, 16, (x, y) => {
+    const fx = x % 16
+    const frame = Math.floor(x / 16)
+    const border = fx === 0 || y === 0 || fx === 15 || y === 15
+    if (border) return [or, og, ob, 255]
+
+    const [ax, ay] = anchors[frame]
+    const marker = (Math.abs(fx - ax) <= 1) && (Math.abs(y - ay) <= 1)
+    if (marker) return [dr, dg, db, 255]
+
+    return [br, bg_, bb, 255]
+  })
+}
+
+/**
  * 80×128 entity spritesheet placeholder.
  * 8 rows × 5 columns of 16×16 frames.
  * Rows 0-3 = walk (down/up/right/left) — lighter tint.
@@ -121,16 +156,17 @@ function sheet(bgHex) {
 
 // ── Write helper ─────────────────────────────────────────────────────────────
 
-/** Write `relPath` (relative to SPRITES/) only if the file doesn't already exist. */
-function write(relPath, buf) {
+/** Write `relPath` (relative to SPRITES/) unless it already exists and overwrite is disabled. */
+function write(relPath, buf, opts = {}) {
+  const overwrite = !!opts.overwrite
   const full = path.join(SPRITES, relPath)
   fs.mkdirSync(path.dirname(full), { recursive: true })
-  if (fs.existsSync(full)) {
+  if (!overwrite && fs.existsSync(full)) {
     console.log(`  skip  ${relPath}`)
     return
   }
   fs.writeFileSync(full, buf)
-  console.log(`  wrote ${relPath}`)
+  console.log(`  ${overwrite ? 'overwrote' : 'wrote'} ${relPath}`)
 }
 
 // ── World/Buildings — overworld structures (16×16) ───────────────────────────
@@ -286,9 +322,9 @@ const ITEMS = [
 ]
 for (const [p, c] of ITEMS) write(p, icon16(c))
 
-// ── Projectiles — in-flight projectile sprites (16×16) ───────────────────────
+// ── Projectiles — directional spritesheets (64×16) ───────────────────────────
 
-console.log('\n=== Projectiles — in-flight sprites (16×16) ===')
+console.log('\n=== Projectiles — directional spritesheets (64×16) ===')
 const PROJECTILES = [
   ['Projectiles/arrow.png',       '#BA8C63', '#000000', '#FFFFFF'],   // physical arrow
   ['Projectiles/dark_arrow.png',  '#4A235A', '#000000', '#AA88FF'],   // dark bow arrow
@@ -298,7 +334,9 @@ const PROJECTILES = [
   ['Projectiles/earth_chunk.png', '#1E8449', '#000000', '#82E0AA'],   // earth element
   ['Projectiles/air_gust.png',    '#D6EAF8', '#000000', '#FFFFFF'],   // air element
 ]
-for (const [p, c, b, d] of PROJECTILES) write(p, icon16(c, b, d))
+for (const [p, c, b, d] of PROJECTILES) {
+  write(p, projectileSheet4(c, b, d), { overwrite: OVERWRITE_PROJECTILES })
+}
 
 // ── Weapons — weapon icons (16×16) ────────────────────────────────────────────
 
