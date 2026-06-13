@@ -188,7 +188,8 @@
 3. ✅ After respawn, overworld chunks around the house are pre-loaded before unfreezing the player (prevents blank-world spawn).
 4. ✅ After respawn, if items were dropped, a system chat message gives the compass direction and tile distance to the loot chest (handles overworld, house, dungeon floor N, and cellar rooms).
 5. ✅ PVP: attack allowed only when both players are ≥ level 10 and in the same room. Facing a remote player with A reads their HP via Firebase, applies attacker's power as damage, writes the new HP back, and shows a float text. Below level 10 shows "PVP: level 10+ only" hint.
-6. ✅ **Checkpoint**: Take enough damage to die; items drop; the death screen shows with killer info and countdown; player respawns at house with half HP; a chat hint points toward the dropped loot.
+6. ✅ The loot location is persisted on the player record as `lastDeathLoot` ({room, x, y}), so it survives reloads. While `lastDeathLoot` is set and the player is in that room, a gold compass-arrow icon is pinned to the edge of the screen pointing toward the chest. It clears automatically when the player opens that chest or gets within 2 tiles.
+7. ✅ **Checkpoint**: Take enough damage to die; items drop; the death screen shows with killer info and countdown; player respawns at house with half HP; a chat hint points toward the dropped loot and an on-screen arrow points toward it until retrieved.
 
 ---
 

@@ -284,6 +284,7 @@ The room ID `house_${tx.padStart(4,'0')}_${ty.padStart(4,'0')}` is derived deter
 ### Death and respawn
 - On death the player drops all inventory items at their current position as loot. Gold is **not** dropped — it is stored separately and survives death.
 - The player respawns at their house with 50% HP. The character and its data are never deleted.
+- If items were dropped, the player's record stores `lastDeathLoot` (room + tile of the loot chest). A system chat message gives the compass direction and tile distance, and a gold compass-arrow icon is shown at the edge of the screen pointing toward the chest whenever the player is in the same room as it. The hint clears automatically when the player opens that chest or walks within 2 tiles of it.
 
 ### PVP
 - Players can attack other players only when **both are level 10 or above**.

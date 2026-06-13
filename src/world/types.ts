@@ -164,6 +164,8 @@ export interface PlayerInstance {
   returnX?: number
   returnY?: number
   house: { room: string; x: number; y: number }
+  /** Location of this player's death-drop loot chest, if not yet retrieved. Drives the on-screen direction arrow. */
+  lastDeathLoot?: { room: string; x: number; y: number } | null
   online: boolean
   lastSeen: number
   /** Cumulative gameplay counters used to track quest progress. */

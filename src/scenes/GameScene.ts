@@ -136,6 +136,9 @@ export class GameScene extends Phaser.Scene {
   private _deathTx   = 0
   private _deathTy   = 0
   private _deathRoom = '0'
+  /** On-screen arrow pointing toward the player's death-drop loot, shown while it's unretrieved and in-room. */
+  private _lootArrow:    Phaser.GameObjects.Container | null = null
+  private _lootArrowTip: Phaser.GameObjects.Graphics  | null = null
   /** Number of item stacks dropped as loot on the last death. */
   private _deathItemsDropped = 0
   /** performance.now() timestamp of the last time enemy damage landed. Used for the invincibility window. */
@@ -402,6 +405,8 @@ export class GameScene extends Phaser.Scene {
     if (!this._isDead && getLocalPlayer().hp <= 0) {
       this._triggerDeath()
     }
+
+    this._updateLootArrow()
 
     // ── Passive HP regen ──────────────────────────────────────────────────────
     // Ticks every _HEAL_INTERVAL_MS, but only while alive, out of combat for
@@ -761,6 +766,9 @@ export class GameScene extends Phaser.Scene {
     this._deathItemsDropped = droppedItems.length
     this._dropInventoryAsLoot(player.room, droppedItems)
     player.inventory = keptItems
+    player.lastDeathLoot = this._deathItemsDropped > 0
+      ? { room: this._deathRoom, x: this._deathTx, y: this._deathTy }
+      : null
     setLocalPlayer(player)
 
     // ── Deaths counter ────────────────────────────────────────────────────────
@@ -772,6 +780,7 @@ export class GameScene extends Phaser.Scene {
     void update(ref(db), {
       [`players/${player.id}/hp`]:        0,
       [`players/${player.id}/inventory`]: keptItems,
+      [`players/${player.id}/lastDeathLoot`]: player.lastDeathLoot,
       [`players/${player.id}/progressCounters/deaths`]: pc.deaths,
       ...questResult.updates,
     })
@@ -931,6 +940,77 @@ export class GameScene extends Phaser.Scene {
     else                     dir = 'south-west'
 
     return `${prefix} to the ${dir}, ~${dist} tiles away.`
+  }
+
+  /**
+   * Keep an on-screen arrow pointing toward the player's death-drop loot chest
+   * while it remains unretrieved and the player is in the same room as it.
+   * Hidden once the player is close enough to see the chest themselves.
+   */
+  private _updateLootArrow(): void {
+    const player = getLocalPlayer()
+    const target  = player.lastDeathLoot
+    if (this._isDead || !target || target.room !== player.room) {
+      if (this._lootArrow) { this._lootArrow.destroy(); this._lootArrow = null; this._lootArrowTip = null }
+      return
+    }
+
+    const px = this.playerController.px
+    const py = this.playerController.py
+    const tx = target.x * TILE_SIZE + TILE_SIZE / 2
+    const ty = target.y * TILE_SIZE + TILE_SIZE / 2
+    const dx = tx - px
+    const dy = ty - py
+    const dist = Math.hypot(dx, dy)
+
+    if (dist < TILE_SIZE * 2) {
+      this._clearLootHint()
+      return
+    }
+
+    if (!this._lootArrow || !this._lootArrowTip) this._createLootArrow()
+
+    const angle = Math.atan2(dy, dx)
+    const cam    = this.cameras.main
+    const cx     = cam.width / 2
+    const cy     = cam.height / 2
+    const radius = Math.min(cam.width, cam.height) / 2 - 48
+    this._lootArrow!.setPosition(cx + Math.cos(angle) * radius, cy + Math.sin(angle) * radius)
+    this._lootArrowTip!.setRotation(angle)
+  }
+
+  /** Build the gold compass-arrow container shown by `_updateLootArrow`. */
+  private _createLootArrow(): void {
+    const tip = this.add.graphics()
+    tip.fillStyle(0xffdd44, 0.95)
+    tip.lineStyle(1, 0x553300, 1)
+    tip.beginPath()
+    tip.moveTo(8, 0)
+    tip.lineTo(-5, -5)
+    tip.lineTo(-5, 5)
+    tip.closePath()
+    tip.fillPath()
+    tip.strokePath()
+
+    const label = this.add.text(0, 10, 'loot', { fontFamily: 'monospace', fontSize: '7px', color: '#ffdd44' })
+      .setOrigin(0.5, 0)
+
+    const container = this.add.container(0, 0, [tip, label])
+    container.setScrollFactor(0)
+    container.setDepth(10_000)
+    this._lootArrow    = container
+    this._lootArrowTip = tip
+  }
+
+  /** Clear the death-loot hint once the player retrieves their belongings (or gets close enough to see the chest). */
+  private _clearLootHint(): void {
+    if (this._lootArrow) { this._lootArrow.destroy(); this._lootArrow = null; this._lootArrowTip = null }
+    const player = getLocalPlayer()
+    if (player.lastDeathLoot) {
+      player.lastDeathLoot = null
+      setLocalPlayer(player)
+      void update(ref(db), { [`players/${player.id}/lastDeathLoot`]: null })
+    }
   }
 
   /**
@@ -1807,7 +1887,10 @@ export class GameScene extends Phaser.Scene {
     if (!tile) return false
     if (![tile.g, ...(tile.m ?? [])].some(l => GameScene._CHEST_TILES.has(l))) return false
 
-    const room       = getActiveRoom() ?? '0'
+    const room = getActiveRoom() ?? '0'
+    const loot = getLocalPlayer().lastDeathLoot
+    if (loot && loot.room === room && loot.x === cx && loot.y === cy) this._clearLootHint()
+
     const allInRoom  = findAllTilesInRoom(GameScene._CHEST_TILES)
     const chestList  = allInRoom.length ? allInRoom : [{ x: cx, y: cy }]
     const chestIndex = Math.max(0, chestList.findIndex(p => p.x === cx && p.y === cy))
