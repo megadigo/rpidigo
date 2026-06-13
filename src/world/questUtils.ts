@@ -72,48 +72,55 @@ export function checkAndAdvanceQuestsLocally(player: PlayerInstance): QuestAdvan
   const active   = { ...(player.quests?.active ?? {}) } as Record<string, ActiveQuest>
   const completed = { ...(player.quests?.completed ?? {}) } as Record<string, { completedAt: number }>
 
-  for (const [cat, quest] of Object.entries(active)) {
-    const allMet = quest.objectives.every(
-      obj => _resolveCounter(pc, obj.counterKey) >= obj.goal,
-    )
-    if (!allMet) continue
+  for (const cat of Object.keys(active)) {
+    // Keep completing and advancing within this category until we hit a quest
+    // whose objectives are not yet met, or run out of quests.
+    let quest: ActiveQuest | undefined = active[cat]
+    while (quest) {
+      const allMet = quest.objectives.every(
+        obj => _resolveCounter(pc, obj.counterKey) >= obj.goal,
+      )
+      if (!allMet) break
 
-    const now = Date.now()
+      const now = Date.now()
 
-    // Mark complete
-    completed[quest.id] = { completedAt: now }
-    result.updates[`players/${player.id}/quests/completed/${quest.id}`] = { completedAt: now }
-    result.completedTitles.push(quest.title)
+      // Mark complete
+      completed[quest.id] = { completedAt: now }
+      result.updates[`players/${player.id}/quests/completed/${quest.id}`] = { completedAt: now }
+      result.completedTitles.push(quest.title)
 
-    // Apply rewards
-    result.xpGained   += quest.rewardXp
-    result.goldGained += quest.rewardGold ?? 0
+      // Apply rewards
+      result.xpGained   += quest.rewardXp
+      result.goldGained += quest.rewardGold ?? 0
 
-    // Advance to next quest in this category
-    const template = QUEST_TEMPLATES.find(t => t.id === quest.id)
-    const nextTemplate = template
-      ? QUEST_TEMPLATES
-          .filter(t => t.category === template.category && t.order > template.order)
-          .sort((a, b) => a.order - b.order)[0]
-      : undefined
+      // Advance to next quest in this category
+      const template = QUEST_TEMPLATES.find(t => t.id === quest!.id)
+      const nextTemplate = template
+        ? QUEST_TEMPLATES
+            .filter(t => t.category === template.category && t.order > template.order)
+            .sort((a, b) => a.order - b.order)[0]
+        : undefined
 
-    if (nextTemplate && !completed[nextTemplate.id]) {
-      const nextActive: ActiveQuest = {
-        id:          nextTemplate.id,
-        category:    nextTemplate.category,
-        title:       nextTemplate.title,
-        description: nextTemplate.description,
-        objectives:  nextTemplate.objectives,
-        rewardXp:    nextTemplate.rewardXp,
-        acceptedAt:  now,
+      if (nextTemplate && !completed[nextTemplate.id]) {
+        const nextActive: ActiveQuest = {
+          id:          nextTemplate.id,
+          category:    nextTemplate.category,
+          title:       nextTemplate.title,
+          description: nextTemplate.description,
+          objectives:  nextTemplate.objectives,
+          rewardXp:    nextTemplate.rewardXp,
+          acceptedAt:  now,
+        }
+        if (nextTemplate.rewardGold !== undefined) nextActive.rewardGold = nextTemplate.rewardGold
+        active[cat] = nextActive
+        result.updates[`players/${player.id}/quests/active/${cat}`] = nextActive
+        quest = nextActive
+      } else {
+        // Category finished — remove active slot
+        delete active[cat]
+        result.updates[`players/${player.id}/quests/active/${cat}`] = null
+        quest = undefined
       }
-      if (nextTemplate.rewardGold !== undefined) nextActive.rewardGold = nextTemplate.rewardGold
-      active[cat] = nextActive
-      result.updates[`players/${player.id}/quests/active/${cat}`] = nextActive
-    } else {
-      // Category finished — remove active slot
-      delete active[cat]
-      result.updates[`players/${player.id}/quests/active/${cat}`] = null
     }
   }
 

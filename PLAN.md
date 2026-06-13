@@ -300,16 +300,6 @@
 
 1. ✅ Add `QuestCategory`, `QuestTemplate`, `QuestObjective`, `ActiveQuest` to `types.ts`; add `progressCounters` (12 counter fields incl. maps) and `quests` (`active` keyed by category, `completed` keyed by quest id) to `PlayerInstance`.
 2. ✅ Create `src/data/quests.ts` — **33 quest templates** across 6 categories, ordered by difficulty. New players receive the first quest in every category automatically.
-
-   | Category | Quests | Example objectives |
-   |---|---|---|
-   | ⚔ Combat | 7 | Kill 1 / 5 / 25 / 60 / 150 enemies; kill 3 wolves; kill 10 bandits |
-   | 🧭 Exploration | 8 | Walk 100 / 500 / 2 000 / 10 000 tiles; enter 1 / 3 / 10 dungeons; enter house |
-   | 🪵 Gathering | 7 | Collect 5 leather; 10/30/80 wood; 10/30/80 stone; 15 iron ore |
-   | 🔨 Crafting | 5 | Complete 1 / 5 / 15 / 30 / 60 crafts |
-   | 💬 Social | 3 | Send 1 / 10 / 50 chat messages |
-   | 💰 Economy | 4 | Collect 50 / 200 / 500 / 2 000 gold total |
-
 3. ✅ Create `src/world/questUtils.ts` — `checkAndAdvanceQuestsLocally()`:
    - Checks all active quests against current `progressCounters`.
    - Marks completed quests, applies reward XP + gold to the player in-place.
@@ -321,14 +311,28 @@
    - `Q` / `Esc` shortcut + **Close** button.
 5. ✅ Register `QuestScene` in `src/main.ts`; add to `PAUSE_BLOCKING_SCENES` in `GameScene`.
 6. ✅ Wire `Q` key + `game.events.on('openQuests')` in `GameScene.create` → `_openQuests()`. Distance flushed on SHUTDOWN.
-7. ✅ `checkAndAdvanceQuestsLocally` called after every counter write — `_resolveEnemyKill`, `_triggerDeath`, `_handleEnterRoom`, `_flushDistanceTraveled`.
+7. ✅ `checkAndAdvanceQuestsLocally` called after every counter write — `_resolveEnemyKill`, `_triggerDeath`, `_handleEnterRoom`, `_flushDistanceTraveled`, `_handleGather`.
 8. ✅ Counter increments wired:
    - `enemiesKilledTotal` + `killsByEnemyId[baseType]` + `goldCollectedTotal` + `collectedByItemId[itemId]` — `_resolveEnemyKill`.
+   - `collectedByItemId[itemId]` — `_handleGather` (chopping/mining tiles).
    - `deaths` — `_triggerDeath`.
    - `houseEntered` / `dungeonsVisited` — `_handleEnterRoom`.
    - `distanceTraveled` — per-tile accumulator, flushed every 30 s + on SHUTDOWN.
    - `craftsDone` + `craftedByItemId[itemId]` — `CraftScene._craft`.
    - `chatMessagesSent` — `HudScene._sendMessage`.
-9. ✅ `HudScene`: `_buildQuestBtn()` adds `Q` toolbar button (left of ☰); `_subscribePlayer` merges `progressCounters` from Firebase.
+9. ✅ `HudScene`: `_buildQuestBtn()` adds `Q` toolbar button (left of ☰) and a `Q` button in the touch dpad column (tablet mode); `_subscribePlayer` merges `progressCounters` from Firebase.
 10. ✅ Add `Q — Open quest log` to key-binding table in `PauseScene`.
-11. ✅ **Checkpoint**: press `Q` or tap **Q** toolbar button → overlay with 6 category cards (active quest + progress bars) and a Counters tab. Quest completion triggers float text and auto-advances to next quest in the same category. All counters written to Firebase and merged back on login.
+11. ✅ **Checkpoint**: press `Q` or tap **Q** button (toolbar or touch dpad) → overlay with category cards (active quest + progress bars) and a Counters tab. Quest completion triggers float text and auto-advances to next quest in the same category, re-checking immediately so already-met follow-up quests complete in a chain. All counters written to Firebase and merged back on login.
+
+## Step 25 — Quest System Rebalance (2-category model) ✅
+*Goal: simplify quest categories, fix gathering tracking, and soften the XP curve.*
+
+1. ✅ Reduced `QuestCategory` to two categories: **⚔ Combat** and **🪵 Gathering & Crafting**. Removed Exploration, Social, and Economy categories and their templates entirely.
+2. ✅ Merged the old Gathering and Crafting template lists into a single 13-step `gathering` chain interleaving leather/wood/stone/iron-ore collection with workbench/forge craft counts.
+3. ✅ Combat expanded to 13 steps with smoother goal progression (1→3→8→15→30→50→90→150 kills, plus flavor quests for wolves/crabs/bandits).
+4. ✅ Both categories share the same softened-exponential reward curve (15, 20, 25, 30, 35, 45, 55, 70, 90, 110, 140, 175, 220 XP — roughly ×1.25 per step), reducing early rewards versus the previous scheme while keeping late-game milestones meaningful. Final quest of each category also grants 50 gold.
+5. ✅ Fixed a bug where enemy-kill loot (e.g. leather from wolves/crabs) never incremented `collectedByItemId` — the diff-based detection compared `player.inventory` against itself after it had already been overwritten. Now loot quantities are tracked directly while rolling the loot table.
+6. ✅ Fixed `checkAndAdvanceQuestsLocally` so that after auto-advancing to the next quest in a category, it immediately re-checks the new quest's objectives and keeps advancing until it finds one that isn't already met (handles bulk-progress / catch-up cases).
+7. ✅ `QuestScene` category list/labels updated to the 2-category model.
+
+> ⚠️ **Schema change** — existing players' `quests/active` and `quests/completed` data reference the old category names/quest ids (`explore_*`, `social_*`, `economy_*`, `craft_*`). Per project policy, reset/delete the affected player `quests` and `progressCounters` data (or the whole `players` test data) in Firebase Realtime Database before testing, rather than writing migration scripts.

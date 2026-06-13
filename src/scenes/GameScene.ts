@@ -1682,6 +1682,7 @@ export class GameScene extends Phaser.Scene {
     // Roll drops for this hit
     const newInv  = [...(player.inventory ?? [])]
     let   newGold = player.gold ?? 0
+    const itemsGained: Record<string, number> = {}
 
     for (const drop of (tileDef.dropTable ?? [])) {
       if (Math.random() >= drop.chance) continue
@@ -1693,6 +1694,7 @@ export class GameScene extends Phaser.Scene {
         const slot = newInv.find(s => s.itemId === drop.itemId)
         if (slot) slot.quantity += qty
         else newInv.push({ itemId: drop.itemId, quantity: qty, metadata: {} })
+        itemsGained[drop.itemId] = (itemsGained[drop.itemId] ?? 0) + qty
         const label = drop.itemId.replace(/_/g, ' ')
         this._showFloatText(cx, cy, `+${qty} ${label}`, '#88ffcc')
       }
@@ -1700,7 +1702,20 @@ export class GameScene extends Phaser.Scene {
 
     player.inventory = newInv
     player.gold      = newGold
+
+    // ── Progress counters & quest advancement ───────────────────────────────
+    const pc = player.progressCounters ??= {}
+    if (Object.keys(itemsGained).length > 0) {
+      const cbi = pc.collectedByItemId ??= {}
+      for (const [itemId, gained] of Object.entries(itemsGained)) {
+        cbi[itemId] = (cbi[itemId] ?? 0) + gained
+      }
+    }
     setLocalPlayer(player)
+    const questResult = checkAndAdvanceQuestsLocally(player)
+    for (const title of questResult.completedTitles) {
+      this._showFloatText(cx, cy, `Quest: ${title}`, '#ffdd44')
+    }
 
     const room = getActiveRoom() ?? '0'
 
@@ -1753,7 +1768,28 @@ export class GameScene extends Phaser.Scene {
       [room === '0' ? overworldTilePath(cx, cy) : `map/${room}/${tileKey(cx, cy)}`]: newTileData,
       [`players/${player.id}/inventory`]:  newInv,
       [`players/${player.id}/gold`]:       newGold,
+      ...(pc.collectedByItemId && {
+        [`players/${player.id}/progressCounters/collectedByItemId`]: pc.collectedByItemId,
+      }),
+      ...questResult.updates,
     })
+
+    // Quest reward level-up
+    if (questResult.levelsGained > 0) {
+      const luData: LevelUpSceneData = {
+        newLevel:      player.level,
+        pointsGranted: questResult.statPointsGranted,
+        unlocks:       findNewUnlocks(questResult.levelBefore, player.level),
+      }
+      if (!this.scene.isActive('LevelUpScene')) {
+        this.playerController.freeze()
+        this.scene.launch('LevelUpScene', luData)
+        this.scene.get('LevelUpScene').events.once(
+          Phaser.Scenes.Events.SHUTDOWN,
+          () => this.playerController.unfreeze(),
+        )
+      }
+    }
 
     return true
   }
@@ -2096,9 +2132,10 @@ export class GameScene extends Phaser.Scene {
     try { template = EnemyRegistry.get(targetEntry.templateId) } catch { /* unknown */ }
 
     const xpGain     = template ? Math.max(1, Math.floor(template.baseHp / 5)) : 1
-    const newInventory = [...(player.inventory ?? [])]
+    const newInventory = (player.inventory ?? []).map(s => ({ ...s }))
     let newGold      = player.gold ?? 0
     let goldGained   = 0
+    const itemsGained: Record<string, number> = {}
 
     if (template) {
       for (const { itemId, min, max, chance } of template.lootTable) {
@@ -2111,6 +2148,7 @@ export class GameScene extends Phaser.Scene {
             const slot = newInventory.find(s => s.itemId === itemId)
             if (slot) slot.quantity += qty
             else newInventory.push({ itemId, quantity: qty, metadata: {} })
+            itemsGained[itemId] = (itemsGained[itemId] ?? 0) + qty
           }
         }
       }
@@ -2181,12 +2219,10 @@ export class GameScene extends Phaser.Scene {
       pc.goldCollectedTotal = (pc.goldCollectedTotal ?? 0) + goldGained
     }
     // Track non-gold items received from enemy loot (leather, crystals, etc.)
-    if (template) {
+    if (Object.keys(itemsGained).length > 0) {
       const cbi = pc.collectedByItemId ??= {}
-      for (const slot of newInventory) {
-        const orig = [...(player.inventory ?? [])].find(s => s.itemId === slot.itemId)?.quantity ?? 0
-        const gained = slot.quantity - orig
-        if (gained > 0) cbi[slot.itemId] = (cbi[slot.itemId] ?? 0) + gained
+      for (const [itemId, gained] of Object.entries(itemsGained)) {
+        cbi[itemId] = (cbi[itemId] ?? 0) + gained
       }
     }
     setLocalPlayer(player)

@@ -35,15 +35,11 @@ function _resolveCounter(counters: Record<string, unknown>, key: string): number
   return typeof v === 'number' ? v : 0
 }
 
-const CATEGORY_ORDER: QuestCategory[] = ['combat', 'exploration', 'gathering', 'crafting', 'social', 'economy']
+const CATEGORY_ORDER: QuestCategory[] = ['combat', 'gathering']
 
 const CATEGORY_LABELS: Record<QuestCategory, string> = {
-  combat:      '⚔ Combat',
-  exploration: '🧭 Exploration',
-  gathering:   '🪵 Gathering',
-  crafting:    '🔨 Crafting',
-  social:      '💬 Social',
-  economy:     '💰 Economy',
+  combat:    '⚔ Combat',
+  gathering: '🪵 Gathering & Crafting',
 }
 
 const COUNTER_LABELS: Record<string, string> = {

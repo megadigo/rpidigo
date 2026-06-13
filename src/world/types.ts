@@ -101,7 +101,7 @@ export interface ChunkData {
 }
 
 /** Quest categories — one quest per category can be active at a time. */
-export type QuestCategory = 'combat' | 'exploration' | 'gathering' | 'crafting' | 'social' | 'economy'
+export type QuestCategory = 'combat' | 'gathering'
 
 /** Static quest definition (lives in data/quests.ts). */
 export interface QuestTemplate {

@@ -142,14 +142,14 @@ export class HudScene extends Phaser.Scene {
         position: fixed;
         bottom: 8px;
         left: 8px;
-        width: 280px;
+        width: 360px;
         font-family: monospace;
-        font-size: 11px;
+        font-size: 16px;
         z-index: 50;
         pointer-events: none;
       }
       #chat-log {
-        max-height: 112px;
+        max-height: 160px;
         overflow-y: auto;
         overflow-x: hidden;
         display: flex;
@@ -160,7 +160,7 @@ export class HudScene extends Phaser.Scene {
       }
       #chat-log > div {
         background: rgba(0,0,0,0.55);
-        padding: 1px 4px;
+        padding: 2px 5px;
         border-radius: 2px;
         color: #ddd;
         word-break: break-word;
@@ -176,8 +176,8 @@ export class HudScene extends Phaser.Scene {
         border: 1px solid #333;
         color: #fff;
         font-family: monospace;
-        font-size: 11px;
-        padding: 2px 5px;
+        font-size: 16px;
+        padding: 4px 7px;
         outline: none;
         border-radius: 2px;
       }
@@ -345,10 +345,23 @@ export class HudScene extends Phaser.Scene {
         transition: background 0.08s;
       }
       #dpad-inventory.pressed { background: rgba(100,180,255,0.3); }
+      #dpad-quest {
+        width:  clamp(42px, 10vmin, 56px);
+        height: clamp(42px, 10vmin, 56px);
+        border-radius: 8px;
+        background: rgba(255,221,136,0.1);
+        border: 1px solid rgba(255,221,136,0.35);
+        color: #ffdd88; font-family: monospace;
+        font-size: clamp(14px, 3.5vmin, 20px); font-weight: bold;
+        display: flex; align-items: center; justify-content: center;
+        cursor: pointer; touch-action: none;
+        transition: background 0.08s;
+      }
+      #dpad-quest.pressed { background: rgba(255,221,136,0.3); }
 
-      #chat-panel { width: clamp(120px, 28vw, 200px) !important; bottom: 8px !important; }
-      #chat-log   { max-height: clamp(36px, 8vh, 60px) !important; font-size: 9px !important; }
-      #chat-input { font-size: 9px !important; padding: 1px 4px !important; }
+      #chat-panel { width: clamp(180px, 40vw, 280px) !important; bottom: 8px !important; }
+      #chat-log   { max-height: clamp(56px, 12vh, 90px) !important; font-size: 14px !important; }
+      #chat-input { font-size: 14px !important; padding: 3px 6px !important; }
     `
     document.head.appendChild(this._dpadStyle)
 
@@ -361,6 +374,7 @@ export class HudScene extends Phaser.Scene {
       <div id="dpad-right-col">
         <button id="dpad-action">A</button>
         <button id="dpad-inventory">I</button>
+        <button id="dpad-quest">Q</button>
       </div>`
     document.body.appendChild(this._dpadWrap)
 
@@ -439,6 +453,18 @@ export class HudScene extends Phaser.Scene {
       this.game.events.emit('openInventory')
     })
     invBtn.addEventListener('pointercancel', () => invBtn.classList.remove('pressed'))
+
+    // ── Quest log button ───────────────────────────────────────────────────
+    const questBtn = this._dpadWrap.querySelector('#dpad-quest') as HTMLElement
+    questBtn.addEventListener('pointerdown', (e) => {
+      questBtn.setPointerCapture(e.pointerId)
+      questBtn.classList.add('pressed')
+    })
+    questBtn.addEventListener('pointerup', () => {
+      questBtn.classList.remove('pressed')
+      this.game.events.emit('openQuests')
+    })
+    questBtn.addEventListener('pointercancel', () => questBtn.classList.remove('pressed'))
   }
 
   private _buildMusicPanel(): void {

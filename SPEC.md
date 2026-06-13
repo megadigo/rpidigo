@@ -1028,20 +1028,20 @@ Opens when a non-merchant NPC speaks (villager, healer, guard, gossiper).
 ---
 
 ### Quest Log Screen (`QuestScene`) — *overlays `GameScene` + `HudScene`*
-Opened anytime by pressing **`Q`** or tapping the **Q** HUD toolbar button (top-right, left of ☰).
+Opened anytime by pressing **`Q`**, tapping the **Q** HUD toolbar button (top-right, left of ☰), or tapping the **Q** button in the touch dpad column (tablet mode).
 
 **Two-tab layout:**
 
 **Quests tab** (default)
-- Six category cards displayed in order: ⚔ Combat, 🧭 Exploration, 🪵 Gathering, 🔨 Crafting, 💬 Social, 💰 Economy.
+- Two category cards displayed in order: ⚔ Combat, 🪵 Gathering & Crafting.
 - Each card shows:
   - Category label + `X / N quests completed` (or "All N complete!" when done).
   - Current active quest title and description.
   - Per-objective progress bar with `current / goal` fraction.
   - Reward line: `Reward: XP [+ Gold]`.
-- One quest per category is active at a time; completing it auto-advances to the next (higher `order`) quest in that category.
+- One quest per category is active at a time; completing it auto-advances to the next (higher `order`) quest in that category, immediately re-checking the new quest so any already-met follow-ups complete in a chain too.
 - New players start with the easiest quest in every category automatically.
-- There is no limit on total quests — categories are unlimited chains.
+- Reward XP follows a softened-exponential curve shared by both categories (15 → 220 XP across 13 steps, +50 gold on the final quest of each category).
 
 **Counters tab**
 - Reads `players/{id}/progressCounters` from Firebase on open.
@@ -1053,7 +1053,7 @@ Opened anytime by pressing **`Q`** or tapping the **Q** HUD toolbar button (top-
 | `enemiesKilledTotal` | Enemies defeated | Enemy kill |
 | `killsByEnemyId` | Kills by enemy type | Enemy kill |
 | `goldCollectedTotal` | Total gold collected | Enemy kill |
-| `collectedByItemId` | Items collected | Enemy loot drop |
+| `collectedByItemId` | Items collected | Enemy loot drop / tile gathering |
 | `houseEntered` | House entries | Room entry |
 | `dungeonsVisited` | Dungeons entered | Room entry |
 | `craftsDone` | Crafts completed | Craft action |

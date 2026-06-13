@@ -78,6 +78,7 @@ export class InstructionsScene extends Phaser.Scene {
                 <div class="key-row"><kbd>↑ ↓ ← →</kbd></div>
                 <div class="key-row"><kbd>A</kbd></div>
                 <div class="key-row"><kbd>I</kbd></div>
+                <div class="key-row"><kbd>Q</kbd></div>
                 <div class="key-row"><kbd>Enter</kbd></div>
                 <div class="key-row"><kbd>Esc</kbd></div>
               </div>
@@ -85,11 +86,12 @@ export class InstructionsScene extends Phaser.Scene {
                 <div>Move</div>
                 <div><strong>Action</strong> — attack · interact · open · gather · talk</div>
                 <div>Open inventory</div>
+                <div>Open quest log</div>
                 <div>Open / send chat</div>
                 <div>Close any overlay</div>
               </div>
             </div>
-            <div class="hs-note">On mobile: D-pad directions on the left, <strong>A</strong> action button on the right. Zoom starts at 2× for easier play.</div>
+            <div class="hs-note">On mobile: D-pad directions on the left, <strong>A</strong>/<strong>I</strong>/<strong>Q</strong> action buttons on the right. Zoom starts at 2× for easier play.</div>
           </div>
 
           <!-- World -->
@@ -121,13 +123,37 @@ export class InstructionsScene extends Phaser.Scene {
             </div>
             <p class="hs-p">
               Face an enemy and press <kbd>A</kbd> to attack. Each hit deals
-              <em>power − enemy defense</em> damage (minimum 1).
+              <em>power − enemy defense</em> damage (minimum 1), with a chance
+              to land a bonus critical hit based on your DEX.
               Killing enemies earns XP and drops loot.
               You have a short invincibility window after each hit you receive.
             </p>
             <p class="hs-p">
+              <strong>Ranged weapons</strong> (bows) and <strong>magic staves</strong>
+              fire projectiles instead of melee swings. Elemental staves apply extra
+              effects on hit: 🔥 fire <em>burns</em> over time, 💧 water <em>slows</em>,
+              🌍 earth <em>staggers</em>, and 💨 air <em>chains</em> to nearby enemies.
+            </p>
+            <p class="hs-p">
               <strong>PVP</strong> unlocks at level 10 — both players must be
               level 10 or above to attack each other.
+            </p>
+          </div>
+
+          <!-- Quests -->
+          <div class="hs">
+            <div class="hs-title">Quests</div>
+            <p class="hs-p">
+              Press <kbd>Q</kbd> (or tap the <strong>Q</strong> button) to open
+              your quest log. You always have one active quest in each of two
+              categories: <strong>⚔ Combat</strong> and
+              <strong>🪵 Gathering &amp; Crafting</strong>.
+            </p>
+            <p class="hs-p">
+              Quests track things you're already doing — defeating enemies,
+              collecting wood/stone/leather/ore, and crafting items — shown as
+              progress bars. Finishing one quest grants XP (and sometimes gold)
+              and automatically unlocks the next, harder quest in that category.
             </p>
           </div>
 
@@ -155,12 +181,16 @@ export class InstructionsScene extends Phaser.Scene {
               Stand adjacent to a resource tile and press <kbd>A</kbd> to gather.
               Trees give <em>wood</em>, rocks give <em>stone</em> (rare: iron ore),
               bushes give <em>fiber</em>, mushrooms give <em>mushroom</em>.
+              Defeated wolves and crabs drop <em>leather</em>.
               Resources regenerate over time.
             </p>
             <p class="hs-p">
-              Bring materials to a <strong>workbench</strong> (in your house or a
-              workshop) and press <kbd>A</kbd> to craft weapons and tools.
-              Higher-tier recipes unlock at higher player levels.
+              Bring materials to a crafting station and press <kbd>A</kbd> to craft.
+              The <strong>workbench</strong> (in your house) makes basic tools, wooden
+              weapons, leather armor, and potions. The village <strong>workshop</strong>
+              forges iron gear from smelted ore. The <strong>dungeon altar</strong>
+              crafts the rarest, most powerful equipment. Higher-tier recipes unlock
+              at higher player levels.
             </p>
             <p class="hs-p">
               <strong>Chests</strong> contain gold and items and can be opened by anyone.
