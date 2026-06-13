@@ -41,7 +41,9 @@
       "Bash(pkill -f \"npm run dev\")",
       "Bash(git checkout *)",
       "Bash(npx vite *)",
-      "Bash(node scripts/gen-placeholders.cjs)"
+      "Bash(node scripts/gen-placeholders.cjs)",
+      "Bash(python3 -c ' *)",
+      "Bash(python -c ' *)"
     ]
   }
 }

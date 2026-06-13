@@ -15,7 +15,7 @@
  *   Enemies/         — enemy spritesheets (80×128)
  *   NPCs/            — NPC spritesheets (80×128)
  *   Items/           — consumables, materials, keys (16×16)
- *   Projectiles/     — projectile spritesheets (64×16, 4 directions)
+ *   Projectiles/     — projectile spritesheets (16×64, 4 directions)
  *   Weapons/         — weapon icons (16×16)
  *   Armors/          — armor icons (16×16)
  *   Tools/           — tool icons (16×16)
@@ -104,28 +104,28 @@ function icon16(bgHex, borderHex = '#000000', dotHex = '#ffffff') {
 }
 
 /**
- * 64×16 projectile sheet placeholder (4 frames × 16×16).
- * Frame order: down, up, right, left.
+ * 16×64 projectile sheet placeholder (4 frames × 16×16, stacked vertically).
+ * Frame order: up, down, right, left.
  */
 function projectileSheet4(bgHex, borderHex = '#000000', dotHex = '#ffffff') {
   const [br, bg_, bb] = hex(bgHex)
   const [or, og, ob]  = hex(borderHex)
   const [dr, dg, db]  = hex(dotHex)
   const anchors = [
-    [7, 11], // down
     [7, 4],  // up
+    [7, 11], // down
     [11, 7], // right
     [4, 7],  // left
   ]
 
-  return makePNG(64, 16, (x, y) => {
-    const fx = x % 16
-    const frame = Math.floor(x / 16)
-    const border = fx === 0 || y === 0 || fx === 15 || y === 15
+  return makePNG(16, 64, (x, y) => {
+    const fy = y % 16
+    const frame = Math.floor(y / 16)
+    const border = x === 0 || fy === 0 || x === 15 || fy === 15
     if (border) return [or, og, ob, 255]
 
     const [ax, ay] = anchors[frame]
-    const marker = (Math.abs(fx - ax) <= 1) && (Math.abs(y - ay) <= 1)
+    const marker = (Math.abs(x - ax) <= 1) && (Math.abs(fy - ay) <= 1)
     if (marker) return [dr, dg, db, 255]
 
     return [br, bg_, bb, 255]
@@ -322,9 +322,9 @@ const ITEMS = [
 ]
 for (const [p, c] of ITEMS) write(p, icon16(c))
 
-// ── Projectiles — directional spritesheets (64×16) ───────────────────────────
+// ── Projectiles — directional spritesheets (16×64) ───────────────────────────
 
-console.log('\n=== Projectiles — directional spritesheets (64×16) ===')
+console.log('\n=== Projectiles — directional spritesheets (16×64) ===')
 const PROJECTILES = [
   ['Projectiles/arrow.png',       '#BA8C63', '#000000', '#FFFFFF'],   // physical arrow
   ['Projectiles/dark_arrow.png',  '#4A235A', '#000000', '#AA88FF'],   // dark bow arrow
