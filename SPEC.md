@@ -278,7 +278,7 @@ The room ID `house_${tx.padStart(4,'0')}_${ty.padStart(4,'0')}` is derived deter
 - On first login the player is placed at a **random reachable passable position** within the world grid (with a 50-tile margin from world edges).
 - A **house tile** is automatically placed within 5 tiles of the spawn point on a grass cell. The player does not choose or build the house — it is always there from the start.
 - The house position is fixed for the life of the character.
-- Entering the house tile transitions into a small **interior room** containing a `workbench` and a personal storage chest.
+- Entering the house tile transitions into a small **interior room** containing a `workbench`, a personal storage chest, and a `vendor_stall` (see [Player Vendors and Trading](#player-vendors-and-trading)).
 - The house is also the **respawn point** after death.
 
 ### Death and respawn
@@ -334,6 +334,31 @@ Some enemies steal gold directly from the player on a successful hit, storing it
 
 - A player can never be reduced below 0 gold — the enemy takes `min(stealAmount, player.gold)`.
 - The chat panel shows a system notification when gold is stolen: *"Thief stole 12 gold from you!"*
+
+---
+
+## Player Vendors and Trading
+
+Every player house includes a **vendor stall** (`vendor_stall` tile, placed alongside the workbench and storage chest) that lets the owner sell items from their personal storage chest to other players — including while the owner is offline.
+
+### Data model
+- `players/{id}/vendor: { listings: Record<string, VendorListing>, till: number }`
+  - `VendorListing = { itemId: string; quantity: number; price: number }`, keyed by a generated listing id.
+  - `till` accumulates gold from sales, collected by the owner separately from their main `gold` balance (keeps offline sales auditable and prevents a buyer transaction from writing directly to the owner's spendable gold).
+
+### Owner flow (`VendorScene`, opened with `E` on `vendor_stall` by the house owner)
+- Pick an item + quantity from the personal storage chest and set an asking price (per unit) to create or update a listing.
+- Remove a listing — unsold quantity returns to the storage chest.
+- Collect `till` — moves accumulated gold into `players/{id}/gold`.
+
+### Buyer flow (visiting another player's house and using their `vendor_stall`)
+- Shows the owner's active listings (item, quantity remaining, price).
+- Buying runs a Firebase transaction on `players/{ownerId}/vendor/listings/{listingId}` that decrements `quantity` (removing the listing at 0) — this prevents two buyers from overselling the same stock.
+- On success: buyer's gold decreases by `price × qty`, buyer's inventory gains the item, and `players/{ownerId}/vendor/till` increases by `price × qty`.
+- Buying is blocked if the buyer is the owner, or if the listing no longer has enough quantity.
+
+### Placement
+- `vendor_stall` is placed in `player_house` interiors near the workbench/chest, generated the same deterministic-seeded way as other house furniture (`HouseGen.ts`).
 
 ---
 

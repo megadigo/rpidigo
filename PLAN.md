@@ -337,3 +337,20 @@
 7. ✅ `QuestScene` category list/labels updated to the 2-category model.
 
 > ⚠️ **Schema change** — existing players' `quests/active` and `quests/completed` data reference the old category names/quest ids (`explore_*`, `social_*`, `economy_*`, `craft_*`). Per project policy, reset/delete the affected player `quests` and `progressCounters` data (or the whole `players` test data) in Firebase Realtime Database before testing, rather than writing migration scripts.
+
+---
+
+## Step 26 — Player Vendors & Trading 🔲
+*Goal: a player-driven economy — sell items from your house storage to other players, even while you're offline.*
+
+1. 🔲 Add `vendor?: { listings: Record<string, { itemId: string; quantity: number; price: number }>; till: number }` to `PlayerInstance` in `types.ts`. `till` holds accumulated sale proceeds, kept separate from `gold` until the owner collects it.
+2. 🔲 `HouseGen.ts`: add a `vendor_stall` furniture tile to the `player_house` layout (alongside `workbench` and the storage `chest`), placed via the existing seeded `place()` helper.
+3. 🔲 Register the `vendor_stall` tile (sprite + `_CHEST_TILES`-style interaction set) so `E` on it opens a new `VendorScene`.
+4. 🔲 `VendorScene` (DOM overlay, same pattern as `StorageScene`/`ShopScene`):
+   - **Owner view** — if `tile` is in the local player's own house room: pick item + quantity from the storage chest inventory, set a price per unit, create/update a listing; remove a listing (returns unsold quantity to the chest); **Collect** button moves `till` into `gold`.
+   - **Buyer view** — if visiting another player's house: list the owner's active listings (item, qty remaining, price); **Buy** button with a quantity stepper.
+5. 🔲 Buy flow: `runTransaction` on `players/{ownerId}/vendor/listings/{listingId}` to decrement `quantity` atomically (delete the listing at 0, preventing oversell across concurrent buyers). On success, `update()`: buyer `gold -= price*qty`, buyer `inventory += item`, owner `vendor/till += price*qty`. Block buying your own stall, or with insufficient buyer gold/listing stock.
+6. 🔲 GameScene: detect "is this the local player's own house room" via `roomId === houseRoomId(player.house.x, player.house.y)` (already used for the `houseEntered` counter) to branch `VendorScene` into owner vs. buyer mode.
+7. 🔲 **Checkpoint**: Player A opens their vendor stall, lists 5 `wood` @ 3 gold each. Player B walks into A's house (A can be offline), opens the stall, buys 2 wood — B's gold drops by 6 and inventory gains 2 wood; A's listing now shows 3 remaining and `till = 6`. A later opens the stall and collects the 6 gold into their balance.
+
+> ⚠️ **Schema change** — adds a new optional `vendor` field to `PlayerInstance` and a new `vendor_stall` tile to existing player houses. Per project policy, reset/regenerate affected house room data (`map/house_{tx}_{ty}`) in Firebase before testing.
