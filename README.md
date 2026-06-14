@@ -611,11 +611,11 @@ Every player gets a personal house on registration. Inside:
 ```
 House Interior (8×8 tiles)
 ┌─────────────────────────────────┐
-│ [wall][wall][door][wall][wall]  │
-│ [wall]  ....room....   [wall]  │
-│ [chest]        [workbench]      │
-│ [wall]     [bed][sofa]  [wall]  │
 │ [wall][wall][wall][wall][wall]  │
+│ [wall]  [bed]  ..room..  [wall] │
+│ [wall] [chairL][table][chairR]  │
+│ [chest]      [workbench] [wall] │
+│ [wall][wall][door][wall][wall]  │
 └─────────────────────────────────┘
 ```
 
@@ -706,16 +706,16 @@ set_memory(key, value)    # persist value to Firebase
 ## Interior Rooms
 
 ### House Interior
-![HouseFloor](public/assets/sprites/House/HouseFloor.png) ![Bed](public/assets/sprites/House/Bed.png) ![Sofa](public/assets/sprites/House/Sofa.png) ![Table](public/assets/sprites/House/Table.png) ![Door](public/assets/sprites/House/Door.png)
+![HouseFloor](public/assets/sprites/House/HouseFloor.png) ![Bed](public/assets/sprites/House/Bed.png) ![Sofa](public/assets/sprites/House/Sofa.png) ![Table](public/assets/sprites/House/Table.png) ![ChairLeft](public/assets/sprites/House/ChairLeft.png) ![ChairRight](public/assets/sprites/House/ChairRight.png) ![Forge](public/assets/sprites/House/Forge.png) ![Door](public/assets/sprites/House/Door.png)
 
 Room ID: `house_{tx}_{ty}` (derived from building tile position — fully deterministic).  
-Size: **8 × 8 tiles**. Contains border walls, house floor, seeded-random furniture, workbench, storage chest, and exit door. Some houses have a **cellar staircase**.
+Size: **8 × 8 tiles**. Contains border walls, house floor, seeded-random furniture, workbench, storage chest, and exit door. Furniture is placed as logical units — a dining table is always flanked by `ChairLeft`/`ChairRight`, one per residential house; workshops may also get a `Forge`. Some houses have a **cellar staircase**.
 
 ### Cellar
-![CellarFloor](public/assets/sprites/Cellars/CellarFloor.png) ![CellarWall](public/assets/sprites/Cellars/CellarWall.png) ![CellarChest](public/assets/sprites/Cellars/CellarChest.png) ![CellarTrap](public/assets/sprites/Cellars/CellarTrap.png) ![CellarStairsUp](public/assets/sprites/Cellars/CellarStairsUp.png)
+![CellarFloor](public/assets/sprites/Cellars/CellarFloor.png) ![CellarWall](public/assets/sprites/Cellars/CellarWall.png) ![CellarChest](public/assets/sprites/Cellars/CellarChest.png) ![CellarBarrel](public/assets/sprites/Cellars/CellarBarrel.png) ![CellarBox](public/assets/sprites/Cellars/CellarBox.png) ![CellarTrap](public/assets/sprites/Cellars/CellarTrap.png) ![CellarStairsUp](public/assets/sprites/Cellars/CellarStairsUp.png)
 
-Room ID: `cellar_{tx}_{ty}_floor_1`.  
-Small underground room — extra chest and traps. Exit via stairs up.
+Room ID: `cellar_{tx}_{ty}`.  
+Small underground room (20×20) — an optional chest, 8–13 destructible `CellarBarrel`/`CellarBox` containers scattered across the floor (press `A` to break, sometimes drop gold/materials/potions), and 2–4 aggressive `rat_weak` enemies using `patrol_chase` (they hunt the player on sight, unlike overworld rats which flee). Exit via stairs up.
 
 ### Dungeon (BSP Multi-floor)
 ![DungeonFloor](public/assets/sprites/Dungeon/DungeonFloor.png) ![DungeonWall](public/assets/sprites/Dungeon/DungeonWall.png) ![DungeonPillar](public/assets/sprites/Dungeon/DungeonPillar.png) ![DungeonTrap](public/assets/sprites/Dungeon/DungeonTrap.png) ![Chest](public/assets/sprites/Dungeon/Chest.png) ![DungeonAltar](public/assets/sprites/Dungeon/DungeonAltar.png) ![StairDown](public/assets/sprites/Dungeon/StairDown.png) ![StairUp](public/assets/sprites/Dungeon/StairUp.png) ![Tombstone](public/assets/sprites/Dungeon/Tombstone.png)
@@ -746,7 +746,8 @@ sprites/
 │   └── shadow_boots.png        shadow_chestplate.png   shadow_gloves.png
 │       shadow_helmet.png       shadow_leggings.png
 ├── Cellars/
-│   ├── CellarChest.png  CellarFloor.png  CellarStairsUp.png
+│   ├── CellarBarrel.png CellarBox.png      CellarChest.png
+│   ├── CellarFloor.png  CellarStairsUp.png
 │   ├── CellarTrap.png   CellarWall.png
 ├── Dungeon/
 │   ├── Chest.png         DungeonAltar.png    DungeonFloor.png
@@ -754,7 +755,8 @@ sprites/
 │   ├── StairDown.png     StairUp.png         Tombstone.png
 ├── Enemies/   (26 enemy sprites — see Enemies section)
 ├── House/
-│   ├── Bed.png  Chest.png  Door.png  HouseFloor.png
+│   ├── Bed.png  ChairLeft.png  ChairRight.png  Chest.png
+│   ├── Door.png  Forge.png  HouseFloor.png
 │   ├── Sofa.png  Table.png  WorkBench.png
 ├── Items/     (12 item sprites — see Items section)
 ├── NPCs/      (8 NPC sprites — see NPC section)

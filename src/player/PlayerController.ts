@@ -209,32 +209,23 @@ export class PlayerController {
   }
 
   /**
-   * Returns true when the player's pixel centre is within 20% of TILE_SIZE
-   * from the centre of tile (tx, ty) — i.e. the player sprite is fully centred
-   * on the transition tile before a room transition is allowed to fire.
-   */
-  private _isOnTile(tx: number, ty: number): boolean {
-    const cx = tx * TILE_SIZE + TILE_SIZE / 2
-    const cy = ty * TILE_SIZE + TILE_SIZE / 2
-    // Stricter: must be within 10% of TILE_SIZE from center
-    return Math.abs(this.px - cx) < TILE_SIZE * 0.1
-      && Math.abs(this.py - cy) < TILE_SIZE * 0.1
-  }
-
-  /**
    * Auto room-transition: fires every frame when cooldown is zero.
    * - If in a room and standing on a house_exit/dungeon_stairs_up tile → exit room
    * - If on overworld and standing on a passable entry tile (dungeon_entrance)
    *   OR adjacent to an impassable entry tile (building) → enter its room
+   *
+   * Detection is purely tile-based (current tile index, from floor(px/TILE_SIZE)):
+   * the player doesn't need to be pixel-perfectly centred, just standing in the
+   * tile. This avoids missed transitions when walking diagonally or at an angle,
+   * where the player's pixel position may never land within a tight centring
+   * tolerance on any single frame.
    */
   private _checkTileTransition(): void {
     const tx = Math.floor(this.px / TILE_SIZE)
     const ty = Math.floor(this.py / TILE_SIZE)
 
     if (getActiveRoom() !== null) {
-      // Inside a room — only trigger when solidly centred on the tile.
-      if (!this._isOnTile(tx, ty)) return
-      // Inside a room — check only the current tile for a room-exit marker
+      // Inside a room — check the current tile for a room-exit marker
       const currentTile = getTile(tx, ty)
       const tileTypes = [
         currentTile?.g,
@@ -337,8 +328,7 @@ export class PlayerController {
     }
 
     // Overworld — check current tile first (passable entry tiles like dungeon_entrance).
-    // Require the player to be solidly on the tile before triggering.
-    if (this._isOnTile(tx, ty)) {
+    {
       const currentTile = getTile(tx, ty)
       if (currentTile) {
         const allTypes = [currentTile.g, ...(currentTile.m ?? [])]
@@ -376,11 +366,13 @@ export class PlayerController {
     }
 
     // Overworld — check the tile directly above the player for an impassable
-    // building entry. Player must be standing in front of the door (feet at the building's south edge).
+    // building entry. The player is standing in front of the door whenever
+    // their current tile is directly below an entrance tile (tile-based, no
+    // pixel-alignment needed since the entrance tile itself is impassable).
     const atx = tx
     const aty = ty - 1
     const tile = getTile(atx, aty)
-    if (tile && this._isAtHouseDoor(tx, ty)) {
+    if (tile) {
       const allTypes = [tile.g, ...(tile.m ?? [])]
       for (const type of allTypes) {
         const entryType = getTileEntryType(type)
@@ -397,22 +389,7 @@ export class PlayerController {
         }
       }
     }
-    // ...existing code...
-    return;
   }
-    /**
-     * Returns true if the player's feet are just below the building's south edge (door).
-     * Used for house entry alignment.
-     */
-    private _isAtHouseDoor(tx: number, ty: number): boolean {
-      // Player feet Y = py + sprite.height / 2
-      // Building bottom Y = (ty-1) * TILE_SIZE + TILE_SIZE
-      if (!this.sprite) return false;
-      const feetY = this.py + this.sprite.height / 2;
-      const doorY = (ty - 1) * TILE_SIZE + TILE_SIZE;
-      // Allow a very forgiving threshold (±12px)
-      return Math.abs(feetY - doorY) <= 12 && Math.abs(this.px - (tx * TILE_SIZE + TILE_SIZE / 2)) < TILE_SIZE * 0.1;
-    }
 
   /**
    * Persist the overworld return position and active room to Firebase so re-login

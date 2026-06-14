@@ -1090,6 +1090,14 @@ export class GameScene extends Phaser.Scene {
     const { x: spawnX, y: spawnY } = this._spawnNextTo(spawnNear)
     this.playerController.teleport(spawnX, spawnY)
 
+    // The presence entry written by PlayerController used a placeholder spawn
+    // position (it doesn't know the room layout yet); correct it now so other
+    // players immediately see this player at the actual spawn tile.
+    void update(ref(db), {
+      [`presence/${roomId}/players/${player.id}/x`]: spawnX,
+      [`presence/${roomId}/players/${player.id}/y`]: spawnY,
+    })
+
     const roomSize = roomId.startsWith('house_')
       ? HOUSE_ROOM_SIZE
       : roomId.startsWith('cellar_')

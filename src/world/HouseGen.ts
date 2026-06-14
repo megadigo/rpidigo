@@ -115,28 +115,61 @@ export function generateHouseRoom(
     return false
   }
 
+  /**
+   * Place a dining table flanked by two chairs — `chair_left` to the west and
+   * `chair_right` to the east — so the seating reads as a real table setting
+   * rather than scattered furniture. Requires all three tiles to be free.
+   * Candidates: table x in [minX, maxX] (chairs occupy x±1, so callers should
+   * leave at least 1 tile of margin on each side), y in [minY, maxY].
+   */
+  function placeTableWithChairs(
+    minX = 2, maxX = S - 3,
+    minY = 1, maxY = S - 4,
+  ): boolean {
+    for (let attempt = 0; attempt < 30; attempt++) {
+      const x = seededRandInt(rand, minX, maxX)
+      const y = seededRandInt(rand, minY, maxY)
+      const center = tileKey(x, y)
+      const left   = tileKey(x - 1, y)
+      const right  = tileKey(x + 1, y)
+      if (occupied.has(center) || occupied.has(left) || occupied.has(right)) continue
+      occupied.add(center)
+      occupied.add(left)
+      occupied.add(right)
+      tiles.set(center, { g: 'house_floor', m: ['table'] })
+      tiles.set(left,   { g: 'house_floor', m: ['chair_left'] })
+      tiles.set(right,  { g: 'house_floor', m: ['chair_right'] })
+      return true
+    }
+    return false
+  }
+
   // ── Themed layouts ────────────────────────────────────────────────────────
 
   switch (buildingType) {
 
     case 'player_house': {
-      // Personal player house: workbench for crafting, personal storage chest.
+      // Personal player house: workbench for crafting, a bed, a dining table
+      // with two chairs, and a personal storage chest.
       place('workbench', 1, 3, 1, 3)
+      place('bed', 1, S - 2, 1, 3)
+      placeTableWithChairs()
       place('chest', S - 4, S - 2, 1, 3, { storage: true })
       break
     }
 
     case 'workshop': {
-      // 2–3 workbenches in the upper half, 1 chest
+      // 2–3 workbenches in the upper half, an optional forge, 1 chest
       const benches = 2 + (rand() < 0.5 ? 1 : 0)
       for (let i = 0; i < benches; i++) place('workbench', 1, S - 2, 1, Math.floor(S / 2) - 1)
+      if (rand() < 0.6) place('forge', 1, S - 2, 1, Math.floor(S / 2) - 1)
       const wItems: Array<{itemId: string; quantity: number}> = []
       if (rand() < 0.7) wItems.push({ itemId: 'iron_ore',  quantity: seededRandInt(rand, 1, 3) })
       if (rand() < 0.5) wItems.push({ itemId: 'stone',     quantity: seededRandInt(rand, 2, 5) })
       if (rand() < 0.3) wItems.push({ itemId: 'leather',   quantity: seededRandInt(rand, 1, 2) })
       place('chest', 1, S - 2, 1, S - 4, { gold: seededRandInt(rand, 5, 20), items: wItems })
-      // Optional extra table
-      if (rand() < 0.4) place('table', 1, S - 2, 1, S - 4)
+      // Optional extra table with seating
+      if (rand() < 0.4) placeTableWithChairs(2, S - 3, 1, S - 4)
       break
     }
 
@@ -150,8 +183,8 @@ export function generateHouseRoom(
         if (rand() < 0.4) bItems.push({ itemId: 'antidote',      quantity: 1 })
         place('chest', 1, S - 2, 1, S - 4, { gold: seededRandInt(rand, 10, 30), items: bItems })
       }
-      // Occasional table (briefing table)
-      if (rand() < 0.5) place('table', 1, S - 2, Math.floor(S / 3), S - 4)
+      // Occasional briefing table with seating
+      if (rand() < 0.5) placeTableWithChairs(2, S - 3, Math.floor(S / 3), S - 4)
       break
     }
 
@@ -174,9 +207,9 @@ export function generateHouseRoom(
     }
 
     case 'tavern': {
-      // Tables and sofas fill the middle; chest in a corner
+      // Tables with seating and sofas fill the middle; chest in a corner
       const tables = 2 + seededRandInt(rand, 0, 2)
-      for (let i = 0; i < tables; i++) place('table', 2, S - 3, 2, S - 4)
+      for (let i = 0; i < tables; i++) placeTableWithChairs(2, S - 3, 2, S - 4)
       const sofas = 1 + (rand() < 0.5 ? 1 : 0)
       for (let i = 0; i < sofas; i++) place('sofa', 2, S - 3, 2, S - 4)
       const tItems: Array<{itemId: string; quantity: number}> = []
@@ -187,10 +220,11 @@ export function generateHouseRoom(
     }
 
     default: {
-      // house_hut / house_cabin — residential: bed, maybe sofa/table, chest
+      // house_hut / house_cabin — residential: one bed, one dining table
+      // flanked by two chairs, optional sofa, chest
       place('bed', 1, S - 2, 1, 4)
-      if (rand() < 0.6) place(rand() < 0.5 ? 'table' : 'sofa', 1, S - 2, 2, S - 4)
-      if (rand() < 0.35) place('sofa', 1, S - 2, 2, S - 4)
+      placeTableWithChairs()
+      if (rand() < 0.4) place('sofa', 1, S - 2, 2, S - 4)
       const rItems: Array<{itemId: string; quantity: number}> = []
       if (rand() < 0.4) rItems.push({ itemId: 'wood',         quantity: seededRandInt(rand, 1, 5) })
       if (rand() < 0.3) rItems.push({ itemId: 'mushroom_item', quantity: seededRandInt(rand, 1, 2) })

@@ -34,10 +34,10 @@ Quick index of major systems and their key files — use this to orient before d
 5. **Dungeons** — Procedural BSP multi-floor dungeons at POI sites, seeded; rooms `dungeon_{tx}_{ty}_floor_{n}`; enemies, chests, dungeon_altar station per floor.
    `world/DungeonGen.ts`, `world/ChunkManager.ts`
 
-6. **Cellars** — Small 20×20 single-room rat dens attached to ~7% of houses; room `cellar_{tx}_{ty}`; optional chest.
+6. **Cellars** — Small 20×20 single-room rat dens attached to ~7% of houses; room `cellar_{tx}_{ty}`; optional chest, 8-13 destructible cellar_barrel/cellar_box containers (occasional gold/material/potion drops), 2-4 aggressive rats using `patrol_chase`.
    `world/CellarGen.ts`
 
-7. **Player House** — Unique 8×8 interior per player (deterministic from world coords); workbench, personal storage chest, themed furniture, optional cellar.
+7. **Player House** — Unique 8×8 interior per player (deterministic from world coords); workbench, bed, dining table flanked by chair_left/chair_right, personal storage chest, themed furniture (optional forge in workshops), optional cellar.
    `world/HouseGen.ts`, `scenes/StorageScene.ts`
 
 8. **Villages/NPCs** — Procedural villages (well, market stall, quest board, 4 building-lined arms); NPC templates (villager/hunter/merchant/healer/dog) with role dialog.

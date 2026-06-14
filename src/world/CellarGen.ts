@@ -2,11 +2,14 @@
  * CellarGen — generates small cellar dungeons attached to some houses.
  * Room key: `cellar_{tx}_{ty}` where (tx, ty) is the source house tile.
  *
- * Each cellar is infested with 2–4 rats.
+ * Each cellar is scattered with 8–13 destructible barrels/boxes (occasional
+ * loot on break) and infested with 2–4 aggressive rats that actively chase
+ * the player (patrol_chase) rather than fleeing.
  */
 import type { TileData, EnemyInstance } from './types.ts'
 import { mulberry32, seededRandInt, tileKey, rollEnemyInitialCarriedGold } from './utils.ts'
 import { EnemyRegistry } from '../registry/registries.ts'
+import patrolChase from '../scripts/enemies/patrol_chase.py?raw'
 
 export const CELLAR_ROOM_SIZE = 20
 const CHEST_SPAWN_PROBABILITY = 0.7
@@ -85,6 +88,24 @@ export function generateCellarRoom(tx: number, ty: number, seed: number): Cellar
       })
     }
   }
+  // Scatter barrels and boxes throughout the cellar — destructible containers
+  // (press A to break) that sometimes yield gold, materials, or potions.
+  const containerCount = 8 + seededRandInt(rand, 0, 5) // 8-13
+  for (let i = 0; i < containerCount; i++) {
+    for (let attempt = 0; attempt < 20; attempt++) {
+      const bx = seededRandInt(rand, 1, S - 2)
+      const by = seededRandInt(rand, 1, S - 2)
+      if (Math.abs(bx - upX) <= 1 && Math.abs(by - upY) <= 1) continue // keep entry clear
+      const k = tileKey(bx, by)
+      const existing = tiles.get(k)
+      if (existing?.g === 'cellar_floor' && !existing.m?.length) {
+        const containerType = rand() < 0.5 ? 'cellar_barrel' : 'cellar_box'
+        tiles.set(k, { g: 'cellar_floor', m: [containerType] })
+        break
+      }
+    }
+  }
+
   // Rat infestation — 2 to 4 rats at random free interior positions.
   const ratCount = 2 + seededRandInt(rand, 0, 2)
   for (let i = 0; i < ratCount; i++) {
@@ -107,9 +128,7 @@ export function generateCellarRoom(tx: number, ty: number, seed: number): Cellar
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function _makeRat(id: string, room: string, x: number, y: number): EnemyInstance {
-  let script = 'pass'
   let carriedGold = 0
-  try { script = EnemyRegistry.get('rat_weak').behaviorScript } catch { /* fallback */ }
   try { carriedGold = rollEnemyInitialCarriedGold(EnemyRegistry.get('rat_weak').lootTable) } catch { /* fallback */ }
   return {
     id, templateId: 'rat_weak', baseType: 'rat', variant: 'weak',
@@ -118,7 +137,9 @@ function _makeRat(id: string, room: string, x: number, y: number): EnemyInstance
     state: 'idle',
     executingPlayerId: null,
     lastLogicAt: 0,
-    script,
+    // Cellar rats are more aggressive than overworld rats (which use
+    // patrol_flee and run away): they actively hunt the player on sight.
+    script: patrolChase,
     memory: {},
     carriedGold,
   }

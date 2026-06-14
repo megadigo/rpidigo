@@ -152,9 +152,12 @@ All sprite paths are relative to `public/assets/sprites/`.
 |---|---|---|
 | `house_floor` | `House/HouseFloor.png` | Interior floor |
 | `dungeon_wall` | `Dungeon/DungeonWall.png` | Impassable border (shared with dungeon) |
-| `workbench` | `House/WorkBench.png` | Crafting station (workshop) |
-| `table` | `House/Table.png` | Furniture (tavern, workshop, residential) |
-| `bed` | `House/Bed.png` | Furniture (residential) |
+| `workbench` | `House/WorkBench.png` | Crafting station (workshop, player house) |
+| `forge` | `House/Forge.png` | Crafting/decor station (workshop) |
+| `table` | `House/Table.png` | Dining table — placed with `chair_left`/`chair_right` |
+| `chair_left` | `House/ChairLeft.png` | Chair on the west side of a table |
+| `chair_right` | `House/ChairRight.png` | Chair on the east side of a table |
+| `bed` | `House/Bed.png` | Furniture (residential, player house) |
 | `sofa` | `House/Sofa.png` | Furniture (tavern, chapel, residential) |
 | `chest` | `House/Chest.png` | Storage / loot chest |
 | `quest_board` | `World/Buildings/QuestBoard.png` | Barracks notice board *(copy in `House/` for custom art)* |
@@ -188,6 +191,8 @@ All sprite paths are relative to `public/assets/sprites/`.
 | `cellar_wall` | `Cellars/CellarWall.png` |
 | `cellar_stairs_up` | `Cellars/CellarStairsUp.png` *(step on to return to house)* |
 | `cellar_chest` | `Cellars/CellarChest.png` |
+| `cellar_barrel` | `Cellars/CellarBarrel.png` *(destructible — press `A`, sometimes drops gold/wood/mushroom)* |
+| `cellar_box` | `Cellars/CellarBox.png` *(destructible — press `A`, sometimes drops gold/stone/health potion)* |
 
 ### Special tile interactions
 
@@ -220,11 +225,14 @@ Every enterable village building (house_hut, house_cabin, barracks, chapel, tave
 - `house_exit` tile at centre-bottom (col 4, row 7) returns the player to the overworld
 - Some residential houses (`house_hut`, `house_cabin`) also include `dungeon_stairs_down`, which enters a small cellar room
 - Furniture is **seeded-random per building**, themed by type:
-  - **house_hut / house_cabin**: bed, optional table or sofa, chest with gold
-  - **tavern**: 2–4 tables, 1–2 sofas, chest with gold
-  - **workshop**: 2–3 workbenches, chest, optional table
-  - **barracks**: quest_board (near top), 2–3 chests, optional table
+  - **house_hut / house_cabin**: 1 bed, 1 dining table flanked by `chair_left`/`chair_right`, optional sofa, chest with gold
+  - **player_house**: workbench, 1 bed, 1 dining table with two chairs, personal storage chest
+  - **tavern**: 2–4 dining tables (each with two chairs), 1–2 sofas, chest with gold
+  - **workshop**: 2–3 workbenches, optional forge, chest, optional extra table with seating
+  - **barracks**: quest_board (near top), 2–3 chests, optional briefing table with seating
   - **chapel**: dungeon_altar (near top-centre), 1–2 chests, optional sofa
+
+A table is always placed together with its two chairs (`chair_left` to the west, `chair_right` to the east) as a single unit — chairs never appear without an adjacent table.
 
 ### Room ID derivation
 The room ID `house_${tx.padStart(4,'0')}_${ty.padStart(4,'0')}` is derived deterministically from the building's world coordinates — no metadata storage is needed. Dungeon rooms use `dungeon_${tx:04d}_${ty:04d}_floor_{n}`. House cellars use `cellar_${tx:04d}_${ty:04d}`.
@@ -236,6 +244,12 @@ The room ID `house_${tx.padStart(4,'0')}_${ty.padStart(4,'0')}` is derived deter
 - Step onto the `house_exit` tile → automatically returns the player to the overworld at the original entry position
 - Step onto `dungeon_stairs_up` inside a dungeon floor > 1 → ascends to floor N−1; floor 1 exits to overworld
 - An 800 ms cooldown prevents immediate re-triggering after each transition
+
+### Cellar contents
+- 20×20 room with carved-out inner wall clusters, an optional `cellar_chest` (70% chance, gold + items)
+- 8–13 `cellar_barrel`/`cellar_box` containers scattered across the free floor (kept clear of the entry stairs)
+- Containers are destructible: press `A` to break one (no tool required, 1 hit). Each sometimes drops gold, materials (`wood`/`stone`/`mushroom_item`), or a `health_potion`, then disappears permanently
+- 2–4 `rat_weak` enemies using the `patrol_chase` behaviour — they actively hunt and attack the player on sight (overworld rats use `patrol_flee` and run away instead)
 
 ---
 

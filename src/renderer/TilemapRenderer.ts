@@ -130,7 +130,10 @@ export const TILE_DEFS: Record<string, TileDef> = {
   house_floor:         { sprite: 'House/HouseFloor',                layer: 'GROUND' },
   house_exit:          { sprite: 'House/Door',                      layer: 'MIDDLE', roomExit: true },
   workbench:           { sprite: 'House/WorkBench',                 layer: 'MIDDLE', impassable: true },
+  forge:               { sprite: 'House/Forge',                     layer: 'MIDDLE', impassable: true },
   table:               { sprite: 'House/Table',                     layer: 'MIDDLE', impassable: true },
+  chair_left:          { sprite: 'House/ChairLeft',                 layer: 'MIDDLE', impassable: true },
+  chair_right:         { sprite: 'House/ChairRight',                layer: 'MIDDLE', impassable: true },
   bed:                 { sprite: 'House/Bed',                       layer: 'MIDDLE', impassable: true },
   sofa:                { sprite: 'House/Sofa',                      layer: 'MIDDLE', impassable: true },
   chest:               { sprite: 'House/Chest',                     layer: 'MIDDLE', impassable: true },
@@ -140,6 +143,8 @@ export const TILE_DEFS: Record<string, TileDef> = {
   cellar_wall:         { sprite: 'Cellars/CellarWall',              layer: 'MIDDLE', impassable: true },
   cellar_chest:        { sprite: 'Cellars/CellarChest',             layer: 'MIDDLE', impassable: true },
   cellar_stairs_up:    { sprite: 'Cellars/CellarStairsUp',          layer: 'MIDDLE', roomExit: true },
+  cellar_barrel:       { sprite: 'Cellars/CellarBarrel',            layer: 'MIDDLE', impassable: true },
+  cellar_box:          { sprite: 'Cellars/CellarBox',               layer: 'MIDDLE', impassable: true },
 }
 
 // ── Public helpers (consumed by LoadingScene and CollisionMap) ─────────────

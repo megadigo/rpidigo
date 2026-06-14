@@ -127,6 +127,12 @@ export const tiles: TileDefinition[] = [
   { id: 'house_floor', passable: true,  speedMod: 1.0, destructible: false, spriteFrame: 'House/HouseFloor.png' },
   { id: 'house_exit',  passable: true,  speedMod: 1.0, destructible: false, spriteFrame: 'House/Door.png' },
   { id: 'workbench',   passable: false, speedMod: 0,   destructible: false, spriteFrame: 'House/WorkBench.png' },
+  { id: 'forge',       passable: false, speedMod: 0,   destructible: false, spriteFrame: 'House/Forge.png' },
+  { id: 'table',       passable: false, speedMod: 0,   destructible: false, spriteFrame: 'House/Table.png' },
+  { id: 'chair_left',  passable: false, speedMod: 0,   destructible: false, spriteFrame: 'House/ChairLeft.png' },
+  { id: 'chair_right', passable: false, speedMod: 0,   destructible: false, spriteFrame: 'House/ChairRight.png' },
+  { id: 'bed',         passable: false, speedMod: 0,   destructible: false, spriteFrame: 'House/Bed.png' },
+  { id: 'sofa',        passable: false, speedMod: 0,   destructible: false, spriteFrame: 'House/Sofa.png' },
   { id: 'chest',       passable: false, speedMod: 0,   destructible: false, spriteFrame: 'House/Chest.png' },
   { id: 'void',        passable: false, speedMod: 0,   destructible: false, spriteFrame: 'World/Ground/Void.png' },
 
@@ -135,4 +141,24 @@ export const tiles: TileDefinition[] = [
   { id: 'cellar_wall',       passable: false, speedMod: 0,   destructible: false, spriteFrame: 'Cellars/CellarWall.png' },
   { id: 'cellar_chest',      passable: false, speedMod: 0,   destructible: false, spriteFrame: 'Cellars/CellarChest.png' },
   { id: 'cellar_stairs_up',  passable: true,  speedMod: 1.0, destructible: false, spriteFrame: 'Cellars/CellarStairsUp.png' },
+  {
+    id: 'cellar_barrel', passable: false, speedMod: 0, destructible: true,
+    gatherAction: 'pick', gatherCharges: 1,
+    dropTable: [
+      { itemId: 'gold_coin',      min: 1, max: 5, chance: 0.4 },
+      { itemId: 'wood',           min: 1, max: 3, chance: 0.5 },
+      { itemId: 'mushroom_item',  min: 1, max: 2, chance: 0.3 },
+    ],
+    spriteFrame: 'Cellars/CellarBarrel.png',
+  },
+  {
+    id: 'cellar_box', passable: false, speedMod: 0, destructible: true,
+    gatherAction: 'pick', gatherCharges: 1,
+    dropTable: [
+      { itemId: 'gold_coin',      min: 1, max: 8, chance: 0.35 },
+      { itemId: 'stone',          min: 1, max: 3, chance: 0.4 },
+      { itemId: 'health_potion',  min: 1, max: 1, chance: 0.2 },
+    ],
+    spriteFrame: 'Cellars/CellarBox.png',
+  },
 ]
