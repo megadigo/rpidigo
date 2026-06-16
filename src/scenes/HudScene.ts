@@ -47,6 +47,7 @@ export class HudScene extends Phaser.Scene {
   private _chatRoom = ''
   private _chatUnsub: (() => void) | null = null
   private _messages: ChatMsg[] = []
+  private _localMsgs: { text: string; addedAt: number }[] = []
 
   /** Unsubscribe for the /players/{id} stat listener (remote HP/MP/gold/etc.). */
   private _playerUnsub: (() => void) | null = null
@@ -259,17 +260,32 @@ export class HudScene extends Phaser.Scene {
     })
   }
 
+  /** Show a one-off system message only to the local player (never sent to Firebase). */
+  showLocalMsg(text: string): void {
+    this._localMsgs.push({ text, addedAt: Date.now() })
+    this._renderMessages()
+  }
+
   private _renderMessages(): void {
-    const p = getLocalPlayer()
+    const p   = getLocalPlayer()
+    const now = Date.now()
+
+    // Expire local messages after 8 s
+    this._localMsgs = this._localMsgs.filter(m => now - m.addedAt < 8000)
+
     const visible = this._messages
       .filter(m => m.system || Math.max(Math.abs(m.x - p.x), Math.abs(m.y - p.y)) <= CHAT_RANGE)
       .slice(-30)
 
-    this._chatLog.innerHTML = visible.map(m =>
+    const localHtml  = this._localMsgs.map(m =>
+      `<div class="chat-system chat-local">${esc(m.text)}</div>`).join('')
+    const remoteHtml = visible.map(m =>
       m.system
         ? `<div class="chat-system">${esc(m.text)}</div>`
         : `<div><span class="chat-name">${esc(m.sender)}:</span> ${esc(m.text)}</div>`,
     ).join('')
+
+    this._chatLog.innerHTML = remoteHtml + localHtml
     this._chatLog.scrollTop = this._chatLog.scrollHeight
   }
 

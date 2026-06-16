@@ -35,6 +35,7 @@ import type { DialogSceneData } from './DialogScene.ts'
 import type { CraftSceneData } from './CraftScene.ts'
 import type { ShopSceneData } from './ShopScene.ts'
 import type { StorageSceneData } from './StorageScene.ts'
+import type { VendorSceneData } from './VendorScene.ts'
 import type { DeathSceneData } from './DeathScene.ts'
 import type { LevelUpSceneData } from './LevelUpScene.ts'
 import { MusicDirector } from '../audio/MusicDirector.ts'
@@ -49,7 +50,7 @@ const ATTACK_ANIM_MS = 500
 
 /** DOM-overlay scenes that own input (and Esc) while active — block taps and the pause menu. */
 const PAUSE_BLOCKING_SCENES = ['DialogScene', 'InventoryScene', 'CraftScene',
-  'ShopScene', 'StorageScene', 'DeathScene', 'PauseScene', 'LevelUpScene', 'StatsScene', 'QuestScene']
+  'ShopScene', 'StorageScene', 'VendorScene', 'DeathScene', 'PauseScene', 'LevelUpScene', 'StatsScene', 'QuestScene']
 
 /** Shape of each entry under /presence/{room}/players/{id}. */
 interface PresenceEntry {
@@ -156,6 +157,12 @@ export class GameScene extends Phaser.Scene {
 
   /** Tracks how much local-player gold each enemy has stolen and can still lose on escape. */
   private _stolenByEnemy = new Map<string, number>()
+
+  /** Active tombstone hordes: hordeKey → { tombX, tombY, room, remaining enemy IDs }. */
+  private _tombHordes = new Map<string, { tombX: number; tombY: number; room: string; remaining: Set<string> }>()
+
+  /** Village IDs already counted toward villagesVisited this session. */
+  private _discoveredVillages = new Set<string>()
 
   /** Accumulated delta (ms) since the last regen tick. Reset whenever the player takes damage. */
   private _healTimer = 0
@@ -433,7 +440,8 @@ export class GameScene extends Phaser.Scene {
 
     // ── Distance traveled counter ──────────────────────────────────────────
     if (!this._isDead) {
-      if (this._prevTileX >= 0 && (tx !== this._prevTileX || ty !== this._prevTileY)) {
+      const tileChanged = this._prevTileX >= 0 && (tx !== this._prevTileX || ty !== this._prevTileY)
+      if (tileChanged) {
         this._distAccum += Math.abs(tx - this._prevTileX) + Math.abs(ty - this._prevTileY)
       }
       this._prevTileX = tx
@@ -442,6 +450,29 @@ export class GameScene extends Phaser.Scene {
       if (this._distFlushTimer >= 30_000 && this._distAccum > 0) {
         this._distFlushTimer = 0
         this._flushDistanceTraveled()
+      }
+
+      // ── Village discovery ────────────────────────────────────────────────
+      if (tileChanged && !getActiveRoom()) {
+        const { pois } = getWorldConfig()
+        for (const v of pois.villages) {
+          if (this._discoveredVillages.has(v.id)) continue
+          if (Math.abs(tx - v.x) <= 10 && Math.abs(ty - v.y) <= 10) {
+            this._discoveredVillages.add(v.id)
+            const player = getLocalPlayer()
+            const pc = player.progressCounters ??= {}
+            pc.villagesVisited = (pc.villagesVisited ?? 0) + 1
+            setLocalPlayer(player)
+            const questResult = checkAndAdvanceQuestsLocally(player)
+            void update(ref(db), {
+              [`players/${player.id}/progressCounters/villagesVisited`]: pc.villagesVisited,
+              ...questResult.updates,
+            })
+            const hud = this.scene.get('HudScene') as import('./HudScene.ts').HudScene
+            hud.showLocalMsg(`📍 Village discovered! (${pc.villagesVisited})`)
+            break
+          }
+        }
       }
     }
 
@@ -943,44 +974,109 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
-   * Keep an on-screen arrow pointing toward the player's death-drop loot chest
-   * while it remains unretrieved and the player is in the same room as it.
+   * Keep an on-screen arrow pointing toward the player's death-drop loot chest.
+   * - Same room as loot: directional arrow pointing at the chest.
+   * - Different room: directional arrow pointing toward the entrance of that room
+   *   (dungeon entrance tile, house tile, or cellar stairs inside a house).
    * Hidden once the player is close enough to see the chest themselves.
    */
   private _updateLootArrow(): void {
     const player = getLocalPlayer()
-    const target  = player.lastDeathLoot
-    if (this._isDead || !target || target.room !== player.room) {
+    const target = player.lastDeathLoot
+    if (this._isDead || !target) {
       if (this._lootArrow) { this._lootArrow.destroy(); this._lootArrow = null; this._lootArrowTip = null }
       return
     }
 
-    const px = this.playerController.px
-    const py = this.playerController.py
-    const tx = target.x * TILE_SIZE + TILE_SIZE / 2
-    const ty = target.y * TILE_SIZE + TILE_SIZE / 2
-    const dx = tx - px
-    const dy = ty - py
-    const dist = Math.hypot(dx, dy)
+    const playerRoom = player.room ?? '0'
+    const sameRoom   = target.room === playerRoom
 
-    if (dist < TILE_SIZE * 2) {
+    let targetWorldX: number
+    let targetWorldY: number
+    let label: string
+
+    if (sameRoom) {
+      targetWorldX = target.x * TILE_SIZE + TILE_SIZE / 2
+      targetWorldY = target.y * TILE_SIZE + TILE_SIZE / 2
+      label = 'loot'
+    } else {
+      // Resolve entrance tile for the room that holds the loot
+      const entrance = this._resolveLootEntrance(target.room, playerRoom)
+      if (!entrance) {
+        // Fallback: static badge — no meaningful direction available
+        if (!this._lootArrow || !this._lootArrowTip) this._createLootArrow('body')
+        const cam = this.cameras.main
+        this._lootArrow!.setPosition(cam.width - 32, 24)
+        this._lootArrowTip!.setVisible(false)
+        return
+      }
+      targetWorldX = entrance.worldX
+      targetWorldY = entrance.worldY
+      label        = entrance.label
+    }
+
+    const px   = this.playerController.px
+    const py   = this.playerController.py
+    const ddx  = targetWorldX - px
+    const ddy  = targetWorldY - py
+    const dist = Math.hypot(ddx, ddy)
+
+    if (sameRoom && dist < TILE_SIZE * 2) {
       this._clearLootHint()
       return
     }
 
-    if (!this._lootArrow || !this._lootArrowTip) this._createLootArrow()
+    if (!this._lootArrow || !this._lootArrowTip) this._createLootArrow(label)
 
-    const angle = Math.atan2(dy, dx)
+    const angle  = Math.atan2(ddy, ddx)
     const cam    = this.cameras.main
-    const cx     = cam.width / 2
-    const cy     = cam.height / 2
     const radius = Math.min(cam.width, cam.height) / 2 - 48
-    this._lootArrow!.setPosition(cx + Math.cos(angle) * radius, cy + Math.sin(angle) * radius)
+    this._lootArrow!.setPosition(cam.width / 2 + Math.cos(angle) * radius, cam.height / 2 + Math.sin(angle) * radius)
+    this._lootArrowTip!.setVisible(true)
     this._lootArrowTip!.setRotation(angle)
   }
 
+  /**
+   * Given the room where loot was dropped and the player's current room,
+   * return the world-pixel position of the entrance to that room plus a label.
+   * Returns null when no directional hint can be determined.
+   */
+  private _resolveLootEntrance(lootRoom: string, playerRoom: string): { worldX: number; worldY: number; label: string } | null {
+    const ROOM_RE = /^(?:dungeon|house|cellar)_(\d{4})_(\d{4})/
+    const m = ROOM_RE.exec(lootRoom)
+    if (!m) return null
+    const rx = parseInt(m[1], 10)
+    const ry = parseInt(m[2], 10)
+
+    // Dungeon → point to the overworld entrance tile from any non-dungeon room
+    if (lootRoom.startsWith('dungeon_') && (playerRoom === '0' || playerRoom.startsWith('house_') || playerRoom.startsWith('cellar_'))) {
+      return { worldX: rx * TILE_SIZE + TILE_SIZE / 2, worldY: ry * TILE_SIZE + TILE_SIZE / 2, label: 'dungeon' }
+    }
+
+    // House → point to the house tile in the overworld
+    if (lootRoom.startsWith('house_') && playerRoom === '0') {
+      return { worldX: rx * TILE_SIZE + TILE_SIZE / 2, worldY: ry * TILE_SIZE + TILE_SIZE / 2, label: 'house' }
+    }
+
+    // Cellar → from overworld point to the house tile; from the parent house point to cellar stairs
+    if (lootRoom.startsWith('cellar_')) {
+      const parentHouse = `house_${m[1]}_${m[2]}`
+      if (playerRoom === '0') {
+        return { worldX: rx * TILE_SIZE + TILE_SIZE / 2, worldY: ry * TILE_SIZE + TILE_SIZE / 2, label: 'cellar' }
+      }
+      if (playerRoom === parentHouse) {
+        const stairs = findTileInRoom('dungeon_stairs_down')
+        if (stairs) {
+          return { worldX: stairs.x * TILE_SIZE + TILE_SIZE / 2, worldY: stairs.y * TILE_SIZE + TILE_SIZE / 2, label: 'cellar' }
+        }
+      }
+    }
+
+    return null
+  }
+
   /** Build the gold compass-arrow container shown by `_updateLootArrow`. */
-  private _createLootArrow(): void {
+  private _createLootArrow(label: string): void {
     const tip = this.add.graphics()
     tip.fillStyle(0xffdd44, 0.95)
     tip.lineStyle(1, 0x553300, 1)
@@ -992,10 +1088,10 @@ export class GameScene extends Phaser.Scene {
     tip.fillPath()
     tip.strokePath()
 
-    const label = this.add.text(0, 10, 'loot', { fontFamily: 'monospace', fontSize: '7px', color: '#ffdd44' })
+    const text = this.add.text(0, 10, label, { fontFamily: 'monospace', fontSize: '7px', color: '#ffdd44' })
       .setOrigin(0.5, 0)
 
-    const container = this.add.container(0, 0, [tip, label])
+    const container = this.add.container(0, 0, [tip, text])
     container.setScrollFactor(0)
     container.setDepth(10_000)
     this._lootArrow    = container
@@ -1073,6 +1169,10 @@ export class GameScene extends Phaser.Scene {
       if (roomId === houseRoomId(player.house.x, player.house.y)) {
         pc.houseEntered = (pc.houseEntered ?? 0) + 1
         counterUpdate[`players/${player.id}/progressCounters/houseEntered`] = pc.houseEntered
+        counterUpdate[`houseOwners/${roomId}`] = player.id
+      } else if (roomId.startsWith('house_')) {
+        pc.housesVisited = (pc.housesVisited ?? 0) + 1
+        counterUpdate[`players/${player.id}/progressCounters/housesVisited`] = pc.housesVisited
       } else if (roomId.startsWith('dungeon_')) {
         pc.dungeonsVisited = (pc.dungeonsVisited ?? 0) + 1
         counterUpdate[`players/${player.id}/progressCounters/dungeonsVisited`] = pc.dungeonsVisited
@@ -1084,6 +1184,7 @@ export class GameScene extends Phaser.Scene {
       }
     }
 
+    this._announceRoom(roomId)
     this._projectileSystem.destroyAll()
     await enterRoom(roomId)
     this.tilemapRenderer.reset()
@@ -1471,6 +1572,12 @@ export class GameScene extends Phaser.Scene {
       return
     }
 
+    // Plaque check — street signs and notice boards
+    if (this._handlePlaque(tx + fdx2, ty + fdy2)) return
+
+    // Vendor stall check — facing tile only (Step 26)
+    if (this._handleVendorStall(tx + fdx2, ty + fdy2)) return
+
     // Chest check — facing tile only (Step 13)
     if (this._handleChest(tx + fdx2, ty + fdy2)) return
 
@@ -1691,10 +1798,13 @@ export class GameScene extends Phaser.Scene {
 
     const now = Date.now()
     const fbUpdate: Record<string, unknown> = {}
+    const spawnedIds = new Set<string>()
+    const hordeKey = `tomb_${tombX}_${tombY}_${now}`
 
     for (let i = 0; i < Math.min(count, candidates.length); i++) {
       const { x, y } = candidates[i]
       const id = `enemy_tomb_${tombX}_${tombY}_${now}_${i}`
+      spawnedIds.add(id)
       const enemy: import('../world/types.ts').EnemyInstance = {
         id, templateId: 'skeleton_weak', baseType: 'skeleton', variant: 'weak',
         hp: def.baseHp, maxHp: def.baseHp, mp: 0, maxMp: 0, power: def.basePower,
@@ -1711,7 +1821,37 @@ export class GameScene extends Phaser.Scene {
       }
     }
 
+    if (spawnedIds.size > 0) {
+      this._tombHordes.set(hordeKey, { tombX, tombY, room, remaining: spawnedIds })
+    }
+
     if (Object.keys(fbUpdate).length) void update(ref(db), fbUpdate)
+  }
+
+  /** Spawn a loot chest at the tombstone origin when its horde is fully defeated. */
+  private _spawnTombChest(tombX: number, tombY: number, room: string): void {
+    const existing = getTile(tombX, tombY)
+    if (!existing) return
+
+    const gold = 10 + Math.floor(Math.random() * 21) // 10–30g
+    const items: { itemId: string; quantity: number }[] = [
+      { itemId: 'health_potion', quantity: 1 + Math.floor(Math.random() * 2) },
+      { itemId: 'stone',         quantity: 2 + Math.floor(Math.random() * 4) },
+    ]
+
+    const newTile: import('../world/types.ts').TileData = {
+      g: existing.g,
+      m: [...(existing.m ?? []).filter(m => !GameScene._CHEST_TILES.has(m)), 'chest'],
+      ...(existing.t ? { t: existing.t } : {}),
+      metadata: { opened: false, dropped: true, gold, items },
+    }
+
+    setTile(tombX, tombY, newTile)
+    this.tilemapRenderer.invalidateTile(tombX, tombY)
+    const tilePath = (room || '0') === '0' ? overworldTilePath(tombX, tombY) : `map/${room}/${tileKey(tombX, tombY)}`
+    void update(ref(db), { [tilePath]: newTile })
+
+    this._showFloatText(tombX, tombY, 'Horde defeated!', '#aa44ff')
   }
 
   /**
@@ -1882,6 +2022,59 @@ export class GameScene extends Phaser.Scene {
     return true
   }
 
+  /** Open a plaque dialog for street_sign / quest_board tiles. Returns true if handled. */
+  private _handlePlaque(cx: number, cy: number): boolean {
+    const tile = getTile(cx, cy)
+    if (!tile) return false
+    const layers = [tile.g, ...(tile.m ?? [])]
+    const isSign  = layers.includes('street_sign')
+    const isBoard = layers.includes('quest_board')
+    if (!isSign && !isBoard) return false
+
+    const meta = tile.metadata
+    const villageName = meta?.villageName ?? 'Unknown Village'
+    const buildings   = meta?.buildings ?? []
+
+    const BUILDING_LABELS: Record<string, string> = {
+      tavern:   'Tavern',
+      barracks: 'Barracks',
+      chapel:   'Chapel',
+      workshop: 'Workshop',
+    }
+    const buildingList = buildings.map(b => BUILDING_LABELS[b] ?? b).join(', ')
+
+    let plaqueTitle: string
+    let plaqueLines: string[]
+
+    if (isSign) {
+      const direction = meta?.direction ?? ''
+      plaqueTitle = `Village of ${villageName}`
+      plaqueLines = [
+        direction ? `${direction} Gate` : '',
+        '',
+        buildingList ? `Notable buildings: ${buildingList}` : '',
+        'Market Stall & Quest Board in the square.',
+      ].filter(l => l !== '')
+    } else {
+      plaqueTitle = `${villageName} — Notice Board`
+      plaqueLines = [
+        buildingList ? `This village has: ${buildingList}.` : '',
+        'Speak to the healer at the Chapel to restore HP.',
+        'Visit the Tavern for local rumours.',
+        'Check the Market Stall for goods.',
+      ].filter(l => l !== '')
+    }
+
+    const data: DialogSceneData = { templateId: 'plaque', npcX: cx, npcY: cy, plaqueTitle, plaqueLines }
+    this.playerController.freeze()
+    this.scene.launch('DialogScene', data)
+    this.scene.get('DialogScene').events.once(
+      Phaser.Scenes.Events.SHUTDOWN,
+      () => this.playerController.unfreeze(),
+    )
+    return true
+  }
+
   /** Chest tile IDs recognised by the interact system. */
   private static readonly _CHEST_TILES = new Set(['chest', 'dungeon_chest', 'cellar_chest'])
 
@@ -1905,6 +2098,74 @@ export class GameScene extends Phaser.Scene {
 
     this._openChestUI({ tileX: cx, tileY: cy, roomId: room, chestList, chestIndex })
     return true
+  }
+
+  private _announceRoom(roomId: string): void {
+    const hud = this.scene.get('HudScene') as import('./HudScene.ts').HudScene
+    if (!hud?.showLocalMsg) return
+    hud.showLocalMsg(`📍 ${this._roomLabel(roomId)}`)
+  }
+
+  private _roomLabel(roomId: string): string {
+    const player = getLocalPlayer()
+    if (roomId === '0') return 'Overworld'
+    if (roomId === player.house.room) return 'Your house'
+    if (roomId.startsWith('cellar_')) return 'Cellar'
+    if (roomId.startsWith('dungeon_')) {
+      const m = /floor_(\d+)$/.exec(roomId)
+      return `Dungeon — Floor ${m ? m[1] : '1'}`
+    }
+    if (roomId.startsWith('house_')) {
+      const m = /^house_(\d{4})_(\d{4})$/.exec(roomId)
+      if (m) {
+        const tx = parseInt(m[1], 10)
+        const ty = parseInt(m[2], 10)
+        const tile = getTile(tx, ty)
+        const layers = tile ? [tile.g, ...(tile.m ?? [])] : []
+        const BUILDING_LABELS: Record<string, string> = {
+          workshop:    'Blacksmith',
+          barracks:    'Barracks',
+          chapel:      'Chapel',
+          tavern:      'Tavern',
+          house_hut:   "Villager's hut",
+          house_cabin: "Villager's cabin",
+        }
+        for (const l of layers) {
+          if (BUILDING_LABELS[l]) return BUILDING_LABELS[l]
+        }
+      }
+      return "Someone's house"
+    }
+    return roomId
+  }
+
+  private _handleVendorStall(cx: number, cy: number): boolean {
+    const tile = getTile(cx, cy)
+    if (!tile) return false
+    if (![tile.g, ...(tile.m ?? [])].includes('vendor_stall')) return false
+    const room     = getActiveRoom() ?? '0'
+    const player   = getLocalPlayer()
+    const isOwner  = room === houseRoomId(player.house.x, player.house.y)
+    let chestTileX: number | undefined
+    let chestTileY: number | undefined
+    if (isOwner) {
+      const storageTile = findAllTilesInRoom(GameScene._CHEST_TILES)
+        .map(p => ({ p, tile: getTile(p.x, p.y) }))
+        .find(({ tile: t }) => t?.metadata?.storage === true)
+      if (storageTile) { chestTileX = storageTile.p.x; chestTileY = storageTile.p.y }
+    }
+    this._openVendorUI({ roomId: room, isOwner, chestTileX, chestTileY })
+    return true
+  }
+
+  private _openVendorUI(data: VendorSceneData): void {
+    if (this.scene.isActive('VendorScene')) return
+    this.playerController.freeze()
+    this.scene.launch('VendorScene', data)
+    this.scene.get('VendorScene').events.once(
+      Phaser.Scenes.Events.SHUTDOWN,
+      () => this.playerController.unfreeze(),
+    )
   }
 
   /**
@@ -2298,6 +2559,20 @@ export class GameScene extends Phaser.Scene {
 
     if (carriedGold > 0) {
       this._dropEnemyCarriedGold(room, targetEntry.x, targetEntry.y, carriedGold)
+    }
+
+    // Check if this kill completes a tombstone horde → spawn a loot chest
+    if (targetId.startsWith('enemy_tomb_')) {
+      for (const [hordeKey, horde] of this._tombHordes) {
+        if (horde.remaining.has(targetId)) {
+          horde.remaining.delete(targetId)
+          if (horde.remaining.size === 0) {
+            this._tombHordes.delete(hordeKey)
+            this._spawnTombChest(horde.tombX, horde.tombY, horde.room)
+          }
+          break
+        }
+      }
     }
 
     // ── Progress counters ─────────────────────────────────────────────────────

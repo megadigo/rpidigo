@@ -133,8 +133,9 @@ export const tiles: TileDefinition[] = [
   { id: 'chair_right', passable: false, speedMod: 0,   destructible: false, spriteFrame: 'House/ChairRight.png' },
   { id: 'bed',         passable: false, speedMod: 0,   destructible: false, spriteFrame: 'House/Bed.png' },
   { id: 'sofa',        passable: false, speedMod: 0,   destructible: false, spriteFrame: 'House/Sofa.png' },
-  { id: 'chest',       passable: false, speedMod: 0,   destructible: false, spriteFrame: 'House/Chest.png' },
-  { id: 'void',        passable: false, speedMod: 0,   destructible: false, spriteFrame: 'World/Ground/Void.png' },
+  { id: 'chest',        passable: false, speedMod: 0,   destructible: false, spriteFrame: 'House/Chest.png' },
+  { id: 'vendor_stall', passable: false, speedMod: 0,   destructible: false, spriteFrame: 'House/VendorStall.png' },
+  { id: 'void',         passable: false, speedMod: 0,   destructible: false, spriteFrame: 'World/Ground/Void.png' },
 
   // ── Cellars (under village houses) ───────────────────────────────────────
   { id: 'cellar_floor',      passable: true,  speedMod: 1.0, destructible: false, spriteFrame: 'Cellars/CellarFloor.png' },

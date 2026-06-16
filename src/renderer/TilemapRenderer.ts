@@ -137,6 +137,7 @@ export const TILE_DEFS: Record<string, TileDef> = {
   bed:                 { sprite: 'House/Bed',                       layer: 'MIDDLE', impassable: true },
   sofa:                { sprite: 'House/Sofa',                      layer: 'MIDDLE', impassable: true },
   chest:               { sprite: 'House/Chest',                     layer: 'MIDDLE', impassable: true },
+  vendor_stall:        { sprite: 'House/VendorStall',               layer: 'MIDDLE', impassable: true },
   void:                { sprite: 'World/Ground/Void',               layer: 'MIDDLE', impassable: true },
   // ── Cellars (under village houses) ───────────────────────────────────────
   cellar_floor:        { sprite: 'Cellars/CellarFloor',             layer: 'GROUND' },

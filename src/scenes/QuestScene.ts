@@ -35,17 +35,19 @@ function _resolveCounter(counters: Record<string, unknown>, key: string): number
   return typeof v === 'number' ? v : 0
 }
 
-const CATEGORY_ORDER: QuestCategory[] = ['combat', 'gathering']
+const CATEGORY_ORDER: QuestCategory[] = ['combat', 'gathering', 'exploration']
 
 const CATEGORY_LABELS: Record<QuestCategory, string> = {
-  combat:    '⚔ Combat',
-  gathering: '🪵 Gathering & Crafting',
+  combat:      '⚔ Combat',
+  gathering:   '🪵 Gathering & Crafting',
+  exploration: '🗺 Exploration',
 }
 
 const COUNTER_LABELS: Record<string, string> = {
   enemiesKilledTotal:  'Enemies defeated',
   killsByEnemyId:      'Kills by enemy type',
   houseEntered:        'House entries',
+  housesVisited:       'Houses visited',
   dungeonsVisited:     'Dungeons entered',
   villagesVisited:     'Villages discovered',
   chatMessagesSent:    'Chat messages sent',

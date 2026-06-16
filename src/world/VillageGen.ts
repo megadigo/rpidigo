@@ -22,6 +22,15 @@ import { mulberry32, seededRandInt, tileKey } from './utils.ts'
 import npcWander   from '../scripts/npcs/wander.py?raw'
 import dogFollow   from '../scripts/npcs/dog_follow.py?raw'
 
+const _V_PREFIXES = ['Mill', 'Oak', 'Stone', 'River', 'Iron', 'Silver', 'Gold', 'Frost', 'Green', 'Shadow', 'Wind', 'Thorn', 'Bright', 'Elm', 'Ash']
+const _V_SUFFIXES = ['brook', 'haven', 'wood', 'ford', 'shire', 'vale', 'hollow', 'bridge', 'crest', 'field', 'moor', 'dale', 'ridge', 'cross', 'gate']
+
+function _genVillageName(villageId: string, seed: number): string {
+  let h = seed >>> 0
+  for (let i = 0; i < villageId.length; i++) h = (Math.imul(h, 31) + villageId.charCodeAt(i)) >>> 0
+  return _V_PREFIXES[h % _V_PREFIXES.length] + _V_SUFFIXES[(h >>> 4) % _V_SUFFIXES.length]
+}
+
 export interface VillageLayout {
   tiles: Map<string, TileData>   // key `${x}_${y}`
   npcs: NpcInstance[]
@@ -54,6 +63,9 @@ export function generateVillage(
     if (hasInterior.includes(type)) buildingPositions.push({ x, y, type })
   }
 
+  const villageName = _genVillageName(villageId, seed)
+  const specialBuildings = ['tavern', 'barracks', 'chapel', 'workshop']
+
   // ── Central cobblestone square (5×5) ────────────────────────────────────
   for (let dx = -2; dx <= 2; dx++) {
     for (let dy = -2; dy <= 2; dy++) {
@@ -63,6 +75,12 @@ export function generateVillage(
   object(originX, originY, 'well')
   object(originX + 2, originY - 2, 'market_stall')
   object(originX - 2, originY - 2, 'quest_board')
+  // Stamp quest_board metadata after object() has created the tile
+  {
+    const k = tileKey(originX - 2, originY - 2)
+    const e = tiles.get(k)!
+    tiles.set(k, { ...e, metadata: { villageName, buildings: specialBuildings } })
+  }
 
   // ── 4 path arms — 3 tiles wide ────────────────────────────────────────
   const pathLengths = [
@@ -72,14 +90,14 @@ export function generateVillage(
     seededRandInt(rand, 12, 18),
   ]
   const dirs = [
-    { dx: 1,  dy: 0  },
-    { dx: -1, dy: 0  },
-    { dx: 0,  dy: 1  },
-    { dx: 0,  dy: -1 },
+    { dx: 1,  dy: 0,  direction: 'East'  },
+    { dx: -1, dy: 0,  direction: 'West'  },
+    { dx: 0,  dy: 1,  direction: 'South' },
+    { dx: 0,  dy: -1, direction: 'North' },
   ]
 
   for (let d = 0; d < 4; d++) {
-    const { dx, dy } = dirs[d]
+    const { dx, dy, direction } = dirs[d]
     const pl = pathLengths[d]
     // Perpendicular unit vector (non-zero axis swapped)
     const px = dy !== 0 ? 1 : 0
@@ -89,8 +107,12 @@ export function generateVillage(
       ground(originX + dx * i + px, originY + dy * i + py, 'cobblestone')
       ground(originX + dx * i - px, originY + dy * i - py, 'cobblestone')
     }
-    // Street sign at path end (centre tile)
-    object(originX + dx * pl, originY + dy * pl, 'street_sign')
+    // Street sign at path end — embed village info in metadata
+    const sx = originX + dx * pl, sy = originY + dy * pl
+    object(sx, sy, 'street_sign')
+    const k = tileKey(sx, sy)
+    const e = tiles.get(k)!
+    tiles.set(k, { ...e, metadata: { villageName, direction, buildings: specialBuildings } })
   }
 
   // ── Buildings on both sides of each arm ─────────────────────────────────

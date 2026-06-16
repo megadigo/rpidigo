@@ -12,6 +12,7 @@ import { InventoryScene } from './scenes/InventoryScene'
 import { CraftScene } from './scenes/CraftScene'
 import { ShopScene } from './scenes/ShopScene'
 import { StorageScene } from './scenes/StorageScene'
+import { VendorScene } from './scenes/VendorScene'
 import { DeathScene } from './scenes/DeathScene'
 import { PauseScene } from './scenes/PauseScene'
 import { LevelUpScene } from './scenes/LevelUpScene'
@@ -31,7 +32,7 @@ async function main(): Promise<void> {
       mode: Phaser.Scale.FIT,
       autoCenter: Phaser.Scale.CENTER_BOTH,
     },
-    scene: [IntroScene, InstructionsScene, LoginScene, LoadingScene, GameScene, HudScene, DialogScene, InventoryScene, CraftScene, ShopScene, StorageScene, DeathScene, PauseScene, LevelUpScene, StatsScene, QuestScene],
+    scene: [IntroScene, InstructionsScene, LoginScene, LoadingScene, GameScene, HudScene, DialogScene, InventoryScene, CraftScene, ShopScene, StorageScene, VendorScene, DeathScene, PauseScene, LevelUpScene, StatsScene, QuestScene],
   })
 }
 

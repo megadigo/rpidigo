@@ -150,11 +150,12 @@ export function generateHouseRoom(
 
     case 'player_house': {
       // Personal player house: workbench for crafting, a bed, a dining table
-      // with two chairs, and a personal storage chest.
+      // with two chairs, a personal storage chest, and a vendor stall.
       place('workbench', 1, 3, 1, 3)
       place('bed', 1, S - 2, 1, 3)
       placeTableWithChairs()
       place('chest', S - 4, S - 2, 1, 3, { storage: true })
+      place('vendor_stall', 1, S - 2, 1, 3)
       break
     }
 

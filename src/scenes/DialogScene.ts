@@ -24,7 +24,7 @@ import type { PoiLayout } from '../world/types.ts'
 
 // ─── NPC profile data ─────────────────────────────────────────────────────────
 
-type NpcRole = 'chat' | 'heal' | 'gossip' | 'guard' | 'merchant' | 'dog'
+type NpcRole = 'chat' | 'heal' | 'gossip' | 'guard' | 'merchant' | 'dog' | 'plaque'
 
 interface NpcProfile {
   displayName: string
@@ -126,6 +126,10 @@ export interface DialogSceneData {
   npcY: number
   /** Required for NPCs that need to write to their own Firebase entity (e.g. dog). */
   npcId?: string
+  /** Override display name (used for plaque/sign interactions). */
+  plaqueTitle?: string
+  /** Override dialog lines (used for plaque/sign interactions). */
+  plaqueLines?: string[]
 }
 
 // ─── Scene ────────────────────────────────────────────────────────────────────
@@ -142,10 +146,18 @@ export class DialogScene extends Phaser.Scene {
 
   init(data: DialogSceneData): void {
     this._sceneData = data
-    this._profile = NPC_PROFILES[data.templateId] ?? {
-      displayName: 'Stranger',
-      lines: ['…'],
-      role: 'chat',
+    if (data.plaqueTitle !== undefined) {
+      this._profile = {
+        displayName: data.plaqueTitle,
+        lines: data.plaqueLines ?? ['…'],
+        role: 'plaque',
+      }
+    } else {
+      this._profile = NPC_PROFILES[data.templateId] ?? {
+        displayName: 'Stranger',
+        lines: ['…'],
+        role: 'chat',
+      }
     }
   }
 
@@ -167,7 +179,9 @@ export class DialogScene extends Phaser.Scene {
     let bodyText: string
     let subText: string | null = null
 
-    if (role === 'heal') {
+    if (role === 'plaque') {
+      bodyText = this._profile.lines.join('\n')
+    } else if (role === 'heal') {
       bodyText = this._pickLine()
       subText  = await this._applyHeal()
     } else if (role === 'gossip') {

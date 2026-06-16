@@ -30,6 +30,12 @@ export interface TileData {
     originalId?: string
     /** Layer the original tile was on (to know how to restore it). */
     originalLayer?: 'MIDDLE' | 'GROUND'
+    /** Village name stored on street_sign / quest_board tiles. */
+    villageName?: string
+    /** Cardinal direction label for street signs ("North", "South", "East", "West"). */
+    direction?: string
+    /** List of notable building types in the village (stored on street_sign / quest_board). */
+    buildings?: string[]
   }
 }
 
@@ -101,7 +107,7 @@ export interface ChunkData {
 }
 
 /** Quest categories — one quest per category can be active at a time. */
-export type QuestCategory = 'combat' | 'gathering'
+export type QuestCategory = 'combat' | 'gathering' | 'exploration'
 
 /** Static quest definition (lives in data/quests.ts). */
 export interface QuestTemplate {
@@ -173,6 +179,7 @@ export interface PlayerInstance {
     enemiesKilledTotal?: number
     killsByEnemyId?: Record<string, number>
     houseEntered?: number
+    housesVisited?: number
     dungeonsVisited?: number
     villagesVisited?: number
     chatMessagesSent?: number
@@ -182,6 +189,11 @@ export interface PlayerInstance {
     collectedByItemId?: Record<string, number>
     deaths?: number
     distanceTraveled?: number
+  }
+  /** Player-run vendor stall. Listings are sold from house storage; proceeds accumulate in till. */
+  vendor?: {
+    listings: Record<string, { itemId: string; quantity: number; price: number }>
+    till: number
   }
   /** Per-player quest state. */
   quests: {
